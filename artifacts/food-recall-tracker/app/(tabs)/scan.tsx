@@ -357,8 +357,19 @@ function VerdictView({
         <Text style={[styles.verdictBody, { color: colors.mutedForeground }]}>
           {hasRecall
             ? 'This product matches an active FDA recall. Review the details below and follow the official notice.'
-            : 'No active FDA recall matched this product name. Always check the package and official notices.'}
+            : 'No active FDA food or drug recall matched this product name. Recent recalls announced in the last 1–2 weeks may not yet be in the database, so this is not a guarantee that the product is safe.'}
         </Text>
+        {!hasRecall ? (
+          <Pressable
+            accessibilityRole="link"
+            onPress={() => Linking.openURL(FDA_NOTICES_URL)}
+            style={({ pressed }) => [styles.noticeLink, { opacity: pressed ? 0.65 : 1 }]}
+            testID="current-fda-list-link"
+          >
+            <Text style={[styles.noticeLinkText, { color: colors.success }]}>View current FDA recall list</Text>
+            <Feather name="external-link" size={15} color={colors.success} />
+          </Pressable>
+        ) : null}
         {recallResult?.fromCache ? (
           <View style={[styles.savedPill, { backgroundColor: colors.warningSoft }]}>
             <Feather name="wifi-off" size={13} color={colors.warning} />

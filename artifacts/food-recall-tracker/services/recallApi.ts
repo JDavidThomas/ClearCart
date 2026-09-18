@@ -5,7 +5,10 @@ import type {
   RecallSearchResult,
 } from '@/types/recall';
 
-const OPENFDA_URL = 'https://api.fda.gov/food/enforcement.json';
+const OPENFDA_ENDPOINTS = [
+  'https://api.fda.gov/food/enforcement.json',
+  'https://api.fda.gov/drug/enforcement.json',
+];
 const OPEN_FOOD_FACTS_URL = 'https://world.openfoodfacts.org/api/v3/product/';
 const FDA_NOTICES_URL =
   'https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts';
@@ -65,6 +68,21 @@ function isActiveRecall(record: OpenFdaRecall) {
   return !status.includes('terminated') && !status.includes('completed');
 }
 
+async function searchOpenFdaEndpoint(endpoint: string, params: URLSearchParams) {
+  const response = await fetch(`${endpoint}?${params.toString()}`);
+
+  if (response.status === 404) {
+    return [];
+  }
+
+  if (!response.ok) {
+    throw new Error(`openFDA returned ${response.status}`);
+  }
+
+  const payload = (await response.json()) as OpenFdaResponse;
+  return payload.results ?? [];
+}
+
 async function readCachedSearch(term: string): Promise<CachedSearch | null> {
   try {
     const cached = await AsyncStorage.getItem(cacheKey(term));
@@ -93,8 +111,9 @@ async function saveSearch(term: string, value: CachedSearch) {
 }
 
 /**
- * Searches openFDA and falls back to the most recent local result if the
- * device is offline or the public API is temporarily unavailable.
+ * Searches both openFDA food and drug enforcement records, then falls back to
+ * the most recent local result if the device is offline or the public API is
+ * temporarily unavailable.
  */
 export async function searchFoodRecalls(term: string): Promise<RecallSearchResult> {
   const normalizedTerm = term.trim();
@@ -106,24 +125,24 @@ export async function searchFoodRecalls(term: string): Promise<RecallSearchResul
       limit: '20',
     });
 
-    const response = await fetch(`${OPENFDA_URL}?${params.toString()}`);
-    if (response.status === 404) {
-      const emptyResult: CachedSearch = {
-        recalls: [],
-        lastUpdated: new Date().toISOString(),
-      };
-      await saveSearch(normalizedTerm, emptyResult);
-      return { ...emptyResult, fromCache: false };
-    }
-
-    if (!response.ok) {
-      throw new Error(`openFDA returned ${response.status}`);
-    }
-
-    const payload = (await response.json()) as OpenFdaResponse;
-    const recalls = (payload.results ?? [])
+    const endpointResults = await Promise.all(
+      OPENFDA_ENDPOINTS.map((endpoint) => searchOpenFdaEndpoint(endpoint, params)),
+    );
+    const seenRecallKeys = new Set<string>();
+    const recalls = endpointResults
+      .flat()
       .filter(isActiveRecall)
-      .map(toRecall);
+      .map(toRecall)
+      .filter((recall) => {
+        const key = recall.recallNumber ?? [
+          recall.productDescription,
+          recall.recallingFirm,
+          recall.recallDate,
+        ].join('|');
+        if (seenRecallKeys.has(key)) return false;
+        seenRecallKeys.add(key);
+        return true;
+      });
     const freshResult: CachedSearch = {
       recalls,
       lastUpdated: new Date().toISOString(),

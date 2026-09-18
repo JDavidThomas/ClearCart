@@ -6,6 +6,7 @@ import { useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Linking,
   Platform,
   Pressable,
   StyleSheet,
@@ -18,6 +19,9 @@ import { RecallCard } from '@/components/RecallCard';
 import { useColors } from '@/hooks/useColors';
 import { searchFoodRecalls } from '@/services/recallApi';
 import type { RecallSearchResult } from '@/types/recall';
+
+const FDA_NOTICES_URL =
+  'https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts';
 
 function formatUpdatedAt(date: string) {
   const parsedDate = new Date(date);
@@ -245,8 +249,17 @@ function NoResultsState({ term, updatedAt, colors }: NoResultsStateProps) {
       <Feather name="check-circle" size={22} color={colors.success} />
       <Text style={[styles.stateTitle, { color: colors.foreground }]}>No active recalls found for this product</Text>
       <Text style={[styles.stateBody, { color: colors.mutedForeground }]}>
-        We didn’t find an active FDA food recall matching “{term}”. This is not a guarantee that a product is safe—check the package and official notices.
+        We didn’t find an active FDA food or drug recall matching “{term}”. Recent recalls announced in the last 1–2 weeks may not yet be in the database, so this is not a guarantee that a product is safe.
       </Text>
+      <Pressable
+        accessibilityRole="link"
+        onPress={() => Linking.openURL(FDA_NOTICES_URL)}
+        style={({ pressed }) => [styles.fdaLink, { opacity: pressed ? 0.65 : 1 }]}
+        testID="current-fda-list-link"
+      >
+        <Text style={[styles.fdaLinkText, { color: colors.success }]}>View current FDA recall list</Text>
+        <Feather name="external-link" size={15} color={colors.success} />
+      </Pressable>
       <Text style={[styles.updatedText, { color: colors.mutedForeground }]}>
         Last updated {formatUpdatedAt(updatedAt)}
       </Text>
@@ -441,6 +454,17 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   retryText: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 14,
+  },
+  fdaLink: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 7,
+    minHeight: 44,
+    marginTop: 2,
+  },
+  fdaLinkText: {
     fontFamily: 'Inter_600SemiBold',
     fontSize: 14,
   },
