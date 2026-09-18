@@ -1,4 +1,5 @@
 import { Feather } from '@expo/vector-icons';
+import Constants from 'expo-constants';
 import { Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
@@ -10,9 +11,11 @@ export default function AboutScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const topPadding = Platform.OS === 'web' ? Math.max(insets.top, 67) : insets.top;
+  const appVersion = Constants.expoConfig?.version ?? '1.0.0';
 
   return (
     <ScrollView
+      style={{ backgroundColor: colors.background }}
       contentContainerStyle={[
         styles.content,
         { backgroundColor: colors.background, paddingTop: topPadding + 28 },
@@ -26,6 +29,29 @@ export default function AboutScreen() {
         Search public recall records before you buy, cook, or serve packaged food.
       </Text>
 
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>How it works</Text>
+        <HowItWorksStep
+          number="1"
+          title="Search or scan"
+          body="Search by product name or ingredient, or scan a packaged food barcode."
+          colors={colors}
+        />
+        <HowItWorksStep
+          number="2"
+          title="Check public records"
+          body="The app checks Open Food Facts for scanned products and searches current FDA food recall records."
+          colors={colors}
+        />
+        <HowItWorksStep
+          number="3"
+          title="Review the notice"
+          body="Read the match details, then open the official notice for the latest guidance."
+          colors={colors}
+          isLast
+        />
+      </View>
+
       <View style={[styles.disclaimer, { backgroundColor: colors.warningSoft, borderColor: colors.warning }]}>
         <Feather name="info" size={20} color={colors.warning} />
         <Text style={[styles.disclaimerText, { color: colors.foreground }]}>
@@ -33,10 +59,39 @@ export default function AboutScreen() {
         </Text>
       </View>
 
-      <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Official sources</Text>
+      <View style={styles.sourcesSection}>
+        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Official sources</Text>
+      </View>
       <OfficialLink label="FDA recall notices" url={FDA_URL} colors={colors} />
       <OfficialLink label="USDA FSIS recalls" url={USDA_URL} colors={colors} />
+
+      <View style={[styles.versionRow, { borderTopColor: colors.border }]}>
+        <Text style={[styles.versionLabel, { color: colors.mutedForeground }]}>App version</Text>
+        <Text style={[styles.versionValue, { color: colors.foreground }]}>{appVersion}</Text>
+      </View>
     </ScrollView>
+  );
+}
+
+interface HowItWorksStepProps {
+  number: string;
+  title: string;
+  body: string;
+  colors: ReturnType<typeof useColors>;
+  isLast?: boolean;
+}
+
+function HowItWorksStep({ number, title, body, colors, isLast = false }: HowItWorksStepProps) {
+  return (
+    <View style={[styles.step, !isLast && { borderBottomColor: colors.border, borderBottomWidth: 1 }]}>
+      <View style={[styles.stepNumber, { backgroundColor: colors.blueSoft }]}>
+        <Text style={[styles.stepNumberText, { color: colors.primary }]}>{number}</Text>
+      </View>
+      <View style={styles.stepCopy}>
+        <Text style={[styles.stepTitle, { color: colors.foreground }]}>{title}</Text>
+        <Text style={[styles.stepBody, { color: colors.mutedForeground }]}>{body}</Text>
+      </View>
+    </View>
   );
 }
 
@@ -92,6 +147,10 @@ const styles = StyleSheet.create({
     maxWidth: 330,
     textAlign: 'center',
   },
+  section: {
+    alignSelf: 'stretch',
+    marginTop: 30,
+  },
   disclaimer: {
     borderRadius: 16,
     borderWidth: 1,
@@ -110,8 +169,41 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     fontFamily: 'Inter_700Bold',
     fontSize: 16,
-    marginTop: 30,
     marginBottom: 10,
+  },
+  step: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 12,
+    paddingVertical: 14,
+  },
+  stepNumber: {
+    alignItems: 'center',
+    borderRadius: 999,
+    height: 28,
+    justifyContent: 'center',
+    width: 28,
+  },
+  stepNumberText: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 13,
+  },
+  stepCopy: {
+    flex: 1,
+    gap: 3,
+  },
+  stepTitle: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 15,
+  },
+  stepBody: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 14,
+    lineHeight: 21,
+  },
+  sourcesSection: {
+    alignSelf: 'stretch',
+    marginTop: 30,
   },
   officialLink: {
     alignItems: 'center',
@@ -127,5 +219,22 @@ const styles = StyleSheet.create({
   officialLinkText: {
     fontFamily: 'Inter_600SemiBold',
     fontSize: 15,
+  },
+  versionRow: {
+    alignItems: 'center',
+    borderTopWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 30,
+    paddingTop: 16,
+    width: '100%',
+  },
+  versionLabel: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 13,
+  },
+  versionValue: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 13,
   },
 });
