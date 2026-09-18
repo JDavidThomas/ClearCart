@@ -1,0 +1,24 @@
+kind = "mobile"
+previewPath = "/food-recall-tracker/"
+title = "Food Recall Tracker"
+description = "A cross-platform Expo app that helps shoppers search live government food recall data, understand recall details, and verify products with clear safety guidance."
+version = "1.0.0"
+id = "artifacts/food-recall-tracker"
+router = "expo-domain"
+
+[[services]]
+name = "expo"
+ensurePreviewReachable = "/status"
+paths = [ "/food-recall-tracker/" ]
+localPort = 20920
+
+[services.development]
+run = "pnpm --filter @workspace/food-recall-tracker run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/food-recall-tracker", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/food-recall-tracker", "run", "serve" ]
+
+[services.env]
+PORT = "20920"
+BASE_PATH = "/food-recall-tracker/"

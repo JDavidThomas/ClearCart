@@ -1,0 +1,1 @@
+- [openFDA key handling](openfda-key.md) — keep the stored API key server-side; the initial Expo client uses the public endpoint.

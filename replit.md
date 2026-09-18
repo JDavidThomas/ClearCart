@@ -1,15 +1,16 @@
-# [Project name]
+# Food Recall Tracker
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A cross-platform Expo app for searching current food recall records before buying, cooking, or serving packaged food.
 
 ## Run & Operate
 
 - `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- `pnpm --filter @workspace/food-recall-tracker run dev` — run the Expo mobile preview
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- Required secret for higher openFDA rate limits: `OPENFDA_API_KEY`
 
 ## Stack
 
@@ -22,15 +23,22 @@ _Replace the heading above with the project's name, and this line with one sente
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/food-recall-tracker/app/(tabs)/index.tsx` — Home search screen
+- `artifacts/food-recall-tracker/services/recallApi.ts` — openFDA search and AsyncStorage cache
+- `artifacts/food-recall-tracker/components/RecallCard.tsx` — recall result presentation
+- `artifacts/food-recall-tracker/constants/colors.ts` — food-safety palette
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- The first mobile build is frontend-only and stores recent search results with AsyncStorage.
+- openFDA results are filtered to exclude completed or terminated records before display.
+- Search failures fall back to a saved result for the same term; cached results are labeled in the UI.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- Home search queries the public openFDA food enforcement API and presents active recall details.
+- Scan is currently a clearly labeled placeholder for the next barcode/photo checkpoint.
+- About provides the official FDA/USDA links and the required informational disclaimer.
 
 ## User preferences
 
