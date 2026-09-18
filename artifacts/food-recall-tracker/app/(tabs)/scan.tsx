@@ -143,7 +143,7 @@ export default function ScanScreen() {
       <ScrollView
         contentContainerStyle={[
           styles.content,
-          { paddingTop: topPadding + 22, paddingBottom: Platform.OS === 'web' ? 34 : 36 },
+          { paddingTop: topPadding + 22, paddingBottom: 110 },
         ]}
         showsVerticalScrollIndicator={false}
       >

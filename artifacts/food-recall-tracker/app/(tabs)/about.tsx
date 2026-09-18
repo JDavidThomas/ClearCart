@@ -122,7 +122,7 @@ const styles = StyleSheet.create({
   content: {
     alignItems: 'center',
     flexGrow: 1,
-    paddingBottom: 44,
+    paddingBottom: 110,
     paddingHorizontal: 24,
   },
   iconCircle: {

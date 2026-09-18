@@ -70,11 +70,11 @@ export default function HomeScreen() {
           styles.listContent,
           {
             paddingTop: topPadding + 22,
-            paddingBottom: Platform.OS === 'web' ? 34 : 36,
+                    paddingBottom: 110,
           },
         ]}
         keyboardShouldPersistTaps="handled"
-        scrollEnabled={(data?.recalls.length ?? 0) > 0}
+        scrollEnabled
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
           <View style={styles.header}>
