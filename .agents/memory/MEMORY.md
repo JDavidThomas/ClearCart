@@ -1,1 +1,2 @@
 - [openFDA key handling](openfda-key.md) — keep the stored API key server-side; the initial Expo client uses the public endpoint.
+- [Expo Camera SDK alignment](expo-camera-sdk.md) — use the workspace-compatible Expo SDK 57 camera package line for native scanning.

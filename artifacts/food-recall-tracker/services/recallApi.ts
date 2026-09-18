@@ -1,7 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { FoodRecall, RecallSearchResult } from '@/types/recall';
+import type {
+  FoodRecall,
+  OpenFoodFactsProduct,
+  RecallSearchResult,
+} from '@/types/recall';
 
 const OPENFDA_URL = 'https://api.fda.gov/food/enforcement.json';
+const OPEN_FOOD_FACTS_URL = 'https://world.openfoodfacts.org/api/v3/product/';
 const FDA_NOTICES_URL =
   'https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts';
 const CACHE_PREFIX = '@food-recall-tracker/recalls/';
@@ -26,6 +31,16 @@ interface OpenFdaRecall {
 
 interface OpenFdaResponse {
   results?: OpenFdaRecall[];
+}
+
+interface OpenFoodFactsResponse {
+  status?: number;
+  product?: {
+    product_name?: string;
+    product_name_en?: string;
+    brands?: string;
+    ingredients_text?: string;
+  };
 }
 
 function cacheKey(term: string) {
@@ -126,4 +141,36 @@ export async function searchFoodRecalls(term: string): Promise<RecallSearchResul
         : 'We could not reach the recall database right now. Please try again.',
     );
   }
+}
+
+/**
+ * Finds the consumer-facing product name and brand for a scanned barcode.
+ * Open Food Facts returns status 0 when the barcode is not in its database.
+ */
+export async function lookupOpenFoodFactsProduct(
+  barcode: string,
+): Promise<OpenFoodFactsProduct | null> {
+  const response = await fetch(
+    `${OPEN_FOOD_FACTS_URL}${encodeURIComponent(barcode)}.json`,
+  );
+
+  if (!response.ok) {
+    throw new Error('The product database is unavailable right now.');
+  }
+
+  const payload = (await response.json()) as OpenFoodFactsResponse;
+  const name =
+    payload.product?.product_name?.trim() ||
+    payload.product?.product_name_en?.trim();
+
+  if (payload.status !== 1 || !name) {
+    return null;
+  }
+
+  return {
+    barcode,
+    name,
+    brand: payload.product?.brands?.split(',')[0]?.trim() || 'Brand not listed',
+    ingredients: payload.product?.ingredients_text?.trim(),
+  };
 }

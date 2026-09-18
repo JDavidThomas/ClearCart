@@ -18,3 +18,10 @@ export interface RecallSearchResult {
   lastUpdated: string;
   fromCache: boolean;
 }
+
+export interface OpenFoodFactsProduct {
+  barcode: string;
+  name: string;
+  brand: string;
+  ingredients?: string;
+}
