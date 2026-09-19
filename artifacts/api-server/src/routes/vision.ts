@@ -78,16 +78,13 @@ router.post("/vision/identify-food", async (req, res) => {
             {
               parts: [
                 {
-                  text: 'Identify the single packaged food product or ingredient shown in this image. Do not identify people, brands alone, or non-food objects. Return only valid JSON in exactly this shape: {"productName":"simple food name"}; if you cannot identify a food confidently, return {"productName":null}.',
+                  text: "Look at this image. Identify the food product in it. Reply with ONLY a short product name, like 'romaine lettuce', 'ground beef', 'chicken breast', or 'cheddar cheese'. Do not include any other text, explanation, or punctuation. If you cannot identify a food product, reply with 'unknown'.",
                 },
                 { inlineData: { mimeType, data: imageBase64 } },
               ],
             },
           ],
-          generationConfig: {
-            temperature: 0,
-            responseMimeType: "application/json",
-          },
+          generationConfig: { temperature: 0 },
         }),
       },
     );

@@ -33,7 +33,8 @@ export default function PhotoCheckScreen() {
   const colors = useColors();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [permission, requestPermission] = ImagePicker.useCameraPermissions();
+  const [cameraPermission, requestCameraPermission] = ImagePicker.useCameraPermissions();
+  const [libraryPermission, requestLibraryPermission] = ImagePicker.useMediaLibraryPermissions();
   const [photoState, setPhotoState] = useState<PhotoState>('ready');
   const [verdict, setVerdict] = useState<PhotoVerdict | null>(null);
   const [imageUri, setImageUri] = useState<string | null>(null);
@@ -47,10 +48,39 @@ export default function PhotoCheckScreen() {
     setErrorMessage(null);
   };
 
+  const processAsset = async (asset: ImagePicker.ImagePickerAsset) => {
+    if (!asset.base64) throw new Error('We could not read that photo. Please try again.');
+    setImageUri(asset.uri);
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setPhotoState('identifying');
+
+    const productName = await identifyFoodFromImage(asset.base64, asset.mimeType ?? 'image/jpeg');
+    if (!productName) {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setVerdict({ productName: null, recallResult: null });
+      setPhotoState('verdict');
+      return;
+    }
+
+    setPhotoState('checking');
+    const recallResult = await searchFoodRecalls(productName);
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setVerdict({ productName, recallResult });
+    setPhotoState('verdict');
+  };
+
   const takePhoto = async () => {
     setErrorMessage(null);
-    if (!permission?.granted) {
-      await requestPermission();
+    if (!cameraPermission?.granted) {
+      const result = await requestCameraPermission();
+      if (!result.granted) {
+        setErrorMessage(
+          result.canAskAgain
+            ? 'Camera access is needed to take a photo. You can choose an existing image from your gallery instead.'
+            : 'Camera access is off. Choose an image from your gallery or enable camera access in Settings.',
+        );
+        setPhotoState('error');
+      }
       return;
     }
 
@@ -61,26 +91,9 @@ export default function PhotoCheckScreen() {
         quality: 0.65,
       });
       if (result.canceled) return;
-
       const asset = result.assets[0];
-      if (!asset?.base64) throw new Error('We could not read that photo. Please try again.');
-      setImageUri(asset.uri);
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setPhotoState('identifying');
-
-      const productName = await identifyFoodFromImage(asset.base64, asset.mimeType ?? 'image/jpeg');
-      if (!productName) {
-        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        setVerdict({ productName: null, recallResult: null });
-        setPhotoState('verdict');
-        return;
-      }
-
-      setPhotoState('checking');
-      const recallResult = await searchFoodRecalls(productName);
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setVerdict({ productName, recallResult });
-      setPhotoState('verdict');
+      if (!asset) throw new Error('We could not read that photo. Please try again.');
+      await processAsset(asset);
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : 'We could not check that photo. Please try again.',
@@ -89,7 +102,36 @@ export default function PhotoCheckScreen() {
     }
   };
 
-  if (!permission) {
+  const chooseFromGallery = async () => {
+    setErrorMessage(null);
+    if (!libraryPermission?.granted) {
+      const result = await requestLibraryPermission();
+      if (!result.granted) {
+        setErrorMessage('Photo library access is needed to choose an image. You can take a new photo instead.');
+        setPhotoState('error');
+      }
+      return;
+    }
+
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        base64: true,
+        mediaTypes: ['images'],
+        quality: 0.65,
+      });
+      if (result.canceled) return;
+      const asset = result.assets[0];
+      if (!asset) throw new Error('We could not read that photo. Please try again.');
+      await processAsset(asset);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'We could not check that photo. Please try again.',
+      );
+      setPhotoState('error');
+    }
+  };
+
+  if (!cameraPermission) {
     return (
       <StatusScreen
         colors={colors}
@@ -103,8 +145,8 @@ export default function PhotoCheckScreen() {
     );
   }
 
-  if (!permission.granted) {
-    const canOpenSettings = permission.status === 'denied' && !permission.canAskAgain;
+  if (!cameraPermission.granted) {
+    const canOpenSettings = cameraPermission.status === 'denied' && !cameraPermission.canAskAgain;
     return (
       <StatusScreen
         colors={colors}
@@ -117,7 +159,7 @@ export default function PhotoCheckScreen() {
           accessibilityRole="button"
           onPress={() => {
             if (canOpenSettings && Platform.OS !== 'web') void Linking.openSettings();
-            else void requestPermission();
+            else void takePhoto();
           }}
           style={({ pressed }) => [
             styles.primaryButton,
@@ -130,6 +172,7 @@ export default function PhotoCheckScreen() {
             {canOpenSettings ? 'Open Settings' : 'Allow Camera Access'}
           </Text>
         </Pressable>
+        <GalleryButton colors={colors} onPress={() => void chooseFromGallery()} />
         <ManualSearchButton colors={colors} onPress={() => router.push('/')} />
       </StatusScreen>
     );
@@ -175,6 +218,7 @@ export default function PhotoCheckScreen() {
               <Feather name="camera" size={18} color={colors.primaryForeground} />
               <Text style={[styles.primaryButtonText, { color: colors.primaryForeground }]}>Take a Photo</Text>
             </Pressable>
+            <GalleryButton colors={colors} onPress={() => void chooseFromGallery()} />
           </View>
         ) : photoState === 'identifying' || photoState === 'checking' ? (
           <View style={[styles.feedbackCard, { backgroundColor: colors.blueSoft }]}>
@@ -270,6 +314,29 @@ function ManualSearchButton({
   );
 }
 
+function GalleryButton({
+  colors,
+  onPress,
+}: {
+  colors: ReturnType<typeof useColors>;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.secondaryButton,
+        { borderColor: colors.border, opacity: pressed ? 0.65 : 1 },
+      ]}
+      testID="choose-photo-button"
+    >
+      <Feather name="image" size={17} color={colors.primary} />
+      <Text style={[styles.secondaryButtonText, { color: colors.primary }]}>Choose from Gallery</Text>
+    </Pressable>
+  );
+}
+
 function PhotoVerdictView({
   verdict,
   colors,
@@ -287,7 +354,7 @@ function PhotoVerdictView({
           <View style={[styles.verdictIcon, { backgroundColor: colors.warning }]}>
             <Feather name="help-circle" size={25} color={colors.primaryForeground} />
           </View>
-          <Text style={[styles.verdictTitle, { color: colors.foreground }]}>Product Not Identified</Text>
+          <Text style={[styles.verdictTitle, { color: colors.foreground }]}>Product Not Found</Text>
           <Text style={[styles.verdictBody, { color: colors.mutedForeground }]}>
             We couldn’t confidently read a food product from this photo. Try a clearer image or search manually instead.
           </Text>
@@ -316,7 +383,7 @@ function PhotoVerdictView({
           <Feather name={hasRecall ? 'alert-triangle' : 'check'} size={25} color={colors.primaryForeground} />
         </View>
         <Text style={[styles.verdictTitle, { color: colors.foreground }]}>
-          {hasRecall ? 'Recall Found' : 'Safe'}
+          {hasRecall ? 'Active Recall Found' : 'No Active Recalls Found'}
         </Text>
         <Text style={[styles.productName, { color: colors.foreground }]}>{verdict.productName}</Text>
         <Text style={[styles.verdictBody, { color: colors.mutedForeground }]}>
