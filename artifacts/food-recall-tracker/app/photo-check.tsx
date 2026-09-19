@@ -279,6 +279,7 @@ export default function PhotoCheckScreen() {
             >
               <Text style={[styles.inlineButtonText, { color: colors.destructive }]}>Try another photo</Text>
             </Pressable>
+            <ManualSearchButton colors={colors} onPress={() => router.push('/')} />
           </View>
         ) : verdict ? (
           <PhotoVerdictView verdict={verdict} colors={colors} onRetake={reset} />
