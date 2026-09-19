@@ -34,3 +34,91 @@ export const IdentifyFoodResponse = zod.object({
   "productName": zod.string().nullable()
 })
 
+
+/**
+ * @summary Create a profile
+ */
+export const authSignUpBodyPasswordMin = 6;
+
+export const authSignUpBodyNameMin = 2;
+
+
+
+export const AuthSignUpBody = zod.object({
+  "email": zod.string().email(),
+  "password": zod.string().min(authSignUpBodyPasswordMin),
+  "name": zod.string().min(authSignUpBodyNameMin).optional()
+})
+
+export const AuthSignUpResponse = zod.object({
+  "accessToken": zod.string().nullable(),
+  "refreshToken": zod.string().nullable(),
+  "profile": zod.union([zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "email": zod.string(),
+  "allergies": zod.array(zod.string())
+}),zod.null()]),
+  "requiresEmailConfirmation": zod.boolean()
+})
+
+
+/**
+ * @summary Log in to a profile
+ */
+export const authLogInBodyPasswordMin = 6;
+
+export const authLogInBodyNameMin = 2;
+
+
+
+export const AuthLogInBody = zod.object({
+  "email": zod.string().email(),
+  "password": zod.string().min(authLogInBodyPasswordMin),
+  "name": zod.string().min(authLogInBodyNameMin).optional()
+})
+
+export const AuthLogInResponse = zod.object({
+  "accessToken": zod.string().nullable(),
+  "refreshToken": zod.string().nullable(),
+  "profile": zod.union([zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "email": zod.string(),
+  "allergies": zod.array(zod.string())
+}),zod.null()]),
+  "requiresEmailConfirmation": zod.boolean()
+})
+
+
+/**
+ * @summary Get the current profile
+ */
+export const AuthGetMeResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "email": zod.string(),
+  "allergies": zod.array(zod.string())
+})
+
+
+/**
+ * @summary Update profile preferences
+ */
+export const authUpdateProfileBodyNameMin = 2;
+
+
+
+export const AuthUpdateProfileBody = zod.object({
+  "name": zod.string().min(authUpdateProfileBodyNameMin).optional(),
+  "allergies": zod.array(zod.string())
+})
+
+export const AuthUpdateProfileResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "email": zod.string(),
+  "allergies": zod.array(zod.string())
+})
+
+

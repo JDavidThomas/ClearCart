@@ -6,6 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './authCredentialsPayload';
+export * from './authProfilePayload';
+export * from './authProfileUpdatePayload';
+export * from './authSessionPayload';
 export * from './healthStatus';
 export * from './identifyFoodPayload';
 export * from './identifyFoodRequest';

@@ -20,3 +20,34 @@ export interface IdentifyFoodPayload {
   /** @nullable */
   productName: string | null;
 }
+
+export interface AuthCredentialsPayload {
+  email: string;
+  /** @minLength 6 */
+  password: string;
+  /** @minLength 2 */
+  name?: string;
+}
+
+export interface AuthProfileUpdatePayload {
+  /** @minLength 2 */
+  name?: string;
+  allergies: string[];
+}
+
+export interface AuthProfilePayload {
+  id: string;
+  name: string;
+  email: string;
+  allergies: string[];
+}
+
+export interface AuthSessionPayload {
+  /** @nullable */
+  accessToken: string | null;
+  /** @nullable */
+  refreshToken: string | null;
+  profile: AuthProfilePayload | null;
+  requiresEmailConfirmation: boolean;
+}
+

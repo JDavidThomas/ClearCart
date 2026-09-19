@@ -12,6 +12,8 @@ tags:
     description: Health operations
   - name: vision
     description: Vision-assisted product identification
+  - name: auth
+    description: Profile authentication and preferences
 paths:
   /healthz:
     get:
@@ -49,7 +51,89 @@ paths:
           description: Invalid image payload
         "503":
           description: Vision service unavailable
+  /auth/signup:
+    post:
+      operationId: authSignUp
+      tags: [auth]
+      summary: Create a profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuthCredentialsPayload"
+      responses:
+        "200":
+          description: Profile created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSessionPayload"
+        "400":
+          description: Invalid sign-up details
+  /auth/login:
+    post:
+      operationId: authLogIn
+      tags: [auth]
+      summary: Log in to a profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuthCredentialsPayload"
+      responses:
+        "200":
+          description: Authenticated profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSessionPayload"
+        "401":
+          description: Invalid credentials
+  /auth/me:
+    get:
+      operationId: authGetMe
+      tags: [auth]
+      summary: Get the current profile
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Current profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthProfilePayload"
+        "401":
+          description: Missing or invalid session
+  /auth/profile:
+    put:
+      operationId: authUpdateProfile
+      tags: [auth]
+      summary: Update profile preferences
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuthProfileUpdatePayload"
+      responses:
+        "200":
+          description: Updated profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthProfilePayload"
+        "401":
+          description: Missing or invalid session
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
   schemas:
     HealthStatus:
       type: object
@@ -79,4 +163,71 @@ components:
             - "null"
       required:
         - productName
+    AuthCredentialsPayload:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 6
+        name:
+          type: string
+          minLength: 2
+      required:
+        - email
+        - password
+    AuthProfileUpdatePayload:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 2
+        allergies:
+          type: array
+          items:
+            type: string
+      required:
+        - allergies
+    AuthProfilePayload:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        allergies:
+          type: array
+          items:
+            type: string
+      required:
+        - id
+        - name
+        - email
+        - allergies
+    AuthSessionPayload:
+      type: object
+      properties:
+        accessToken:
+          type:
+            - string
+            - "null"
+        refreshToken:
+          type:
+            - string
+            - "null"
+        profile:
+          anyOf:
+            - $ref: "#/components/schemas/AuthProfilePayload"
+            - type: "null"
+        requiresEmailConfirmation:
+          type: boolean
+      required:
+        - accessToken
+        - refreshToken
+        - profile
+        - requiresEmailConfirmation
 

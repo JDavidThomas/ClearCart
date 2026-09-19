@@ -20,6 +20,10 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AuthCredentialsPayload,
+  AuthProfilePayload,
+  AuthProfileUpdatePayload,
+  AuthSessionPayload,
   HealthStatus,
   IdentifyFoodPayload,
   IdentifyFoodRequest
@@ -58,7 +62,8 @@ export const getHealthCheckUrl = () => {
 
 
   return `/api/healthz`
-     }
+}
+
 /**
  * Returns server health status
  * @summary Health check
@@ -145,13 +150,7 @@ export const identifyFood = async (identifyFoodRequest: IdentifyFoodRequest, opt
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
-    if (h instanceof Headers) {
-      const values: Record<string, string> = {};
-      h.forEach((value, key) => {
-        values[key] = value;
-      });
-      return values;
-    }
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
     if (Symbol.iterator in h) {
       return Object.fromEntries(
         Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
@@ -222,5 +221,346 @@ export const useIdentifyFood = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getIdentifyFoodMutationOptions(options));
+    }
+
+export const getAuthSignUpUrl = () => {
+
+
+
+
+  return `/api/auth/signup`
+}
+
+/**
+ * @summary Create a profile
+ */
+export const authSignUp = async (authCredentialsPayload: AuthCredentialsPayload, options?: Parameters<typeof customFetch>[1]): Promise<AuthSessionPayload> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<AuthSessionPayload>(getAuthSignUpUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(authCredentialsPayload)
+  }
+);}
+
+
+
+
+
+export const getAuthSignUpMutationKey = () => ['authSignUp'] as const;
+
+export const getAuthSignUpMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof authSignUp>>, TError,AuthSignUpMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof authSignUp>>, TError,AuthSignUpMutationVariables, TContext> => {
+
+const mutationKey = getAuthSignUpMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof authSignUp>>, AuthSignUpMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  authSignUp(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AuthSignUpMutationResult = NonNullable<Awaited<ReturnType<typeof authSignUp>>>
+    export type AuthSignUpMutationBody = BodyType<AuthCredentialsPayload>
+    export type AuthSignUpMutationError = ErrorType<void>
+    export type AuthSignUpMutationVariables = {data: BodyType<AuthCredentialsPayload>}
+
+    /**
+ * @summary Create a profile
+ */
+export const useAuthSignUp = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof authSignUp>>, TError,AuthSignUpMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof authSignUp>>,
+        TError,
+        AuthSignUpMutationVariables,
+        TContext
+      > => {
+      return useMutation(getAuthSignUpMutationOptions(options));
+    }
+
+export const getAuthLogInUrl = () => {
+
+
+
+
+  return `/api/auth/login`
+}
+
+/**
+ * @summary Log in to a profile
+ */
+export const authLogIn = async (authCredentialsPayload: AuthCredentialsPayload, options?: Parameters<typeof customFetch>[1]): Promise<AuthSessionPayload> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<AuthSessionPayload>(getAuthLogInUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(authCredentialsPayload)
+  }
+);}
+
+
+
+
+
+export const getAuthLogInMutationKey = () => ['authLogIn'] as const;
+
+export const getAuthLogInMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof authLogIn>>, TError,AuthLogInMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof authLogIn>>, TError,AuthLogInMutationVariables, TContext> => {
+
+const mutationKey = getAuthLogInMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof authLogIn>>, AuthLogInMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  authLogIn(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AuthLogInMutationResult = NonNullable<Awaited<ReturnType<typeof authLogIn>>>
+    export type AuthLogInMutationBody = BodyType<AuthCredentialsPayload>
+    export type AuthLogInMutationError = ErrorType<void>
+    export type AuthLogInMutationVariables = {data: BodyType<AuthCredentialsPayload>}
+
+    /**
+ * @summary Log in to a profile
+ */
+export const useAuthLogIn = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof authLogIn>>, TError,AuthLogInMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof authLogIn>>,
+        TError,
+        AuthLogInMutationVariables,
+        TContext
+      > => {
+      return useMutation(getAuthLogInMutationOptions(options));
+    }
+
+export const getAuthGetMeUrl = () => {
+
+
+
+
+  return `/api/auth/me`
+}
+
+/**
+ * @summary Get the current profile
+ */
+export const authGetMe = async ( options?: Parameters<typeof customFetch>[1]): Promise<AuthProfilePayload> => {
+
+  return customFetch<AuthProfilePayload>(getAuthGetMeUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getAuthGetMeQueryKey = () => {
+    return [
+    `/api/auth/me`
+    ] as const;
+    }
+
+
+export const getAuthGetMeQueryOptions = <TData = Awaited<ReturnType<typeof authGetMe>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof authGetMe>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAuthGetMeQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof authGetMe>>> = ({ signal }) => authGetMe({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof authGetMe>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type AuthGetMeQueryResult = NonNullable<Awaited<ReturnType<typeof authGetMe>>>
+export type AuthGetMeQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get the current profile
+ */
+
+export function useAuthGetMe<TData = Awaited<ReturnType<typeof authGetMe>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof authGetMe>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getAuthGetMeQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getAuthUpdateProfileUrl = () => {
+
+
+
+
+  return `/api/auth/profile`
+}
+
+/**
+ * @summary Update profile preferences
+ */
+export const authUpdateProfile = async (authProfileUpdatePayload: AuthProfileUpdatePayload, options?: Parameters<typeof customFetch>[1]): Promise<AuthProfilePayload> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<AuthProfilePayload>(getAuthUpdateProfileUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(authProfileUpdatePayload)
+  }
+);}
+
+
+
+
+
+export const getAuthUpdateProfileMutationKey = () => ['authUpdateProfile'] as const;
+
+export const getAuthUpdateProfileMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof authUpdateProfile>>, TError,AuthUpdateProfileMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof authUpdateProfile>>, TError,AuthUpdateProfileMutationVariables, TContext> => {
+
+const mutationKey = getAuthUpdateProfileMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof authUpdateProfile>>, AuthUpdateProfileMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  authUpdateProfile(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AuthUpdateProfileMutationResult = NonNullable<Awaited<ReturnType<typeof authUpdateProfile>>>
+    export type AuthUpdateProfileMutationBody = BodyType<AuthProfileUpdatePayload>
+    export type AuthUpdateProfileMutationError = ErrorType<void>
+    export type AuthUpdateProfileMutationVariables = {data: BodyType<AuthProfileUpdatePayload>}
+
+    /**
+ * @summary Update profile preferences
+ */
+export const useAuthUpdateProfile = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof authUpdateProfile>>, TError,AuthUpdateProfileMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof authUpdateProfile>>,
+        TError,
+        AuthUpdateProfileMutationVariables,
+        TContext
+      > => {
+      return useMutation(getAuthUpdateProfileMutationOptions(options));
     }
 
