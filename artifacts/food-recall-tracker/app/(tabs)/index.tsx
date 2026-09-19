@@ -46,6 +46,9 @@ export default function HomeScreen() {
     isPending: isHealthPending,
     refetch: refetchHealth,
   } = useHealthCheck({
+    request: {
+      cache: 'no-store',
+    },
     query: {
       queryKey: ['/api/health'],
       refetchOnMount: 'always',

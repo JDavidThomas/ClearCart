@@ -18,7 +18,7 @@ import { setAuthTokenGetter, setBaseUrl } from '@workspace/api-client-react';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
-setBaseUrl(process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : null);
+setBaseUrl(process.env.EXPO_PUBLIC_API_BASE_URL?.trim() || null);
 setAuthTokenGetter(getStoredAccessToken);
 
 const queryClient = new QueryClient();
