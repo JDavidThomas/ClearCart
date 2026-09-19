@@ -68,6 +68,38 @@ paths:
                 $ref: "#/components/schemas/FsisRecallResponse"
         "502":
           description: USDA FSIS is unavailable
+  /recalls/fda:
+    get:
+      operationId: getFdaRecalls
+      tags: [recalls]
+      summary: Search FDA enforcement recalls
+      description: Searches FDA food and drug enforcement records through the server-side OpenFDA proxy.
+      parameters:
+        - name: search
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        "200":
+          description: Matching FDA enforcement recalls
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpenFdaRecallResponse"
+        "400":
+          description: Invalid search query
+        "502":
+          description: OpenFDA is unavailable
   /auth/signup:
     post:
       operationId: authSignUp
@@ -228,6 +260,42 @@ components:
       required:
         - recalls
         - lastUpdated
+    OpenFdaRecall:
+      type: object
+      properties:
+        recallNumber:
+          type: string
+        productDescription:
+          type: string
+        reasonForRecall:
+          type: string
+        recallingFirm:
+          type: string
+        recallDate:
+          type: string
+        classification:
+          type: string
+        status:
+          type: string
+        officialUrl:
+          type: string
+          format: uri
+      required:
+        - productDescription
+        - reasonForRecall
+        - recallingFirm
+        - recallDate
+        - classification
+        - officialUrl
+    OpenFdaRecallResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/OpenFdaRecall"
+      required:
+        - results
     AuthCredentialsPayload:
       type: object
       properties:
