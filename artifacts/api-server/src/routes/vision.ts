@@ -3,7 +3,7 @@ import { IdentifyFoodBody, IdentifyFoodResponse } from "@workspace/api-zod";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
-const GEMINI_MODEL = "gemini-2.0-flash";
+const GEMINI_MODEL = "gemini-3.6-flash";
 const MAX_IMAGE_BASE64_LENGTH = 2_000_000;
 const SUPPORTED_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"]);
 
