@@ -14,6 +14,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AllergenInsights } from '@/components/AllergenInsights';
 import { FdaFreshnessNotice } from '@/components/FdaFreshnessNotice';
 import { RecallCard } from '@/components/RecallCard';
 import { useColors } from '@/hooks/useColors';
@@ -141,26 +142,48 @@ export default function HomeScreen() {
                 {!isFetching ? <Feather name="arrow-right" size={18} color={colors.primaryForeground} /> : null}
               </Pressable>
             </View>
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => router.push('/scan')}
-              style={({ pressed }) => [
-                styles.scanButton,
-                { borderColor: colors.primary, opacity: pressed ? 0.7 : 1 },
-              ]}
-              testID="scan-product-button"
-            >
-              <View style={[styles.scanButtonIcon, { backgroundColor: colors.blueSoft }]}>
-                <Feather name="maximize" size={18} color={colors.primary} />
-              </View>
-              <View style={styles.scanButtonCopy}>
-                <Text style={[styles.scanButtonTitle, { color: colors.foreground }]}>Scan Product</Text>
-                <Text style={[styles.scanButtonSubtitle, { color: colors.mutedForeground }]}>
-                  Use your camera to check a barcode
-                </Text>
-              </View>
-              <Feather name="chevron-right" size={20} color={colors.primary} />
-            </Pressable>
+            <View style={styles.scanActionRow}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => router.push('/scan')}
+                style={({ pressed }) => [
+                  styles.scanButton,
+                  { borderColor: colors.primary, opacity: pressed ? 0.7 : 1 },
+                ]}
+                testID="scan-product-button"
+              >
+                <View style={[styles.scanButtonIcon, { backgroundColor: colors.blueSoft }]}>
+                  <Feather name="maximize" size={18} color={colors.primary} />
+                </View>
+                <View style={styles.scanButtonCopy}>
+                  <Text style={[styles.scanButtonTitle, { color: colors.foreground }]}>Scan Product</Text>
+                  <Text style={[styles.scanButtonSubtitle, { color: colors.mutedForeground }]}>
+                    Check a barcode
+                  </Text>
+                </View>
+                <Feather name="chevron-right" size={18} color={colors.primary} />
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => router.push('/photo-check')}
+                style={({ pressed }) => [
+                  styles.scanButton,
+                  { borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
+                ]}
+                testID="take-photo-button"
+              >
+                <View style={[styles.scanButtonIcon, { backgroundColor: colors.successSoft }]}>
+                  <Feather name="camera" size={18} color={colors.success} />
+                </View>
+                <View style={styles.scanButtonCopy}>
+                  <Text style={[styles.scanButtonTitle, { color: colors.foreground }]}>Take a Photo</Text>
+                  <Text style={[styles.scanButtonSubtitle, { color: colors.mutedForeground }]}>
+                    Identify a product
+                  </Text>
+                </View>
+                <Feather name="chevron-right" size={18} color={colors.primary} />
+              </Pressable>
+            </View>
 
             {submittedTerm.length === 0 ? (
               <EmptySearchState colors={colors} />
@@ -189,6 +212,11 @@ export default function HomeScreen() {
               </View>
             )}
           </View>
+        }
+        ListFooterComponent={
+          submittedTerm.length > 0 && data && !isFetching ? (
+            <AllergenInsights productText={submittedTerm} dataAvailable={false} colors={colors} />
+          ) : null
         }
         ListEmptyComponent={null}
       />
@@ -347,10 +375,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: 16,
     borderWidth: 1,
+    flex: 1,
     flexDirection: 'row',
     gap: 12,
-    minHeight: 70,
-    paddingHorizontal: 13,
+    minHeight: 76,
+    paddingHorizontal: 10,
+  },
+  scanActionRow: {
+    flexDirection: 'row',
+    gap: 10,
   },
   scanButtonIcon: {
     alignItems: 'center',

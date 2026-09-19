@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: vision
+    description: Vision-assisted product identification
 paths:
   /healthz:
     get:
@@ -24,6 +26,29 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /vision/identify-food:
+    post:
+      operationId: identifyFood
+      tags: [vision]
+      summary: Identify a food product from a photo
+      description: Uses server-side vision processing to return a simple product name when one can be identified.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IdentifyFoodRequest"
+      responses:
+        "200":
+          description: Identified product name, or null when the image is not confidently identifiable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IdentifyFoodPayload"
+        "400":
+          description: Invalid image payload
+        "503":
+          description: Vision service unavailable
 components:
   schemas:
     HealthStatus:
@@ -33,4 +58,25 @@ components:
           type: string
       required:
         - status
+    IdentifyFoodRequest:
+      type: object
+      properties:
+        imageBase64:
+          type: string
+          minLength: 1
+        mimeType:
+          type: string
+          minLength: 1
+      required:
+        - imageBase64
+        - mimeType
+    IdentifyFoodPayload:
+      type: object
+      properties:
+        productName:
+          type:
+            - string
+            - "null"
+      required:
+        - productName
 

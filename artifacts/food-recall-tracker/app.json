@@ -21,6 +21,13 @@
         {
           "cameraPermission": "Food Recall Tracker uses your camera to scan product barcodes."
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Food Recall Tracker uses your camera to identify food products.",
+          "photosPermission": "Food Recall Tracker uses your photos to identify food products."
+        }
       ]
     ],
     "experiments": {

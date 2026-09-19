@@ -14,6 +14,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AllergenInsights } from '@/components/AllergenInsights';
 import { FDA_NOTICES_URL, FdaFreshnessNotice } from '@/components/FdaFreshnessNotice';
 import { RecallCard } from '@/components/RecallCard';
 import { useColors } from '@/hooks/useColors';
@@ -66,6 +67,7 @@ export default function ScanScreen() {
       const product = await lookupOpenFoodFactsProduct(data);
       if (!product) {
         setVerdict({ kind: 'not-found', barcode: data });
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         setScanState('verdict');
         return;
       }
@@ -77,6 +79,7 @@ export default function ScanScreen() {
         product,
         recallResult,
       });
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setScanState('verdict');
     } catch (error) {
       setErrorMessage(
@@ -155,6 +158,7 @@ export default function ScanScreen() {
           <View style={[styles.headingIcon, { backgroundColor: colors.blueSoft }]}>
             <Feather name="maximize" size={22} color={colors.primary} />
           </View>
+          <AllergenInsights productText="" dataAvailable={false} colors={colors} />
         </View>
         <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
           Hold the barcode inside the frame. We’ll check Open Food Facts, then search active FDA recalls.
@@ -320,6 +324,7 @@ function VerdictView({
             <Feather name="external-link" size={15} color={colors.warning} />
           </Pressable>
         </View>
+        <AllergenInsights productText="" dataAvailable={false} colors={colors} />
         <ScanAgainButton colors={colors} onPress={onScanAgain} />
       </View>
     );
@@ -370,6 +375,11 @@ function VerdictView({
         <RecallCard key={`${recall.recallNumber ?? recall.productDescription}-${index}`} recall={recall} />
       ))}
 
+      <AllergenInsights
+        productText={`${productLabel} ${verdict.product?.ingredients ?? ''}`}
+        dataAvailable={Boolean(verdict.product?.ingredients)}
+        colors={colors}
+      />
       <ScanAgainButton colors={colors} onPress={onScanAgain} />
     </View>
   );
