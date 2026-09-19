@@ -19,6 +19,38 @@ interface CachedSearch {
   lastUpdated: string;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function normalizeCachedSearch(value: unknown): CachedSearch | null {
+  let candidate: unknown = value;
+
+  for (let depth = 0; depth < 3; depth += 1) {
+    if (!isRecord(candidate)) return null;
+
+    if (Array.isArray(candidate.recalls)) {
+      const lastUpdated =
+        typeof candidate.lastUpdated === 'string' && candidate.lastUpdated.trim()
+          ? candidate.lastUpdated
+          : typeof candidate.updatedAt === 'string' && candidate.updatedAt.trim()
+            ? candidate.updatedAt
+            : null;
+
+      if (!lastUpdated) return null;
+
+      return {
+        recalls: candidate.recalls as FoodRecall[],
+        lastUpdated,
+      };
+    }
+
+    candidate = candidate.data ?? candidate.result;
+  }
+
+  return null;
+}
+
 interface OpenFoodFactsResponse {
   status?: number;
   product?: {
@@ -66,7 +98,7 @@ function formatRecallSearchError(error: unknown) {
 async function readCachedSearch(term: string): Promise<CachedSearch | null> {
   try {
     const cached = await AsyncStorage.getItem(cacheKey(term));
-    return cached ? (JSON.parse(cached) as CachedSearch) : null;
+    return cached ? normalizeCachedSearch(JSON.parse(cached)) : null;
   } catch {
     return null;
   }

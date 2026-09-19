@@ -47,6 +47,9 @@ export default function HomeScreen() {
     staleTime: 5 * 60 * 1000,
     retry: false,
   });
+  const recalls = Array.isArray(data?.recalls) ? data.recalls : [];
+  const recallCount = recalls.length;
+  const lastUpdated = data?.lastUpdated ?? new Date().toISOString();
 
   const handleSearch = async () => {
     const nextTerm = term.trim();
@@ -64,7 +67,7 @@ export default function HomeScreen() {
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
       <FlatList
-        data={data?.recalls ?? []}
+        data={recalls}
         keyExtractor={(item, index) => `${item.recallNumber ?? item.productDescription}-${index}`}
         renderItem={({ item }) => <RecallCard recall={item} />}
         contentContainerStyle={[
@@ -194,16 +197,16 @@ export default function HomeScreen() {
               <ErrorState message={error?.message ?? 'Something went wrong.'} onRetry={() => refetch()} colors={colors} />
             ) : isFetching ? (
               <LoadingState colors={colors} />
-            ) : data?.recalls.length === 0 ? (
-              <NoResultsState term={submittedTerm} updatedAt={data.lastUpdated} colors={colors} />
+            ) : recallCount === 0 ? (
+              <NoResultsState term={submittedTerm} updatedAt={lastUpdated} colors={colors} />
             ) : (
               <View style={styles.resultsHeader}>
                 <View>
                   <Text style={[styles.resultsTitle, { color: colors.foreground }]}>
-                    {data?.recalls.length} active {data?.recalls.length === 1 ? 'recall' : 'recalls'} found
+                    {recallCount} active {recallCount === 1 ? 'recall' : 'recalls'} found
                   </Text>
                   <Text style={[styles.updatedText, { color: colors.mutedForeground }]}>
-                    Last updated {formatUpdatedAt(data?.lastUpdated ?? '')}
+                    Last updated {formatUpdatedAt(lastUpdated)}
                   </Text>
                 </View>
                 {data?.fromCache ? (
