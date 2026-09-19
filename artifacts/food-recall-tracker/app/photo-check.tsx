@@ -1,4 +1,5 @@
 import * as Haptics from 'expo-haptics';
+import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -23,6 +24,7 @@ import { searchFoodRecalls } from '@/services/recallApi';
 import type { RecallSearchResult } from '@/types/recall';
 
 type PhotoState = 'ready' | 'identifying' | 'checking' | 'verdict' | 'error';
+const MAX_PHOTO_WIDTH = 1024;
 
 interface PhotoVerdict {
   productName: string | null;
@@ -49,12 +51,22 @@ export default function PhotoCheckScreen() {
   };
 
   const processAsset = async (asset: ImagePicker.ImagePickerAsset) => {
-    if (!asset.base64) throw new Error('We could not read that photo. Please try again.');
+    const targetWidth = Math.min(asset.width || MAX_PHOTO_WIDTH, MAX_PHOTO_WIDTH);
+    const manipulatedImage = await ImageManipulator.manipulateAsync(
+      asset.uri,
+      asset.width > MAX_PHOTO_WIDTH ? [{ resize: { width: targetWidth } }] : [],
+      {
+        compress: 0.65,
+        format: ImageManipulator.SaveFormat.JPEG,
+        base64: true,
+      },
+    );
+    if (!manipulatedImage.base64) throw new Error('We could not read that photo. Please try again.');
     setImageUri(asset.uri);
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setPhotoState('identifying');
 
-    const productName = await identifyFoodFromImage(asset.base64, asset.mimeType ?? 'image/jpeg');
+    const productName = await identifyFoodFromImage(manipulatedImage.base64, 'image/jpeg');
     if (!productName) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setVerdict({ productName: null, recallResult: null });
@@ -86,7 +98,7 @@ export default function PhotoCheckScreen() {
 
     try {
       const result = await ImagePicker.launchCameraAsync({
-        base64: true,
+        base64: false,
         mediaTypes: ['images'],
         quality: 0.65,
       });
@@ -115,7 +127,7 @@ export default function PhotoCheckScreen() {
 
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        base64: true,
+        base64: false,
         mediaTypes: ['images'],
         quality: 0.65,
       });

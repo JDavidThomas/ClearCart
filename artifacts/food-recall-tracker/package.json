@@ -55,6 +55,7 @@
     "zod-validation-error": "^3.4.0"
   },
   "dependencies": {
-    "expo-camera": "~57.0.5"
+    "expo-camera": "~57.0.5",
+    "expo-image-manipulator": "~57.0.19"
   }
 }
