@@ -52,21 +52,34 @@ export default function PhotoCheckScreen() {
 
   const processAsset = async (asset: ImagePicker.ImagePickerAsset) => {
     const targetWidth = Math.min(asset.width || MAX_PHOTO_WIDTH, MAX_PHOTO_WIDTH);
-    const manipulatedImage = await ImageManipulator.manipulateAsync(
+    // Keep the original camera result as a URI. Resize and compress it before
+    // asking the native image module to create a base64 string.
+    const compressedImage = await ImageManipulator.manipulateAsync(
       asset.uri,
       asset.width > MAX_PHOTO_WIDTH ? [{ resize: { width: targetWidth } }] : [],
       {
-        compress: 0.65,
+        compress: 0.5,
+        format: ImageManipulator.SaveFormat.JPEG,
+        base64: false,
+      },
+    );
+
+    const encodedImage = await ImageManipulator.manipulateAsync(
+      compressedImage.uri,
+      [],
+      {
+        compress: 1,
         format: ImageManipulator.SaveFormat.JPEG,
         base64: true,
       },
     );
-    if (!manipulatedImage.base64) throw new Error('We could not read that photo. Please try again.');
+    if (!encodedImage.base64) throw new Error('We could not read that photo. Please try again.');
+
     setImageUri(asset.uri);
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setPhotoState('identifying');
 
-    const productName = await identifyFoodFromImage(manipulatedImage.base64, 'image/jpeg');
+    const productName = await identifyFoodFromImage(encodedImage.base64, 'image/jpeg');
     if (!productName) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setVerdict({ productName: null, recallResult: null });

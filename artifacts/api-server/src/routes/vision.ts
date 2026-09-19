@@ -5,6 +5,7 @@ import { logger } from "../lib/logger";
 const router: IRouter = Router();
 const GEMINI_MODEL = "gemini-3.6-flash";
 const MAX_IMAGE_BASE64_LENGTH = 2_000_000;
+const GEMINI_REQUEST_TIMEOUT_MS = 30_000;
 const SUPPORTED_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"]);
 
 interface GeminiResponse {
@@ -75,12 +76,16 @@ router.post("/vision/identify-food", async (req, res) => {
 
   logger.info({ base64Length: imageBase64.length, mimeType }, "Received food photo for Gemini identification");
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), GEMINI_REQUEST_TIMEOUT_MS);
+
   try {
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`,
       {
         method: "POST",
         headers: { "content-type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           contents: [
             {
@@ -128,6 +133,8 @@ router.post("/vision/identify-food", async (req, res) => {
       "Gemini food identification request threw an error",
     );
     res.status(502).json({ message: "We could not identify that photo. Please try another image." });
+  } finally {
+    clearTimeout(timeoutId);
   }
 });
 

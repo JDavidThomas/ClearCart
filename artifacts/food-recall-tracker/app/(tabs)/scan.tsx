@@ -173,21 +173,20 @@ export default function ScanScreen() {
               facing="back"
               onBarcodeScanned={handleBarcodeScanned}
               style={styles.camera}
-            >
-              <View style={styles.cameraOverlay}>
-                <View style={styles.scanFrame}>
-                  <View style={[styles.corner, styles.cornerTopLeft, { borderColor: colors.primary }]} />
-                  <View style={[styles.corner, styles.cornerTopRight, { borderColor: colors.primary }]} />
-                  <View style={[styles.corner, styles.cornerBottomLeft, { borderColor: colors.primary }]} />
-                  <View style={[styles.corner, styles.cornerBottomRight, { borderColor: colors.primary }]} />
-                </View>
-                <View style={[styles.cameraHint, { backgroundColor: colors.foreground }]}>
-                  <Text style={[styles.cameraHintText, { color: colors.primaryForeground }]}>
-                    Scan UPC or EAN barcode
-                  </Text>
-                </View>
+            />
+            <View pointerEvents="none" style={styles.cameraOverlay}>
+              <View style={styles.scanFrame}>
+                <View style={[styles.corner, styles.cornerTopLeft, { borderColor: colors.primary }]} />
+                <View style={[styles.corner, styles.cornerTopRight, { borderColor: colors.primary }]} />
+                <View style={[styles.corner, styles.cornerBottomLeft, { borderColor: colors.primary }]} />
+                <View style={[styles.corner, styles.cornerBottomRight, { borderColor: colors.primary }]} />
               </View>
-            </CameraView>
+              <View style={[styles.cameraHint, { backgroundColor: colors.foreground }]}>
+                <Text style={[styles.cameraHintText, { color: colors.primaryForeground }]}>
+                  Scan UPC or EAN barcode
+                </Text>
+              </View>
+            </View>
           </View>
         ) : scanState === 'checking' ? (
           <CheckingState colors={colors} />
@@ -452,8 +451,12 @@ const styles = StyleSheet.create({
   },
   cameraOverlay: {
     alignItems: 'center',
-    flex: 1,
+    bottom: 0,
     justifyContent: 'center',
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
   },
   scanFrame: {
     height: 150,
