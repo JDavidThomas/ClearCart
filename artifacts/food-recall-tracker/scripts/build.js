@@ -80,6 +80,18 @@ function getApiBaseUrl(deploymentDomain) {
   return `https://${stripProtocol(domain)}`;
 }
 
+function getOpenFdaApiKey() {
+  const apiKey =
+    process.env.EXPO_PUBLIC_OPENFDA_API_KEY || process.env.OPENFDA_API_KEY;
+  if (!apiKey?.trim()) {
+    console.error(
+      'ERROR: OPENFDA_API_KEY is required to bundle direct openFDA recall searches',
+    );
+    process.exit(1);
+  }
+  return apiKey.trim();
+}
+
 function prepareDirectories(timestamp) {
   console.log('Preparing build directories...');
 
@@ -134,7 +146,7 @@ function getExpoPublicReplId() {
   return process.env.REPL_ID || process.env.EXPO_PUBLIC_REPL_ID;
 }
 
-async function startMetro(expoPublicDomain, expoPublicReplId, apiBaseUrl) {
+async function startMetro(expoPublicDomain, expoPublicReplId, apiBaseUrl, openFdaApiKey) {
   const isRunning = await checkMetroHealth();
   if (isRunning) {
     console.log('Metro already running');
@@ -144,9 +156,11 @@ async function startMetro(expoPublicDomain, expoPublicReplId, apiBaseUrl) {
   console.log('Starting Metro...');
   console.log(`Setting EXPO_PUBLIC_DOMAIN=${expoPublicDomain}`);
   console.log(`Setting EXPO_PUBLIC_API_BASE_URL=${apiBaseUrl}`);
+  console.log(`Setting EXPO_PUBLIC_OPENFDA_API_KEY (configured=${Boolean(openFdaApiKey)})`);
   const env = {
     ...process.env,
     EXPO_PUBLIC_API_BASE_URL: apiBaseUrl,
+    EXPO_PUBLIC_OPENFDA_API_KEY: openFdaApiKey,
     EXPO_PUBLIC_DOMAIN: expoPublicDomain,
     EXPO_PUBLIC_REPL_ID: expoPublicReplId,
   };
@@ -536,13 +550,14 @@ async function main() {
   const domain = getDeploymentDomain();
   const expoPublicReplId = getExpoPublicReplId();
   const apiBaseUrl = getApiBaseUrl(domain);
+  const openFdaApiKey = getOpenFdaApiKey();
   const baseUrl = `https://${domain}`;
   const timestamp = `${Date.now()}-${process.pid}`;
 
   prepareDirectories(timestamp);
   clearMetroCache();
 
-  await startMetro(domain, expoPublicReplId, apiBaseUrl);
+  await startMetro(domain, expoPublicReplId, apiBaseUrl, openFdaApiKey);
 
   const downloadTimeout = 600000;
   const downloadPromise = downloadBundlesAndManifests(timestamp);

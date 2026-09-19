@@ -15,18 +15,11 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AllergenInsights } from '@/components/AllergenInsights';
-import { getHealthRetryDelay } from '@/services/apiConnection';
-import {
-  cacheApiBaseUrl,
-  configureApiBaseUrl,
-  refreshApiBaseUrl,
-} from '@/services/apiConnectionRuntime';
 import { FdaFreshnessNotice } from '@/components/FdaFreshnessNotice';
 import { RecallCard } from '@/components/RecallCard';
 import { useColors } from '@/hooks/useColors';
 import { searchFoodRecalls } from '@/services/recallApi';
 import type { RecallSearchResult } from '@/types/recall';
-import { healthCheck, useHealthCheck } from '@workspace/api-client-react';
 
 function formatUpdatedAt(date: string) {
   const parsedDate = new Date(date);
@@ -47,36 +40,10 @@ export default function HomeScreen() {
   const [submittedTerm, setSubmittedTerm] = useState<string>('');
   const topPadding = Platform.OS === 'web' ? Math.max(insets.top, 67) : insets.top;
 
-  const {
-    isError: isHealthError,
-    isPending: isHealthPending,
-    refetch: refetchHealth,
-  } = useHealthCheck({
-    request: {
-      cache: 'no-store',
-    },
-    query: {
-      queryKey: ['/api/health'],
-      queryFn: async ({ signal }) => {
-        const apiBaseUrl = await configureApiBaseUrl();
-        if (!apiBaseUrl) {
-          throw new Error('The API server URL is not configured.');
-        }
-        const result = await healthCheck({ cache: 'no-store', signal });
-        await cacheApiBaseUrl(apiBaseUrl);
-        return result;
-      },
-      refetchOnMount: 'always',
-      retry: 3,
-      retryDelay: getHealthRetryDelay,
-      staleTime: 30 * 1000,
-    },
-  });
-
   const { data, error, isFetching, isError, refetch } = useQuery<RecallSearchResult, Error>({
     queryKey: ['food-recalls', submittedTerm],
     queryFn: () => searchFoodRecalls(submittedTerm),
-    enabled: submittedTerm.length > 0 && !isHealthPending && !isHealthError,
+    enabled: submittedTerm.length > 0,
     staleTime: 5 * 60 * 1000,
     retry: false,
   });
@@ -85,12 +52,6 @@ export default function HomeScreen() {
     const nextTerm = term.trim();
     if (!nextTerm) return;
     await Haptics.selectionAsync();
-    if (isHealthError) {
-      await refreshApiBaseUrl();
-      await refetchHealth();
-      return;
-    }
-    if (isHealthPending) return;
     if (nextTerm === submittedTerm) {
       await refetch();
       return;
@@ -165,14 +126,14 @@ export default function HomeScreen() {
               </View>
               <Pressable
                 accessibilityRole="button"
-                accessibilityState={{ disabled: !term.trim() || isFetching || isHealthPending || isHealthError }}
-                disabled={!term.trim() || isFetching || isHealthPending || isHealthError}
+                accessibilityState={{ disabled: !term.trim() || isFetching }}
+                disabled={!term.trim() || isFetching}
                 onPress={handleSearch}
                 style={({ pressed }) => [
                   styles.searchButton,
                   {
                     backgroundColor: colors.primary,
-                    opacity: pressed || !term.trim() || isFetching || isHealthPending || isHealthError ? 0.7 : 1,
+                    opacity: pressed || !term.trim() || isFetching ? 0.7 : 1,
                   },
                 ]}
                 testID="search-recalls-button"
@@ -227,17 +188,7 @@ export default function HomeScreen() {
               </Pressable>
             </View>
 
-            {isHealthError ? (
-              <ConnectionIssueState
-                onRetry={async () => {
-                  await refreshApiBaseUrl();
-                  await refetchHealth();
-                }}
-                colors={colors}
-              />
-            ) : isHealthPending ? (
-              <ConnectionCheckingState colors={colors} />
-            ) : submittedTerm.length === 0 ? (
+            {submittedTerm.length === 0 ? (
               <EmptySearchState colors={colors} />
             ) : isError ? (
               <ErrorState message={error?.message ?? 'Something went wrong.'} onRetry={() => refetch()} colors={colors} />
@@ -288,35 +239,6 @@ function EmptySearchState({ colors }: StateProps) {
       <Text style={[styles.stateBody, { color: colors.mutedForeground }]}>
         We’ll show active recall records from the FDA database. A match does not replace the official notice.
       </Text>
-    </View>
-  );
-}
-
-function ConnectionIssueState({ onRetry, colors }: { onRetry: () => void } & StateProps) {
-  return (
-    <View style={[styles.stateCard, { backgroundColor: colors.dangerSoft }]}>
-      <Feather name="wifi-off" size={22} color={colors.destructive} />
-      <Text style={[styles.stateTitle, { color: colors.foreground }]}>Connection issue</Text>
-      <Text style={[styles.stateBody, { color: colors.mutedForeground }]}>
-        The recall service is unavailable. Tap to retry.
-      </Text>
-      <Pressable
-        accessibilityRole="button"
-        onPress={onRetry}
-        style={({ pressed }) => [styles.retryButton, { borderColor: colors.destructive, opacity: pressed ? 0.65 : 1 }]}
-        testID="retry-connection-button"
-      >
-        <Text style={[styles.retryText, { color: colors.destructive }]}>Retry connection</Text>
-      </Pressable>
-    </View>
-  );
-}
-
-function ConnectionCheckingState({ colors }: StateProps) {
-  return (
-    <View style={[styles.loadingState, { borderColor: colors.border }]}>
-      <ActivityIndicator color={colors.primary} size="small" />
-      <Text style={[styles.loadingText, { color: colors.mutedForeground }]}>Checking connection…</Text>
     </View>
   );
 }

@@ -4,6 +4,7 @@ import {
   getHealthRetryDelay,
   resolveApiBaseUrl,
 } from "../../food-recall-tracker/services/apiConnection.ts";
+import { searchFdaRecalls } from "../../food-recall-tracker/services/fdaRecalls.ts";
 
 const BASE_URL = process.env.FDA_TEST_BASE_URL ?? "http://127.0.0.1:8080";
 const LIMIT = "20";
@@ -89,6 +90,17 @@ function runApiConnectionRegressionTest() {
   console.log("API connection regression test passed: current URL wins, fallback is bounded, retry delays are 500ms/1s/2s.");
 }
 
+async function runDirectFdaSearchTest() {
+  const recalls = await searchFdaRecalls("banana");
+  if (recalls.length === 0) {
+    throw new Error("Direct openFDA banana search returned no active recalls.");
+  }
+  if (recalls.some((recall) => recall.source !== "FDA")) {
+    throw new Error("Direct openFDA search returned a non-FDA source.");
+  }
+  console.log(`Direct openFDA search test passed: banana returned ${recalls.length} FDA result(s).`);
+}
+
 async function runSearch(term, index) {
   const normalizedTerm = cleanRecallSearchTerm(term);
   const query = buildOpenFdaSearchQuery(term);
@@ -160,6 +172,7 @@ console.log(`Running ${SEARCH_TERMS.length} searches with limit=${LIMIT}`);
 console.log("API keys are redacted from logged URLs.");
 console.log("");
 runApiConnectionRegressionTest();
+await runDirectFdaSearchTest();
 console.log("");
 
 for (const [index, term] of SEARCH_TERMS.entries()) {

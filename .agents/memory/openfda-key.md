@@ -1,10 +1,10 @@
 ---
-name: openFDA API key handling
-description: Why the first mobile build does not bundle the stored API key into the Expo client.
+name: openFDA direct mobile search
+description: Why direct Expo recall searches intentionally bundle the stored openFDA key.
 ---
 
-The mobile client currently calls the public openFDA endpoint without bundling `OPENFDA_API_KEY`; the secret is stored for a future server-side proxy or rate-limit upgrade.
+The mobile client calls the openFDA food and drug enforcement endpoints directly. The stored `OPENFDA_API_KEY` secret is mapped to `EXPO_PUBLIC_OPENFDA_API_KEY` only while Expo bundles the app, so the API key is intentionally visible to app users.
 
-**Why:** Embedding a private key in an Expo bundle would expose it to every app user. The unauthenticated endpoint is sufficient for the initial search flow.
+**Why:** openFDA is a free public API with a documented 120,000-request daily limit, and direct calls remove the unstable Replit API-server URL from the primary recall search path. The key is treated as a public rate-limit credential, not a private server secret.
 
-**How to apply:** If the key is needed in a later feature, proxy openFDA requests through a server route that reads the secret rather than changing the mobile bundle to expose it.
+**How to apply:** Keep `OPENFDA_API_KEY` in Replit Secrets and map it to `EXPO_PUBLIC_OPENFDA_API_KEY` only in the Expo dev/static-build environment. Never print the value. Keep the API server available for Gemini, Supabase, and future USDA proxy work.
