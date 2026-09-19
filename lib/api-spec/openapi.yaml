@@ -17,7 +17,7 @@ tags:
   - name: auth
     description: Profile authentication and preferences
 paths:
-  /healthz:
+  /health:
     get:
       operationId: healthCheck
       tags: [health]
