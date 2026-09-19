@@ -1,15 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getFsisRecalls } from '@workspace/api-client-react';
+import { getFdaRecalls, getFsisRecalls } from '@workspace/api-client-react';
 import type {
   FoodRecall,
   OpenFoodFactsProduct,
   RecallSearchResult,
 } from '@/types/recall';
 
-const OPENFDA_ENDPOINTS = [
-  'https://api.fda.gov/food/enforcement.json',
-  'https://api.fda.gov/drug/enforcement.json',
-];
 const OPEN_FOOD_FACTS_URL = 'https://world.openfoodfacts.org/api/v3/product/';
 const FDA_NOTICES_URL =
   'https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts';
@@ -20,21 +16,6 @@ const MAX_CACHED_SEARCHES = 8;
 interface CachedSearch {
   recalls: FoodRecall[];
   lastUpdated: string;
-}
-
-interface OpenFdaRecall {
-  recall_number?: string;
-  product_description?: string;
-  reason_for_recall?: string;
-  recalling_firm?: string;
-  report_date?: string;
-  classification?: string;
-  status?: string;
-  url?: string;
-}
-
-interface OpenFdaResponse {
-  results?: OpenFdaRecall[];
 }
 
 interface OpenFoodFactsResponse {
@@ -51,16 +32,16 @@ function cacheKey(term: string) {
   return `${CACHE_PREFIX}${encodeURIComponent(term.toLowerCase())}`;
 }
 
-function toRecall(record: OpenFdaRecall): FoodRecall {
+function toRecall(record: Awaited<ReturnType<typeof getFdaRecalls>>['results'][number]): FoodRecall {
   return {
-    recallNumber: record.recall_number,
-    productDescription: record.product_description?.trim() || 'Product description unavailable',
-    reasonForRecall: record.reason_for_recall?.trim() || 'Reason not provided',
-    recallingFirm: record.recalling_firm?.trim() || 'Recalling firm not provided',
-    recallDate: record.report_date?.trim() || 'Date not provided',
-    classification: record.classification?.trim() || 'Classification not provided',
+    recallNumber: record.recallNumber,
+    productDescription: record.productDescription,
+    reasonForRecall: record.reasonForRecall,
+    recallingFirm: record.recallingFirm,
+    recallDate: record.recallDate,
+    classification: record.classification,
     status: record.status,
-    officialUrl: record.url?.trim() || FDA_NOTICES_URL,
+    officialUrl: record.officialUrl || FDA_NOTICES_URL,
     source: 'FDA',
   };
 }
@@ -82,24 +63,61 @@ function toFsisRecall(record: Awaited<ReturnType<typeof getFsisRecalls>>['recall
   };
 }
 
-function isActiveRecall(record: OpenFdaRecall) {
+function isActiveRecall(record: Awaited<ReturnType<typeof getFdaRecalls>>['results'][number]) {
   const status = record.status?.toLowerCase() ?? '';
   return !status.includes('terminated') && !status.includes('completed');
 }
 
-async function searchOpenFdaEndpoint(endpoint: string, params: URLSearchParams) {
-  const response = await fetch(`${endpoint}?${params.toString()}`);
+export function cleanRecallSearchTerm(term: string) {
+  return term
+    .normalize('NFKC')
+    .match(/[\p{L}\p{N}]+/gu)
+    ?.join(' ')
+    .trim() ?? '';
+}
 
-  if (response.status === 404) {
-    return [];
+function wildcardClause(word: string) {
+  return `product_description:*${word}*`;
+}
+
+function singularizeWord(word: string) {
+  const lowerWord = word.toLowerCase();
+  if (lowerWord.endsWith('ies') && word.length > 3) {
+    return `${word.slice(0, -3)}y`;
+  }
+  if (lowerWord.endsWith('ses') && word.length > 3) {
+    return word.slice(0, -2);
+  }
+  if (lowerWord.endsWith('s') && word.length > 1) {
+    return word.slice(0, -1);
+  }
+  return word;
+}
+
+function wildcardVariants(word: string) {
+  const singular = singularizeWord(word);
+  return singular === word
+    ? wildcardClause(word)
+    : `(${wildcardClause(word)} OR ${wildcardClause(singular)})`;
+}
+
+export function buildOpenFdaSearchQuery(term: string) {
+  const words = cleanRecallSearchTerm(term).split(' ').filter(Boolean);
+  if (words.length === 0) return '';
+
+  if (words.length === 1) {
+    const word = words[0];
+    const clauses = [wildcardClause(word)];
+    if (word.toLowerCase().endsWith('s') && word.length > 1) {
+      clauses.push(wildcardClause(word.slice(0, -1)));
+    }
+    return clauses.join(' OR ');
   }
 
-  if (!response.ok) {
-    throw new Error(`openFDA returned ${response.status}`);
-  }
-
-  const payload = (await response.json()) as OpenFdaResponse;
-  return payload.results ?? [];
+  const phrase = `product_description:"${words.join(' ')}"`;
+  const wildcardPhrase = `product_description:*${words.join(' ')}*`;
+  const allWords = words.map(wildcardVariants).join(' AND ');
+  return `${phrase} OR ${wildcardPhrase} OR ${allWords}`;
 }
 
 async function readCachedSearch(term: string): Promise<CachedSearch | null> {
@@ -135,21 +153,25 @@ async function saveSearch(term: string, value: CachedSearch) {
  * temporarily unavailable.
  */
 export async function searchFoodRecalls(term: string): Promise<RecallSearchResult> {
-  const normalizedTerm = term.trim();
+  const normalizedTerm = cleanRecallSearchTerm(term);
+  if (!normalizedTerm) {
+    return { recalls: [], lastUpdated: new Date().toISOString(), fromCache: false };
+  }
   const cached = await readCachedSearch(normalizedTerm);
 
   try {
-    const params = new URLSearchParams({
-      search: `product_description:"${normalizedTerm}"`,
-      limit: '20',
-    });
-
-    const endpointResults = await Promise.all(
-      OPENFDA_ENDPOINTS.map((endpoint) => searchOpenFdaEndpoint(endpoint, params)),
-    );
+    const primaryQuery = buildOpenFdaSearchQuery(normalizedTerm);
+    const primaryResult = await getFdaRecalls({ search: primaryQuery, limit: 20 });
+    let endpointResults = primaryResult.results;
+    if (endpointResults.length === 0) {
+      const firstWord = normalizedTerm.split(' ')[0];
+      const fallbackQuery = buildOpenFdaSearchQuery(firstWord);
+      if (fallbackQuery && fallbackQuery !== primaryQuery) {
+        endpointResults = (await getFdaRecalls({ search: fallbackQuery, limit: 20 })).results;
+      }
+    }
     const seenRecallKeys = new Set<string>();
     const fdaRecalls = endpointResults
-      .flat()
       .filter(isActiveRecall)
       .map(toRecall)
       .filter((recall) => {

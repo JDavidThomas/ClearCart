@@ -25,9 +25,11 @@ import type {
   AuthProfileUpdatePayload,
   AuthSessionPayload,
   FsisRecallResponse,
+  GetFdaRecallsParams,
   HealthStatus,
   IdentifyFoodPayload,
-  IdentifyFoodRequest
+  IdentifyFoodRequest,
+  OpenFdaRecallResponse
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -290,6 +292,91 @@ export function useGetFsisRecalls<TData = Awaited<ReturnType<typeof getFsisRecal
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetFsisRecallsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetFdaRecallsUrl = (params: GetFdaRecallsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/recalls/fda?${stringifiedParams}` : `/api/recalls/fda`
+}
+
+/**
+ * Searches FDA food and drug enforcement records through the server-side OpenFDA proxy.
+ * @summary Search FDA enforcement recalls
+ */
+export const getFdaRecalls = async (params: GetFdaRecallsParams, options?: Parameters<typeof customFetch>[1]): Promise<OpenFdaRecallResponse> => {
+
+  return customFetch<OpenFdaRecallResponse>(getGetFdaRecallsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetFdaRecallsQueryKey = (params?: GetFdaRecallsParams,) => {
+    return [
+    `/api/recalls/fda`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetFdaRecallsQueryOptions = <TData = Awaited<ReturnType<typeof getFdaRecalls>>, TError = ErrorType<void>>(params: GetFdaRecallsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFdaRecalls>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetFdaRecallsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getFdaRecalls>>> = ({ signal }) => getFdaRecalls(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getFdaRecalls>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetFdaRecallsQueryResult = NonNullable<Awaited<ReturnType<typeof getFdaRecalls>>>
+export type GetFdaRecallsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Search FDA enforcement recalls
+ */
+
+export function useGetFdaRecalls<TData = Awaited<ReturnType<typeof getFdaRecalls>>, TError = ErrorType<void>>(
+ params: GetFdaRecallsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFdaRecalls>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetFdaRecallsQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

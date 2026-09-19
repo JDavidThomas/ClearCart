@@ -57,6 +57,35 @@ export const GetFsisRecallsResponse = zod.object({
 
 
 /**
+ * Searches FDA food and drug enforcement records through the server-side OpenFDA proxy.
+ * @summary Search FDA enforcement recalls
+ */
+
+export const getFdaRecallsQueryLimitDefault = 20;
+export const getFdaRecallsQueryLimitMax = 100;
+
+
+
+export const GetFdaRecallsQueryParams = zod.object({
+  "search": zod.coerce.string().min(1),
+  "limit": zod.coerce.number().int().min(1).max(getFdaRecallsQueryLimitMax).default(getFdaRecallsQueryLimitDefault)
+})
+
+export const GetFdaRecallsResponse = zod.object({
+  "results": zod.array(zod.object({
+  "recallNumber": zod.string().optional(),
+  "productDescription": zod.string(),
+  "reasonForRecall": zod.string(),
+  "recallingFirm": zod.string(),
+  "recallDate": zod.string(),
+  "classification": zod.string(),
+  "status": zod.string().optional(),
+  "officialUrl": zod.string().url()
+}))
+})
+
+
+/**
  * @summary Create a profile
  */
 export const authSignUpBodyPasswordMin = 6;

@@ -39,6 +39,21 @@ export interface FsisRecallResponse {
   lastUpdated: string;
 }
 
+export interface OpenFdaRecall {
+  recallNumber?: string;
+  productDescription: string;
+  reasonForRecall: string;
+  recallingFirm: string;
+  recallDate: string;
+  classification: string;
+  status?: string;
+  officialUrl: string;
+}
+
+export interface OpenFdaRecallResponse {
+  results: OpenFdaRecall[];
+}
+
 export interface AuthCredentialsPayload {
   email: string;
   /** @minLength 6 */
@@ -68,4 +83,16 @@ export interface AuthSessionPayload {
   profile: AuthProfilePayload | null;
   requiresEmailConfirmation: boolean;
 }
+
+export type GetFdaRecallsParams = {
+/**
+ * @minLength 1
+ */
+search: string;
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: number;
+};
 
