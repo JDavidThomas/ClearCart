@@ -15,12 +15,18 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AllergenInsights } from '@/components/AllergenInsights';
+import { getHealthRetryDelay } from '@/services/apiConnection';
+import {
+  cacheApiBaseUrl,
+  configureApiBaseUrl,
+  refreshApiBaseUrl,
+} from '@/services/apiConnectionRuntime';
 import { FdaFreshnessNotice } from '@/components/FdaFreshnessNotice';
 import { RecallCard } from '@/components/RecallCard';
 import { useColors } from '@/hooks/useColors';
 import { searchFoodRecalls } from '@/services/recallApi';
 import type { RecallSearchResult } from '@/types/recall';
-import { useHealthCheck } from '@workspace/api-client-react';
+import { healthCheck, useHealthCheck } from '@workspace/api-client-react';
 
 function formatUpdatedAt(date: string) {
   const parsedDate = new Date(date);
@@ -51,8 +57,18 @@ export default function HomeScreen() {
     },
     query: {
       queryKey: ['/api/health'],
+      queryFn: async ({ signal }) => {
+        const apiBaseUrl = await configureApiBaseUrl();
+        if (!apiBaseUrl) {
+          throw new Error('The API server URL is not configured.');
+        }
+        const result = await healthCheck({ cache: 'no-store', signal });
+        await cacheApiBaseUrl(apiBaseUrl);
+        return result;
+      },
       refetchOnMount: 'always',
-      retry: false,
+      retry: 3,
+      retryDelay: getHealthRetryDelay,
       staleTime: 30 * 1000,
     },
   });
@@ -70,6 +86,7 @@ export default function HomeScreen() {
     if (!nextTerm) return;
     await Haptics.selectionAsync();
     if (isHealthError) {
+      await refreshApiBaseUrl();
       await refetchHealth();
       return;
     }
@@ -211,7 +228,13 @@ export default function HomeScreen() {
             </View>
 
             {isHealthError ? (
-              <ConnectionIssueState onRetry={() => refetchHealth()} colors={colors} />
+              <ConnectionIssueState
+                onRetry={async () => {
+                  await refreshApiBaseUrl();
+                  await refetchHealth();
+                }}
+                colors={colors}
+              />
             ) : isHealthPending ? (
               <ConnectionCheckingState colors={colors} />
             ) : submittedTerm.length === 0 ? (

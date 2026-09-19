@@ -1,4 +1,9 @@
 import { buildOpenFdaSearchQuery, cleanRecallSearchTerm } from "../../food-recall-tracker/services/recallSearch.ts";
+import {
+  HEALTH_RETRY_DELAYS_MS,
+  getHealthRetryDelay,
+  resolveApiBaseUrl,
+} from "../../food-recall-tracker/services/apiConnection.ts";
 
 const BASE_URL = process.env.FDA_TEST_BASE_URL ?? "http://127.0.0.1:8080";
 const LIMIT = "20";
@@ -59,6 +64,29 @@ function buildOpenFdaUrl(endpoint, query) {
 
 function formatValue(value) {
   return JSON.stringify(value);
+}
+
+function runApiConnectionRegressionTest() {
+  const currentApiBaseUrl = "https://current-project.riker.replit.dev";
+  const staleCachedApiBaseUrl = "https://old-server-instance.riker.replit.dev";
+
+  if (resolveApiBaseUrl(currentApiBaseUrl, staleCachedApiBaseUrl) !== currentApiBaseUrl) {
+    throw new Error("Current environment API URL did not override the stale cached URL.");
+  }
+  if (resolveApiBaseUrl(null, staleCachedApiBaseUrl) !== staleCachedApiBaseUrl) {
+    throw new Error("Cached API URL was not retained as a fallback when no current URL exists.");
+  }
+  if (resolveApiBaseUrl(null, null) !== null) {
+    throw new Error("Missing API URLs should resolve to null.");
+  }
+  if (HEALTH_RETRY_DELAYS_MS.join(",") !== "500,1000,2000") {
+    throw new Error("Health retry delays changed unexpectedly.");
+  }
+  if ([0, 1, 2].some((index) => getHealthRetryDelay(index) !== HEALTH_RETRY_DELAYS_MS[index])) {
+    throw new Error("Health retry delay schedule is not applied in order.");
+  }
+
+  console.log("API connection regression test passed: current URL wins, fallback is bounded, retry delays are 500ms/1s/2s.");
 }
 
 async function runSearch(term, index) {
@@ -130,6 +158,8 @@ async function runSearch(term, index) {
 console.log(`FDA batch search test base URL: ${BASE_URL}`);
 console.log(`Running ${SEARCH_TERMS.length} searches with limit=${LIMIT}`);
 console.log("API keys are redacted from logged URLs.");
+console.log("");
+runApiConnectionRegressionTest();
 console.log("");
 
 for (const [index, term] of SEARCH_TERMS.entries()) {

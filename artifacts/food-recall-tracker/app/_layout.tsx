@@ -15,10 +15,12 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { AuthProvider, getStoredAccessToken } from '@/context/AuthContext';
 import { setAuthTokenGetter, setBaseUrl } from '@workspace/api-client-react';
+import { getCurrentApiBaseUrl } from '@/services/apiConnection';
+import { initializeApiBaseUrl } from '@/services/apiConnectionRuntime';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
-setBaseUrl(process.env.EXPO_PUBLIC_API_BASE_URL?.trim() || null);
+setBaseUrl(getCurrentApiBaseUrl());
 setAuthTokenGetter(getStoredAccessToken);
 
 const queryClient = new QueryClient();
@@ -40,6 +42,10 @@ export default function RootLayout() {
     Inter_600SemiBold,
     Inter_700Bold,
   });
+
+  useEffect(() => {
+    void initializeApiBaseUrl();
+  }, []);
 
   useEffect(() => {
     if (fontsLoaded || fontError) {
