@@ -101,6 +101,33 @@ function wildcardVariants(word: string) {
     : `(${wildcardClause(word)} OR ${wildcardClause(singular)})`;
 }
 
+function messageFromApiError(error: unknown) {
+  if (!error || typeof error !== 'object') return null;
+  const data = (error as { data?: unknown }).data;
+  if (!data || typeof data !== 'object') return null;
+  const message = (data as { message?: unknown }).message;
+  return typeof message === 'string' && message.trim() ? message.trim() : null;
+}
+
+function formatRecallSearchError(error: unknown) {
+  const apiMessage = messageFromApiError(error);
+  if (apiMessage?.includes('FDA API is unreachable')) {
+    return 'FDA API is unreachable right now. Check your connection and try again.';
+  }
+  if (apiMessage?.includes('FDA API returned an error')) {
+    return apiMessage;
+  }
+  if (apiMessage?.includes('FDA API configuration')) {
+    return apiMessage;
+  }
+
+  const message = error instanceof Error ? error.message : '';
+  if (/network request failed|failed to fetch|fetch failed|timeout/i.test(message)) {
+    return 'FDA API is unreachable right now. Check your connection and try again.';
+  }
+  return 'FDA API returned an unexpected error. Please try again.';
+}
+
 export function buildOpenFdaSearchQuery(term: string) {
   const words = cleanRecallSearchTerm(term).split(' ').filter(Boolean);
   if (words.length === 0) return '';
@@ -210,11 +237,7 @@ export async function searchFoodRecalls(term: string): Promise<RecallSearchResul
       return { ...cached, fromCache: true };
     }
 
-    throw new Error(
-      error instanceof Error && error.message.includes('Network request failed')
-        ? 'Unable to connect. Check your internet connection and try again.'
-        : 'We could not reach the recall database right now. Please try again.',
-    );
+    throw new Error(formatRecallSearchError(error));
   }
 }
 

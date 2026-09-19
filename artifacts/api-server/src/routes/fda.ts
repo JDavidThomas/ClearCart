@@ -29,6 +29,28 @@ interface OpenFdaResponse {
   results?: OpenFdaRecord[];
 }
 
+class FdaConfigurationError extends Error {
+  readonly code = "FDA_API_CONFIGURATION_ERROR";
+}
+
+class FdaUnreachableError extends Error {
+  readonly code = "FDA_API_UNREACHABLE";
+
+  constructor(cause: unknown) {
+    super(cause instanceof Error ? cause.message : "OpenFDA request failed");
+  }
+}
+
+class FdaResponseError extends Error {
+  readonly code = "FDA_API_ERROR";
+  readonly status: number;
+
+  constructor(status: number) {
+    super(`OpenFDA returned HTTP ${status}`);
+    this.status = status;
+  }
+}
+
 function valueOrFallback(value: unknown, fallback: string) {
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
 }
@@ -56,17 +78,39 @@ async function searchEndpoint(endpoint: string, search: string, limit: number) {
   });
   const apiKey = process.env.OPENFDA_API_KEY?.trim();
   if (!apiKey) {
-    throw new Error("OPENFDA_API_KEY is not configured");
+    throw new FdaConfigurationError("OPENFDA_API_KEY is not configured");
   }
   params.set("api_key", apiKey);
 
-  const response = await fetch(`${endpoint}?${params.toString()}`, {
-    signal: AbortSignal.timeout(OPENFDA_REQUEST_TIMEOUT_MS),
-  });
-  if (response.status === 404) return [];
-  if (!response.ok) throw new Error(`OpenFDA returned ${response.status}`);
+  const encodedParams = params.toString().replace(/\*/g, "%2A");
+  const requestUrl = `${endpoint}?${encodedParams}`;
+  const safeRequestUrl = requestUrl.replace(
+    /([?&]api_key=)[^&]*/,
+    "$1%5BREDACTED%5D",
+  );
+  logger.info(
+    { url: safeRequestUrl },
+    "Requesting OpenFDA URL",
+  );
 
-  const payload = (await response.json()) as OpenFdaResponse;
+  let response: Response;
+  try {
+    response = await fetch(requestUrl, {
+      signal: AbortSignal.timeout(OPENFDA_REQUEST_TIMEOUT_MS),
+    });
+  } catch (error) {
+    throw new FdaUnreachableError(error);
+  }
+
+  if (response.status === 404) return [];
+  if (!response.ok) throw new FdaResponseError(response.status);
+
+  let payload: OpenFdaResponse;
+  try {
+    payload = (await response.json()) as OpenFdaResponse;
+  } catch {
+    throw new FdaResponseError(response.status);
+  }
   return payload.results ?? [];
 }
 
@@ -103,8 +147,38 @@ router.get("/recalls/fda", async (req, res) => {
     const response = GetFdaRecallsResponse.parse({ results: normalizedResults });
     res.json(response);
   } catch (error) {
-    logger.error({ err: error, search }, "OpenFDA recall request failed");
-    res.status(502).json({ message: "FDA recall data is unavailable right now." });
+    if (error instanceof FdaConfigurationError) {
+      logger.error({ err: error, search }, "OpenFDA API configuration is missing");
+      res.status(500).json({
+        code: error.code,
+        message: "FDA API configuration is missing on the server.",
+      });
+      return;
+    }
+
+    if (error instanceof FdaUnreachableError) {
+      logger.error({ err: error, search }, "FDA API is unreachable");
+      res.status(502).json({
+        code: error.code,
+        message: "FDA API is unreachable right now. Please try again.",
+      });
+      return;
+    }
+
+    if (error instanceof FdaResponseError) {
+      logger.error({ err: error, search, upstreamStatus: error.status }, "FDA API returned an error");
+      res.status(502).json({
+        code: error.code,
+        message: `FDA API returned an error (HTTP ${error.status}). Please try again.`,
+      });
+      return;
+    }
+
+    logger.error({ err: error, search }, "FDA API response could not be read");
+    res.status(502).json({
+      code: "FDA_API_ERROR",
+      message: "FDA API returned an unreadable response. Please try again.",
+    });
   }
 });
 
