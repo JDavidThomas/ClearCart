@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getFsisRecalls } from '@workspace/api-client-react';
 import type {
   FoodRecall,
   OpenFoodFactsProduct,
@@ -60,6 +61,24 @@ function toRecall(record: OpenFdaRecall): FoodRecall {
     classification: record.classification?.trim() || 'Classification not provided',
     status: record.status,
     officialUrl: record.url?.trim() || FDA_NOTICES_URL,
+    source: 'FDA',
+  };
+}
+
+function toFsisRecall(record: Awaited<ReturnType<typeof getFsisRecalls>>['recalls'][number]): FoodRecall {
+  return {
+    recallNumber: `fsis-${record.id}`,
+    productDescription: record.productName,
+    reasonForRecall: record.reason,
+    recallingFirm: record.companyName,
+    recallDate: record.date,
+    classification: record.classification,
+    status: record.recallType,
+    officialUrl: record.officialUrl,
+    source: 'USDA FSIS',
+    summary: record.summary,
+    recallType: record.recallType,
+    relatedToOutbreak: record.relatedToOutbreak,
   };
 }
 
@@ -129,7 +148,7 @@ export async function searchFoodRecalls(term: string): Promise<RecallSearchResul
       OPENFDA_ENDPOINTS.map((endpoint) => searchOpenFdaEndpoint(endpoint, params)),
     );
     const seenRecallKeys = new Set<string>();
-    const recalls = endpointResults
+    const fdaRecalls = endpointResults
       .flat()
       .filter(isActiveRecall)
       .map(toRecall)
@@ -143,6 +162,21 @@ export async function searchFoodRecalls(term: string): Promise<RecallSearchResul
         seenRecallKeys.add(key);
         return true;
       });
+    let fsisRecalls: FoodRecall[] = [];
+    try {
+      const fsisResult = await getFsisRecalls();
+      const searchNeedle = normalizedTerm.toLowerCase();
+      fsisRecalls = fsisResult.recalls
+        .filter(
+          (record) =>
+            record.productName.toLowerCase().includes(searchNeedle) ||
+            record.summary.toLowerCase().includes(searchNeedle),
+        )
+        .map(toFsisRecall);
+    } catch {
+      // FSIS is an additive source. FDA results remain available if its proxy is down.
+    }
+    const recalls = [...fdaRecalls, ...fsisRecalls];
     const freshResult: CachedSearch = {
       recalls,
       lastUpdated: new Date().toISOString(),

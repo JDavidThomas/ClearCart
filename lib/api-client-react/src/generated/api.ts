@@ -24,6 +24,7 @@ import type {
   AuthProfilePayload,
   AuthProfileUpdatePayload,
   AuthSessionPayload,
+  FsisRecallResponse,
   HealthStatus,
   IdentifyFoodPayload,
   IdentifyFoodRequest
@@ -150,13 +151,7 @@ export const identifyFood = async (identifyFoodRequest: IdentifyFoodRequest, opt
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
-    if (h instanceof Headers) {
-      const values: Record<string, string> = {};
-      h.forEach((value, key) => {
-        values[key] = value;
-      });
-      return values;
-    }
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
     if (Symbol.iterator in h) {
       return Object.fromEntries(
         Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
@@ -229,6 +224,84 @@ export const useIdentifyFood = <TError = ErrorType<void>,
       return useMutation(getIdentifyFoodMutationOptions(options));
     }
 
+export const getGetFsisRecallsUrl = () => {
+
+
+
+
+  return `/api/recalls/fsis`
+}
+
+/**
+ * Returns recent active FSIS recalls fetched through the server-side proxy.
+ * @summary Get recent active USDA FSIS recalls
+ */
+export const getFsisRecalls = async ( options?: Parameters<typeof customFetch>[1]): Promise<FsisRecallResponse> => {
+
+  return customFetch<FsisRecallResponse>(getGetFsisRecallsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetFsisRecallsQueryKey = () => {
+    return [
+    `/api/recalls/fsis`
+    ] as const;
+    }
+
+
+export const getGetFsisRecallsQueryOptions = <TData = Awaited<ReturnType<typeof getFsisRecalls>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFsisRecalls>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetFsisRecallsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getFsisRecalls>>> = ({ signal }) => getFsisRecalls({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getFsisRecalls>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetFsisRecallsQueryResult = NonNullable<Awaited<ReturnType<typeof getFsisRecalls>>>
+export type GetFsisRecallsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get recent active USDA FSIS recalls
+ */
+
+export function useGetFsisRecalls<TData = Awaited<ReturnType<typeof getFsisRecalls>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFsisRecalls>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetFsisRecallsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getAuthSignUpUrl = () => {
 
 
@@ -244,13 +317,7 @@ export const authSignUp = async (authCredentialsPayload: AuthCredentialsPayload,
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
-    if (h instanceof Headers) {
-      const values: Record<string, string> = {};
-      h.forEach((value, key) => {
-        values[key] = value;
-      });
-      return values;
-    }
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
     if (Symbol.iterator in h) {
       return Object.fromEntries(
         Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
@@ -338,13 +405,7 @@ export const authLogIn = async (authCredentialsPayload: AuthCredentialsPayload, 
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
-    if (h instanceof Headers) {
-      const values: Record<string, string> = {};
-      h.forEach((value, key) => {
-        values[key] = value;
-      });
-      return values;
-    }
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
     if (Symbol.iterator in h) {
       return Object.fromEntries(
         Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
@@ -509,13 +570,7 @@ export const authUpdateProfile = async (authProfileUpdatePayload: AuthProfileUpd
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
-    if (h instanceof Headers) {
-      const values: Record<string, string> = {};
-      h.forEach((value, key) => {
-        values[key] = value;
-      });
-      return values;
-    }
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
     if (Symbol.iterator in h) {
       return Object.fromEntries(
         Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),

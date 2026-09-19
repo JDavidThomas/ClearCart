@@ -10,7 +10,10 @@ interface RecallCardProps {
 
 function formatRecallDate(date: string) {
   if (date === 'Date not provided') return date;
-  const parsedDate = new Date(`${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}T00:00:00`);
+  const normalizedDate = /^\d{8}$/.test(date)
+    ? `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}T00:00:00`
+    : date;
+  const parsedDate = new Date(normalizedDate);
   return Number.isNaN(parsedDate.getTime())
     ? date
     : parsedDate.toLocaleDateString(undefined, {
@@ -22,6 +25,7 @@ function formatRecallDate(date: string) {
 
 export function RecallCard({ recall }: RecallCardProps) {
   const colors = useColors();
+  const source = recall.source ?? 'FDA';
 
   const openOfficialNotice = async () => {
     await Haptics.selectionAsync();
@@ -31,9 +35,16 @@ export function RecallCard({ recall }: RecallCardProps) {
   return (
     <View style={[styles.card, { borderColor: colors.border, backgroundColor: colors.card }]}>
       <View style={styles.cardHeader}>
-        <View style={[styles.badge, { backgroundColor: colors.dangerSoft }]}>
-          <Feather name="alert-triangle" size={14} color={colors.destructive} />
-          <Text style={[styles.badgeText, { color: colors.destructive }]}>Active recall</Text>
+        <View style={styles.badgeRow}>
+          <View style={[styles.badge, { backgroundColor: colors.dangerSoft }]}>
+            <Feather name="alert-triangle" size={14} color={colors.destructive} />
+            <Text style={[styles.badgeText, { color: colors.destructive }]}>Active recall</Text>
+          </View>
+          <View style={[styles.sourceBadge, { backgroundColor: source === 'FDA' ? colors.blueSoft : colors.warningSoft }]}>
+            <Text style={[styles.sourceBadgeText, { color: source === 'FDA' ? colors.primary : colors.warning }]}>
+              {source}
+            </Text>
+          </View>
         </View>
         <Text style={[styles.classification, { color: colors.destructive }]}>
           Class {recall.classification.replace(/^Class\s*/i, '')}
@@ -48,16 +59,18 @@ export function RecallCard({ recall }: RecallCardProps) {
         <DetailRow label="Reason" value={recall.reasonForRecall} colors={colors} />
         <DetailRow label="Recalling firm" value={recall.recallingFirm} colors={colors} />
         <DetailRow label="Recall date" value={formatRecallDate(recall.recallDate)} colors={colors} />
+        {recall.summary ? <DetailRow label="Summary" value={recall.summary} colors={colors} /> : null}
+        {recall.relatedToOutbreak ? <DetailRow label="Related to outbreak" value="Yes" colors={colors} /> : null}
       </View>
 
       <Pressable
         accessibilityRole="link"
-        accessibilityLabel="View official FDA recall notice"
+        accessibilityLabel={`View official ${source} recall notice`}
         onPress={openOfficialNotice}
         style={({ pressed }) => [styles.linkButton, { opacity: pressed ? 0.65 : 1 }]}
         testID="official-recall-link"
       >
-        <Text style={[styles.linkText, { color: colors.primary }]}>View official FDA notice</Text>
+        <Text style={[styles.linkText, { color: colors.primary }]}>View official {source} notice</Text>
         <Feather name="external-link" size={15} color={colors.primary} />
       </Pressable>
     </View>
@@ -92,6 +105,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 12,
   },
+  badgeRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexShrink: 1,
+    flexWrap: 'wrap',
+    gap: 6,
+  },
   badge: {
     alignItems: 'center',
     borderRadius: 999,
@@ -104,6 +124,15 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_600SemiBold',
     fontSize: 12,
     letterSpacing: 0.2,
+  },
+  sourceBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  sourceBadgeText: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 11,
   },
   classification: {
     fontFamily: 'Inter_700Bold',

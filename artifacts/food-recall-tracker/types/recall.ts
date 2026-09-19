@@ -11,6 +11,10 @@ export interface FoodRecall {
   classification: string;
   status?: string;
   officialUrl: string;
+  source?: 'FDA' | 'USDA FSIS';
+  summary?: string;
+  recallType?: string;
+  relatedToOutbreak?: boolean;
 }
 
 export interface RecallSearchResult {

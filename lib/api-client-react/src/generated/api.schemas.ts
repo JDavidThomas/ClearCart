@@ -21,6 +21,24 @@ export interface IdentifyFoodPayload {
   productName: string | null;
 }
 
+export interface FsisRecall {
+  id: string;
+  productName: string;
+  companyName: string;
+  reason: string;
+  date: string;
+  classification: string;
+  summary: string;
+  officialUrl: string;
+  recallType: string;
+  relatedToOutbreak: boolean;
+}
+
+export interface FsisRecallResponse {
+  recalls: FsisRecall[];
+  lastUpdated: string;
+}
+
 export interface AuthCredentialsPayload {
   email: string;
   /** @minLength 6 */

@@ -10,6 +10,8 @@ export * from './authCredentialsPayload';
 export * from './authProfilePayload';
 export * from './authProfileUpdatePayload';
 export * from './authSessionPayload';
+export * from './fsisRecall';
+export * from './fsisRecallResponse';
 export * from './healthStatus';
 export * from './identifyFoodPayload';
 export * from './identifyFoodRequest';
