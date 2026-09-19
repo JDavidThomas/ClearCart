@@ -39,6 +39,7 @@ export default function HomeScreen() {
   const [term, setTerm] = useState<string>('');
   const [submittedTerm, setSubmittedTerm] = useState<string>('');
   const topPadding = Platform.OS === 'web' ? Math.max(insets.top, 67) : insets.top;
+  const geminiKeyConfigured = Boolean(process.env.EXPO_PUBLIC_GEMINI_API_KEY?.trim());
 
   const { data, error, isFetching, isError, refetch } = useQuery<RecallSearchResult, Error>({
     queryKey: ['food-recalls', submittedTerm],
@@ -92,6 +93,28 @@ export default function HomeScreen() {
             <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
               Search live public recall records by product name or ingredient.
             </Text>
+            <View
+              style={[
+                styles.geminiStatus,
+                {
+                  backgroundColor: geminiKeyConfigured ? colors.successSoft : colors.warningSoft,
+                },
+              ]}
+            >
+              <Feather
+                name={geminiKeyConfigured ? 'check-circle' : 'alert-circle'}
+                size={15}
+                color={geminiKeyConfigured ? colors.success : colors.warning}
+              />
+              <Text
+                style={[
+                  styles.geminiStatusText,
+                  { color: geminiKeyConfigured ? colors.success : colors.warning },
+                ]}
+              >
+                Gemini key: {geminiKeyConfigured ? 'configured' : 'missing'}
+              </Text>
+            </View>
 
             <View style={styles.searchSection}>
               <Text style={[styles.inputLabel, { color: colors.foreground }]}>What are you checking?</Text>
@@ -340,6 +363,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 24,
     maxWidth: 345,
+  },
+  geminiStatus: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    flexDirection: 'row',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  geminiStatusText: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 12,
   },
   searchSection: {
     gap: 10,
