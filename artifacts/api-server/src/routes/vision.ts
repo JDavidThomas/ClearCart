@@ -52,6 +52,14 @@ function parseProductName(text: string) {
 
 router.post("/vision/identify-food", async (req, res) => {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
+  logger.info(
+    {
+      configured: Boolean(apiKey),
+      apiKeyPreview: apiKey ? `${apiKey.slice(0, 4)}… (length ${apiKey.length})` : "missing",
+      model: GEMINI_MODEL,
+    },
+    "Gemini configuration check",
+  );
   if (!apiKey) {
     logger.warn({ configured: false }, "Gemini food identification is not configured");
     res.status(503).json({ message: "Food photo identification is not configured right now." });
@@ -74,7 +82,17 @@ router.post("/vision/identify-food", async (req, res) => {
     return;
   }
 
-  logger.info({ base64Length: imageBase64.length, mimeType }, "Received food photo for Gemini identification");
+  logger.info(
+    {
+      method: req.method,
+      url: req.originalUrl,
+      body: {
+        imageBase64: `[redacted; ${imageBase64.length} characters]`,
+        mimeType,
+      },
+    },
+    "Received food photo request",
+  );
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), GEMINI_REQUEST_TIMEOUT_MS);

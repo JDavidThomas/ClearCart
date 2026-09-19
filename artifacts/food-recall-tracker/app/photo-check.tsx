@@ -254,11 +254,11 @@ export default function PhotoCheckScreen() {
             ) : null}
             <ActivityIndicator color={colors.primary} size="large" />
             <Text style={[styles.feedbackTitle, { color: colors.foreground }]}>
-              {photoState === 'identifying' ? 'Reading the product photo' : 'Checking this product'}
+              {photoState === 'identifying' ? 'Processing photo…' : 'Checking this product'}
             </Text>
             <Text style={[styles.feedbackBody, { color: colors.mutedForeground }]}>
               {photoState === 'identifying'
-                ? 'Looking for a clear food product name.'
+                ? 'Sending the compressed photo securely for identification.'
                 : 'Searching current FDA food and drug recall records.'}
             </Text>
           </View>
