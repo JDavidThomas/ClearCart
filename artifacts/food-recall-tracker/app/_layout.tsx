@@ -13,12 +13,13 @@ import {
 } from '@expo-google-fonts/inter';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { AuthProvider } from '@/context/AuthContext';
-import { setBaseUrl } from '@workspace/api-client-react';
+import { AuthProvider, getStoredAccessToken } from '@/context/AuthContext';
+import { setAuthTokenGetter, setBaseUrl } from '@workspace/api-client-react';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 setBaseUrl(process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : null);
+setAuthTokenGetter(getStoredAccessToken);
 
 const queryClient = new QueryClient();
 

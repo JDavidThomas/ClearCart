@@ -1,10 +1,10 @@
 ---
-name: Local profile fallback
-description: Current account behavior while the Supabase integration is not connected.
+name: Supabase profile sync
+description: Cloud-backed profile behavior and guest fallback for the Food Recall Tracker.
 ---
 
-The app intentionally keeps recall features available to guests and stores the temporary profile/session locally on the device until Supabase is connected.
+The app uses Supabase Auth for profile sessions and stores only the access/refresh session tokens locally on the device. Recall checks remain available to guests if the profile service is unavailable.
 
-**Why:** The requested Supabase integration was not connected, but the guest-safe profile and allergen experience still needed to work end to end.
+**Why:** Personalized allergen alerts need a durable account, while public recall checks must continue working during auth outages.
 
-**How to apply:** Preserve the guest fallback and allergen UI contract; replace the local persistence layer with Supabase only when the integration is enabled.
+**How to apply:** Keep auth requests server-mediated with Supabase secrets. On auth failures, clear the session, show a small notice, and preserve guest access.

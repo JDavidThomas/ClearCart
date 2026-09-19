@@ -1,5 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import {
+  authGetMe,
+  authLogIn,
+  authSignUp,
+  authUpdateProfile,
+  type AuthProfilePayload,
+} from '@workspace/api-client-react';
 
 export interface UserProfile {
   id: string;
@@ -23,8 +30,8 @@ interface AuthContextValue {
   dismissGuestPrompt: () => void;
 }
 
-const PROFILE_KEY = '@food-recall-tracker/local-profile';
-const SESSION_KEY = '@food-recall-tracker/local-session';
+export const ACCESS_TOKEN_KEY = '@food-recall-tracker/access-token';
+const REFRESH_TOKEN_KEY = '@food-recall-tracker/refresh-token';
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
@@ -32,8 +39,28 @@ function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
 }
 
-function createLocalId() {
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+export async function getStoredAccessToken() {
+  return AsyncStorage.getItem(ACCESS_TOKEN_KEY);
+}
+
+function toUserProfile(profile: AuthProfilePayload): UserProfile {
+  return {
+    id: profile.id,
+    name: profile.name,
+    email: profile.email,
+    allergies: profile.allergies,
+  };
+}
+
+async function saveSession(accessToken: string, refreshToken: string | null) {
+  await AsyncStorage.multiSet([
+    [ACCESS_TOKEN_KEY, accessToken],
+    [REFRESH_TOKEN_KEY, refreshToken ?? ''],
+  ]);
+}
+
+async function clearSession() {
+  await AsyncStorage.multiRemove([ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY]);
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -47,22 +74,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const restoreSession = async () => {
       try {
-        const [sessionValue, profileValue] = await Promise.all([
-          AsyncStorage.getItem(SESSION_KEY),
-          AsyncStorage.getItem(PROFILE_KEY),
-        ]);
+        const accessToken = await getStoredAccessToken();
+        if (!accessToken) {
+          setStatus('guest');
+          return;
+        }
 
+        const currentProfile = await authGetMe();
         if (!active) return;
-        if (sessionValue === 'authenticated' && profileValue) {
-          setProfile(JSON.parse(profileValue) as UserProfile);
+        if (currentProfile) {
+          setProfile(toUserProfile(currentProfile));
           setStatus('authenticated');
         } else {
           setStatus('guest');
         }
       } catch {
         if (active) {
+          await clearSession();
+          setProfile(null);
           setStatus('guest');
-          setAuthNotice('Your profile could not be loaded, so recall checks are continuing as a guest.');
+          setAuthNotice('Profile sync is unavailable, so recall checks are continuing as a guest.');
         }
       }
     };
@@ -80,46 +111,65 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!cleanEmail.includes('@')) throw new Error('Enter a valid email address.');
     if (password.length < 6) throw new Error('Use a password with at least 6 characters.');
 
-    const nextProfile: UserProfile = {
-      id: createLocalId(),
-      name: cleanName,
-      email: cleanEmail,
-      allergies: [],
-    };
-    await AsyncStorage.multiSet([
-      [PROFILE_KEY, JSON.stringify(nextProfile)],
-      [SESSION_KEY, 'authenticated'],
-    ]);
-    setProfile(nextProfile);
-    setStatus('authenticated');
-    setAuthNotice('Your profile is saved on this device while account sync is unavailable.');
-    setGuestPromptDismissed(false);
+    try {
+      const response = await authSignUp({
+        name: cleanName,
+        email: cleanEmail,
+        password,
+      });
+      if (!response.accessToken || !response.profile) {
+        setProfile(null);
+        setStatus('guest');
+        setAuthNotice('Profile created. Confirm your email, then log in to use personalized alerts.');
+        throw new Error('Check your email to confirm your profile, then log in.');
+      }
+      await saveSession(response.accessToken, response.refreshToken);
+      setProfile(toUserProfile(response.profile));
+      setStatus('authenticated');
+      setAuthNotice(null);
+      setGuestPromptDismissed(false);
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith('Check your email')) throw error;
+      await clearSession();
+      setProfile(null);
+      setStatus('guest');
+      setAuthNotice('Profile sync is unavailable, so recall checks are continuing as a guest.');
+      throw new Error('We could not reach your profile service. You can continue as a guest.');
+    }
   };
 
   const logIn = async (email: string, password: string) => {
     const cleanEmail = normalizeEmail(email);
-    if (!cleanEmail.includes('@') || password.length < 1) {
+    if (!cleanEmail.includes('@') || password.length < 6) {
       throw new Error('Enter the email and password for your profile.');
     }
 
-    const storedProfileValue = await AsyncStorage.getItem(PROFILE_KEY);
-    const storedProfile = storedProfileValue
-      ? (JSON.parse(storedProfileValue) as UserProfile)
-      : null;
-
-    if (!storedProfile || storedProfile.email !== cleanEmail) {
-      throw new Error('No profile was found on this device for that email. Create a profile first.');
+    try {
+      const response = await authLogIn({ email: cleanEmail, password });
+      if (!response.accessToken || !response.profile) {
+        throw new Error('Your profile needs email confirmation before you can log in.');
+      }
+      await saveSession(response.accessToken, response.refreshToken);
+      setProfile(toUserProfile(response.profile));
+      setStatus('authenticated');
+      setAuthNotice(null);
+      setGuestPromptDismissed(false);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '';
+      if (message.includes('confirmation')) throw error;
+      if (message.includes('Invalid') || message.includes('credentials')) {
+        throw error;
+      }
+      await clearSession();
+      setProfile(null);
+      setStatus('guest');
+      setAuthNotice('Profile sync is unavailable, so recall checks are continuing as a guest.');
+      throw new Error('We could not reach your profile service. You can continue as a guest.');
     }
-
-    await AsyncStorage.setItem(SESSION_KEY, 'authenticated');
-    setProfile(storedProfile);
-    setStatus('authenticated');
-    setAuthNotice('Your profile is saved on this device while account sync is unavailable.');
-    setGuestPromptDismissed(false);
   };
 
   const logOut = async () => {
-    await AsyncStorage.setItem(SESSION_KEY, 'guest');
+    await clearSession();
     setProfile(null);
     setStatus('guest');
     setAuthNotice(null);
@@ -127,6 +177,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const continueAsGuest = () => {
+    void clearSession();
     setProfile(null);
     setStatus('guest');
     setAuthNotice(null);
@@ -134,9 +185,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const updateAllergies = async (allergies: string[]) => {
     if (!profile) return;
-    const nextProfile = { ...profile, allergies };
-    await AsyncStorage.setItem(PROFILE_KEY, JSON.stringify(nextProfile));
-    setProfile(nextProfile);
+    try {
+      const updatedProfile = await authUpdateProfile({ allergies });
+      setProfile(toUserProfile(updatedProfile));
+    } catch {
+      await clearSession();
+      setProfile(null);
+      setStatus('guest');
+      setAuthNotice('Profile sync is unavailable, so recall checks are continuing as a guest.');
+      throw new Error('Your profile could not be updated. Recall checks are still available as a guest.');
+    }
   };
 
   const value = useMemo<AuthContextValue>(

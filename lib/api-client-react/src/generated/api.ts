@@ -150,7 +150,13 @@ export const identifyFood = async (identifyFoodRequest: IdentifyFoodRequest, opt
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (h instanceof Headers) {
+      const values: Record<string, string> = {};
+      h.forEach((value, key) => {
+        values[key] = value;
+      });
+      return values;
+    }
     if (Symbol.iterator in h) {
       return Object.fromEntries(
         Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
@@ -238,7 +244,13 @@ export const authSignUp = async (authCredentialsPayload: AuthCredentialsPayload,
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (h instanceof Headers) {
+      const values: Record<string, string> = {};
+      h.forEach((value, key) => {
+        values[key] = value;
+      });
+      return values;
+    }
     if (Symbol.iterator in h) {
       return Object.fromEntries(
         Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
@@ -326,7 +338,13 @@ export const authLogIn = async (authCredentialsPayload: AuthCredentialsPayload, 
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (h instanceof Headers) {
+      const values: Record<string, string> = {};
+      h.forEach((value, key) => {
+        values[key] = value;
+      });
+      return values;
+    }
     if (Symbol.iterator in h) {
       return Object.fromEntries(
         Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
@@ -491,7 +509,13 @@ export const authUpdateProfile = async (authProfileUpdatePayload: AuthProfileUpd
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (h instanceof Headers) {
+      const values: Record<string, string> = {};
+      h.forEach((value, key) => {
+        values[key] = value;
+      });
+      return values;
+    }
     if (Symbol.iterator in h) {
       return Object.fromEntries(
         Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),

@@ -65,6 +65,12 @@ export default function ProfileScreen() {
           </View>
           <Text style={[styles.eyebrow, { color: colors.primary }]}>YOUR PROFILE</Text>
         </View>
+        {auth.status === 'guest' && auth.authNotice ? (
+          <View style={[styles.notice, { backgroundColor: colors.warningSoft }]}>
+            <Feather name="info" size={16} color={colors.warning} />
+            <Text style={[styles.noticeText, { color: colors.foreground }]}>{auth.authNotice}</Text>
+          </View>
+        ) : null}
 
         {auth.status === 'authenticated' && auth.profile ? (
           <LoggedInProfile
