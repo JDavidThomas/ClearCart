@@ -105,7 +105,7 @@ export default function HomeScreen() {
                   autoCorrect={false}
                   onChangeText={setTerm}
                   onSubmitEditing={handleSearch}
-                  placeholder="Try jalapeno, lettuce, or cheese"
+                  placeholder="Try jalapeño, lettuce, or cheese"
                   placeholderTextColor={colors.mutedForeground}
                   returnKeyType="search"
                   style={[styles.input, { color: colors.foreground }]}
