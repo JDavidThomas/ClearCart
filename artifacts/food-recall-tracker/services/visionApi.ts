@@ -5,35 +5,59 @@ const PHOTO_SERVICE_ERROR =
 const GENERIC_LABEL_WORDS = new Set([
   'classic',
   'creamy',
+  'fresh',
   'flavor',
+  'great',
+  'market',
+  'natural',
   'original',
   'organic',
   'peanut',
+  'premium',
   'sour',
   'the',
+  'value',
   'vanilla',
 ]);
-const STANDALONE_PRODUCE_WORDS = new Set([
+const STANDALONE_FOOD_WORDS = new Set([
   'apple',
   'avocado',
   'banana',
+  'beef',
+  'bread',
   'broccoli',
   'carrot',
   'celery',
+  'cereal',
+  'cheese',
+  'chicken',
   'cucumber',
+  'coffee',
   'garlic',
   'grape',
+  'hummus',
+  'icecream',
   'kale',
   'lemon',
   'lettuce',
   'lime',
   'mango',
+  'milk',
+  'oats',
   'onion',
   'orange',
+  'pasta',
   'pear',
+  'pork',
   'potato',
+  'rice',
+  'salmon',
+  'soup',
   'spinach',
   'tomato',
+  'tofu',
+  'tuna',
+  'yogurt',
 ]);
 
 interface GeminiResponse {
@@ -69,8 +93,7 @@ export function isUsableProductName(value: string | null | undefined): value is 
   if (words.length === 1) {
     const word = words[0];
     if (GENERIC_LABEL_WORDS.has(word)) return false;
-    if (STANDALONE_PRODUCE_WORDS.has(word)) return true;
-    if (normalized === normalized.toLowerCase() && word.length < 6) return false;
+    if (!STANDALONE_FOOD_WORDS.has(word)) return false;
   }
 
   return true;
@@ -116,7 +139,7 @@ async function fetchGemini(
           {
             parts: [
               {
-                text: "Read the visible food package label carefully. Return ONLY one complete, coherent product name with no explanation, punctuation, or formatting. If a brand is visible, include the brand and the product type, such as 'Great Value Creamy Peanut Butter'. If the image shows unbranded produce, return the specific produce type, such as 'romaine lettuce'. Never return a partial word, an ingredient, a flavor or texture descriptor by itself, or a single fragment such as 'cre', 'creamy', or 'peanut'. If you cannot confidently identify the complete product name, return exactly 'unknown'.",
+                text: "Read the visible food package label carefully. Return ONLY one complete, coherent product name with no explanation, punctuation, or formatting. If a brand is visible, include the brand and the product type, such as 'Great Value Creamy Peanut Butter'. For a jar labeled 'Great Value Creamy Peanut Butter', return: 'Great Value Creamy Peanut Butter'. Do NOT return 'Great', 'Creamy', or 'Peanut Butter'. If the image shows unbranded produce, return the specific produce type, such as 'romaine lettuce'. Never return a partial word, an ingredient, a flavor or texture descriptor by itself, or a single fragment such as 'cre', 'creamy', or 'peanut'. If you can only read part of the label, or if the product name is ambiguous, return 'unknown' rather than guessing. It is better to return 'unknown' than to return an incomplete name. If you cannot confidently identify the complete product name, return exactly 'unknown'.",
               },
               { inlineData: { mimeType, data: imageBase64 } },
             ],
