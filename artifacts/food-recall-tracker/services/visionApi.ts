@@ -59,6 +59,21 @@ const STANDALONE_FOOD_WORDS = new Set([
   'tuna',
   'yogurt',
 ]);
+const SUSPICIOUS_END_WORDS = new Set([
+  'cream',
+  'creamy',
+  'flavor',
+  'fresh',
+  'great',
+  'market',
+  'natural',
+  'organic',
+  'original',
+  'peanut',
+  'premium',
+  'sour',
+  'value',
+]);
 
 interface GeminiResponse {
   candidates?: Array<{
@@ -97,6 +112,16 @@ export function isUsableProductName(value: string | null | undefined): value is 
   }
 
   return true;
+}
+
+export function isPossiblyTruncatedProductName(value: string): boolean {
+  if (!isUsableProductName(value)) return false;
+
+  const words = value.toLowerCase().match(/[a-z0-9]+/g) ?? [];
+  if (words.length < 3 && !STANDALONE_FOOD_WORDS.has(words[words.length - 1])) {
+    return true;
+  }
+  return SUSPICIOUS_END_WORDS.has(words[words.length - 1]);
 }
 
 function parseProductName(text: string): string | null {
@@ -139,7 +164,7 @@ async function fetchGemini(
           {
             parts: [
               {
-                text: "Read the visible food package label carefully. Return ONLY one complete, coherent product name with no explanation, punctuation, or formatting. If a brand is visible, include the brand and the product type, such as 'Great Value Creamy Peanut Butter'. For a jar labeled 'Great Value Creamy Peanut Butter', return: 'Great Value Creamy Peanut Butter'. Do NOT return 'Great', 'Creamy', or 'Peanut Butter'. If the image shows unbranded produce, return the specific produce type, such as 'romaine lettuce'. Never return a partial word, an ingredient, a flavor or texture descriptor by itself, or a single fragment such as 'cre', 'creamy', or 'peanut'. If you can only read part of the label, or if the product name is ambiguous, return 'unknown' rather than guessing. It is better to return 'unknown' than to return an incomplete name. If you cannot confidently identify the complete product name, return exactly 'unknown'.",
+                text: "Read the ENTIRE product name from the front of the package. Include every word visible. Do not truncate at line breaks, wrap points, or the edge of the label. Return ONLY one complete, coherent product name with no explanation, punctuation, or formatting. If a brand is visible, include the brand and the product type, such as 'Great Value Creamy Peanut Butter'. For a jar labeled 'Great Value Creamy Peanut Butter', return: 'Great Value Creamy Peanut Butter'. Do NOT return 'Great', 'Creamy', or 'Peanut Butter'. If the label wraps across lines like 'Great Value' on one line and 'Creamy Peanut Butter' on the next, combine every line into 'Great Value Creamy Peanut Butter'. If the image shows unbranded produce, return the specific produce type, such as 'romaine lettuce'. Never return a partial word, an ingredient, a flavor or texture descriptor by itself, or a single fragment such as 'cre', 'creamy', or 'peanut'. If you can only read part of the label, or if the product name is ambiguous, return 'unknown' rather than guessing. It is better to return 'unknown' than to return an incomplete name. If you cannot confidently identify the complete product name, return exactly 'unknown'.",
               },
               { inlineData: { mimeType, data: imageBase64 } },
             ],
@@ -175,6 +200,7 @@ export async function identifyFoodFromImage(imageBase64: string, mimeType = 'ima
 
   let lastError: unknown = null;
   let receivedIdentificationResponse = false;
+  let suspiciousCandidate: string | null = null;
 
   for (const model of GEMINI_MODELS) {
     try {
@@ -197,13 +223,21 @@ export async function identifyFoodFromImage(imageBase64: string, mimeType = 'ima
         continue;
       }
       const productName = parseProductName(text);
-      if (productName) return productName;
+      if (productName) {
+        if (isPossiblyTruncatedProductName(productName)) {
+          suspiciousCandidate = productName;
+          receivedIdentificationResponse = true;
+          continue;
+        }
+        return productName;
+      }
       receivedIdentificationResponse = true;
     } catch (error) {
       lastError = error;
     }
   }
 
+  if (suspiciousCandidate) return suspiciousCandidate;
   if (receivedIdentificationResponse) return null;
   if (lastError instanceof Error && lastError.message === 'GEMINI_TIMEOUT') {
     throw new Error('Food photo identification timed out. Please try again.');

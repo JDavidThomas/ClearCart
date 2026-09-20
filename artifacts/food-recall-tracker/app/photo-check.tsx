@@ -19,11 +19,15 @@ import { AllergenInsights } from '@/components/AllergenInsights';
 import { FdaFreshnessNotice } from '@/components/FdaFreshnessNotice';
 import { RecallCard } from '@/components/RecallCard';
 import { useColors } from '@/hooks/useColors';
-import { identifyFoodFromImage, isUsableProductName } from '@/services/visionApi';
+import {
+  identifyFoodFromImage,
+  isPossiblyTruncatedProductName,
+  isUsableProductName,
+} from '@/services/visionApi';
 import { searchFoodRecalls } from '@/services/recallApi';
 import type { RecallSearchResult } from '@/types/recall';
 
-type PhotoState = 'ready' | 'identifying' | 'checking' | 'verdict' | 'error';
+type PhotoState = 'ready' | 'identifying' | 'checking' | 'confirming' | 'verdict' | 'error';
 const MAX_PHOTO_WIDTH = 1024;
 
 interface PhotoVerdict {
@@ -48,6 +52,14 @@ export default function PhotoCheckScreen() {
     setVerdict(null);
     setImageUri(null);
     setErrorMessage(null);
+  };
+
+  const checkProduct = async (productName: string) => {
+    setPhotoState('checking');
+    const recallResult = await searchFoodRecalls(productName);
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setVerdict({ productName, recallResult });
+    setPhotoState('verdict');
   };
 
   const processAsset = async (asset: ImagePicker.ImagePickerAsset) => {
@@ -87,12 +99,25 @@ export default function PhotoCheckScreen() {
       return;
     }
 
-    const productName = identifiedProductName;
-    setPhotoState('checking');
-    const recallResult = await searchFoodRecalls(productName);
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setVerdict({ productName, recallResult });
-    setPhotoState('verdict');
+    if (isPossiblyTruncatedProductName(identifiedProductName)) {
+      setVerdict({ productName: identifiedProductName, recallResult: null });
+      setPhotoState('confirming');
+      return;
+    }
+
+    await checkProduct(identifiedProductName);
+  };
+
+  const confirmProduct = async () => {
+    const productName = verdict?.productName;
+    if (!productName) return;
+
+    try {
+      await checkProduct(productName);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'We could not check that product. Please try again.');
+      setPhotoState('error');
+    }
   };
 
   const takePhoto = async () => {
@@ -263,6 +288,14 @@ export default function PhotoCheckScreen() {
                 : 'Searching current FDA food and drug recall records.'}
             </Text>
           </View>
+        ) : photoState === 'confirming' && verdict?.productName ? (
+          <PhotoConfirmationView
+            colors={colors}
+            productName={verdict.productName}
+            onConfirm={() => void confirmProduct()}
+            onManualSearch={() => router.push('/')}
+            onRetake={reset}
+          />
         ) : photoState === 'error' ? (
           <View style={[styles.feedbackCard, { backgroundColor: colors.dangerSoft }]}>
             <Feather name="alert-circle" size={28} color={colors.destructive} />
@@ -361,6 +394,61 @@ function GalleryButton({
       <Feather name="image" size={17} color={colors.primary} />
       <Text style={[styles.secondaryButtonText, { color: colors.primary }]}>Choose from Gallery</Text>
     </Pressable>
+  );
+}
+
+function PhotoConfirmationView({
+  colors,
+  productName,
+  onConfirm,
+  onManualSearch,
+  onRetake,
+}: {
+  colors: ReturnType<typeof useColors>;
+  productName: string;
+  onConfirm: () => void;
+  onManualSearch: () => void;
+  onRetake: () => void;
+}) {
+  return (
+    <View style={[styles.feedbackCard, { backgroundColor: colors.warningSoft }]}>
+      <View style={[styles.verdictIcon, { backgroundColor: colors.warning }]}>
+        <Feather name="help-circle" size={25} color={colors.primaryForeground} />
+      </View>
+      <Text style={[styles.feedbackTitle, { color: colors.foreground }]}>Check this product name</Text>
+      <Text style={[styles.feedbackBody, { color: colors.mutedForeground }]}>
+        We identified this as:
+      </Text>
+      <Text style={[styles.confirmedProductName, { color: colors.foreground }]}>{productName}</Text>
+      <Text style={[styles.feedbackBody, { color: colors.mutedForeground }]}>
+        Confirm it before we search FDA recall records.
+      </Text>
+      <Pressable
+        accessibilityRole="button"
+        onPress={onConfirm}
+        style={({ pressed }) => [
+          styles.primaryButton,
+          { backgroundColor: colors.primary, opacity: pressed ? 0.75 : 1 },
+        ]}
+        testID="confirm-product-button"
+      >
+        <Feather name="check" size={18} color={colors.primaryForeground} />
+        <Text style={[styles.primaryButtonText, { color: colors.primaryForeground }]}>Yes, check recalls</Text>
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        onPress={onManualSearch}
+        style={({ pressed }) => [
+          styles.secondaryButton,
+          { borderColor: colors.border, opacity: pressed ? 0.65 : 1 },
+        ]}
+        testID="manual-search-from-confirmation-button"
+      >
+        <Feather name="search" size={17} color={colors.primary} />
+        <Text style={[styles.secondaryButtonText, { color: colors.primary }]}>No, search manually</Text>
+      </Pressable>
+      <RetakeButton colors={colors} onPress={onRetake} />
+    </View>
   );
 }
 
@@ -469,6 +557,7 @@ const styles = StyleSheet.create({
   feedbackCard: { alignItems: 'center', borderRadius: 20, gap: 10, padding: 28 },
   feedbackTitle: { fontFamily: 'Inter_700Bold', fontSize: 18, marginTop: 3 },
   feedbackBody: { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 21, maxWidth: 310, textAlign: 'center' },
+  confirmedProductName: { fontFamily: 'Inter_700Bold', fontSize: 20, lineHeight: 27, maxWidth: 320, textAlign: 'center' },
   inlineButton: { borderRadius: 10, borderWidth: 1, marginTop: 4, minHeight: 44, justifyContent: 'center', paddingHorizontal: 16 },
   inlineButtonText: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
   verdictStack: { gap: 14 },
