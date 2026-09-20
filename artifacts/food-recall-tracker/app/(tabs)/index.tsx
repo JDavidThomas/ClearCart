@@ -2,7 +2,7 @@ import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -18,6 +18,7 @@ import { AllergenInsights } from '@/components/AllergenInsights';
 import { FdaFreshnessNotice } from '@/components/FdaFreshnessNotice';
 import { RecallCard } from '@/components/RecallCard';
 import { useColors } from '@/hooks/useColors';
+import { runGeminiHelloSmokeTest } from '@/services/geminiSmokeTest';
 import { searchFoodRecalls } from '@/services/recallApi';
 import type { RecallSearchResult } from '@/types/recall';
 
@@ -40,6 +41,11 @@ export default function HomeScreen() {
   const [submittedTerm, setSubmittedTerm] = useState<string>('');
   const topPadding = Platform.OS === 'web' ? Math.max(insets.top, 67) : insets.top;
   const geminiKeyConfigured = Boolean(process.env.EXPO_PUBLIC_GEMINI_API_KEY?.trim());
+
+  useEffect(() => {
+    if (!geminiKeyConfigured) return;
+    void runGeminiHelloSmokeTest().catch(() => undefined);
+  }, [geminiKeyConfigured]);
 
   const { data, error, isFetching, isError, refetch } = useQuery<RecallSearchResult, Error>({
     queryKey: ['food-recalls', submittedTerm],
