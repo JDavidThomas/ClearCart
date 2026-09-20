@@ -1,17 +1,6 @@
-const OCR_ENDPOINT = 'https://api.ocr.space/parse/image';
-const OCR_DEMO_KEY = 'helloworld';
-const OCR_REQUEST_TIMEOUT_MS = 30_000;
+const VISION_REQUEST_TIMEOUT_MS = 30_000;
 const PHOTO_SERVICE_ERROR =
   'Photo identification service is temporarily unavailable. Please type the product name instead.';
-export const GEMINI_MODELS = ['gemini-3.5-flash', 'gemini-3.7-flash', 'gemini-3.8-flash'] as const;
-
-interface OcrResponse {
-  IsErroredOnProcessing?: boolean;
-  ErrorMessage?: string | string[];
-  ParsedResults?: Array<{
-    ParsedText?: string;
-  }>;
-}
 
 function abortAfter(milliseconds: number) {
   const controller = new AbortController();
@@ -19,99 +8,57 @@ function abortAfter(milliseconds: number) {
   return { controller, timeoutId };
 }
 
-function getErrorMessage(payload: OcrResponse) {
-  if (Array.isArray(payload.ErrorMessage)) return payload.ErrorMessage.join(' ');
-  return typeof payload.ErrorMessage === 'string' ? payload.ErrorMessage : 'OCR processing failed.';
-}
-
-function isUsefulProductLabel(value: string) {
-  const normalized = value
-    .replace(/[|_]+/g, ' ')
-    .replace(/[^\p{L}\p{N}\s&'’-]/gu, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  if (!normalized || normalized.length < 3 || normalized.length > 80) return false;
-  if (normalized.split(/\s+/).length > 10) return false;
-  if ((normalized.match(/\d/g) ?? []).length > 3) return false;
-
-  return !/^(food|product|ingredients?|nutrition facts?|serving size|calories?|amount per serving|best before|use by|net weight|contents?)$/i.test(
-    normalized,
-  );
-}
-
-function extractProductLabel(payload: OcrResponse) {
-  const text =
-    payload.ParsedResults?.map((result) => result.ParsedText ?? '')
-      .join('\n')
-      .trim() ?? '';
-  if (!text) return null;
-
-  const candidates = text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(isUsefulProductLabel);
-
-  return candidates[0] ?? null;
+function getApiErrorMessage(error: unknown) {
+  if (!error || typeof error !== 'object') return null;
+  const data = (error as { data?: unknown }).data;
+  if (!data || typeof data !== 'object') return null;
+  const message = (data as { message?: unknown }).message;
+  return typeof message === 'string' && message.trim() ? message.trim() : null;
 }
 
 export async function identifyFoodFromImage(imageBase64: string, mimeType = 'image/jpeg') {
-  const request = abortAfter(OCR_REQUEST_TIMEOUT_MS);
-  const requestBody = {
-    base64Image: `data:${mimeType};base64,${imageBase64}`,
-    language: 'eng',
-    isOverlayRequired: false,
-    detectOrientation: true,
-    scale: true,
-    OCREngine: 1,
-  };
+  const baseUrl = getCurrentApiBaseUrl();
+  if (!baseUrl) {
+    throw new Error('Photo identification server is not configured in this app bundle.');
+  }
 
-  console.info('[PhotoCheck] OCR request', {
+  const request = abortAfter(VISION_REQUEST_TIMEOUT_MS);
+  const visionUrl = `${baseUrl}/api/vision/identify-food`;
+  console.info('[PhotoCheck] Vision request', {
     method: 'POST',
-    url: OCR_ENDPOINT,
+    url: visionUrl,
     body: {
       base64Image: `[redacted; ${imageBase64.length} characters]`,
-      language: requestBody.language,
-      OCREngine: requestBody.OCREngine,
+      mimeType,
     },
   });
 
   try {
-    const response = await fetch(OCR_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: OCR_DEMO_KEY,
-      },
-      body: JSON.stringify(requestBody),
-      signal: request.controller.signal,
-    });
-
-    if (!response.ok) {
-      throw new Error(`OCR service returned HTTP ${response.status}.`);
-    }
-
-    const payload = (await response.json()) as OcrResponse;
-    if (payload.IsErroredOnProcessing) {
-      throw new Error(getErrorMessage(payload));
-    }
-
-    const productName = extractProductLabel(payload);
-    console.info('[PhotoCheck] OCR response', {
-      url: OCR_ENDPOINT,
+    const response = await identifyFood(
+      { imageBase64, mimeType },
+      { signal: request.controller.signal },
+    );
+    const productName = response.productName?.trim() || null;
+    console.info('[PhotoCheck] Vision response', {
+      url: visionUrl,
       status: 'ok',
       productFound: Boolean(productName),
     });
     return productName;
   } catch (error) {
-    const reason =
-      error instanceof Error && error.name === 'AbortError'
-        ? 'request timed out'
-        : error instanceof Error
-          ? error.message
-          : 'unknown network error';
-    console.error('[PhotoCheck] OCR request failed', { url: OCR_ENDPOINT, reason });
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('Food photo identification timed out. Please try again.');
+    }
+    const reason = error instanceof Error ? error.message : 'unknown network error';
+    console.error('[PhotoCheck] Vision request failed', { url: visionUrl, reason });
+    const apiMessage = getApiErrorMessage(error);
+    if (apiMessage) throw new Error(apiMessage);
+    if (/failed to fetch|network request failed|fetch failed/i.test(reason)) {
+      throw new Error('Photo identification server is unreachable. Check your connection and try again.');
+    }
     throw new Error(PHOTO_SERVICE_ERROR);
   } finally {
     clearTimeout(request.timeoutId);
   }
 }
+const VISION_REQUEST_TIMEOUT_MS = 30_000;

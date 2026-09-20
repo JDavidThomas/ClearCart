@@ -39,7 +39,6 @@ export default function HomeScreen() {
   const [term, setTerm] = useState<string>('');
   const [submittedTerm, setSubmittedTerm] = useState<string>('');
   const topPadding = Platform.OS === 'web' ? Math.max(insets.top, 67) : insets.top;
-  const geminiKeyConfigured = Boolean(process.env.EXPO_PUBLIC_GEMINI_API_KEY?.trim());
 
   const { data, error, isFetching, isError, refetch } = useQuery<RecallSearchResult, Error>({
     queryKey: ['food-recalls', submittedTerm],
@@ -97,22 +96,18 @@ export default function HomeScreen() {
               style={[
                 styles.geminiStatus,
                 {
-                  backgroundColor: geminiKeyConfigured ? colors.successSoft : colors.warningSoft,
+                  backgroundColor: colors.successSoft,
                 },
               ]}
             >
-              <Feather
-                name={geminiKeyConfigured ? 'check-circle' : 'alert-circle'}
-                size={15}
-                color={geminiKeyConfigured ? colors.success : colors.warning}
-              />
+              <Feather name="shield" size={15} color={colors.success} />
               <Text
                 style={[
                   styles.geminiStatusText,
-                  { color: geminiKeyConfigured ? colors.success : colors.warning },
+                  { color: colors.success },
                 ]}
               >
-                Gemini key: {geminiKeyConfigured ? 'configured' : 'missing'}
+                Photo checks use secure server-side Gemini
               </Text>
             </View>
 

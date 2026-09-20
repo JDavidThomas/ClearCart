@@ -3,7 +3,7 @@ import { IdentifyFoodBody, IdentifyFoodResponse } from "@workspace/api-zod";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
-const GEMINI_MODELS = ["gemini-3.5-flash", "gemini-3.7-flash", "gemini-3.8-flash"] as const;
+const GEMINI_MODELS = ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.7-flash", "gemini-3.8-flash"] as const;
 const MAX_IMAGE_BASE64_LENGTH = 2_000_000;
 const GEMINI_REQUEST_TIMEOUT_MS = 30_000;
 const SUPPORTED_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"]);
@@ -55,7 +55,6 @@ router.post("/vision/identify-food", async (req, res) => {
   logger.info(
     {
       configured: Boolean(apiKey),
-      apiKeyPreview: apiKey ? `${apiKey.slice(0, 4)}… (length ${apiKey.length})` : "missing",
       models: GEMINI_MODELS,
     },
     "Gemini configuration check",
@@ -65,7 +64,6 @@ router.post("/vision/identify-food", async (req, res) => {
     res.status(503).json({ message: "Food photo identification is not configured right now." });
     return;
   }
-
   const parsed = IdentifyFoodBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ message: "Send a base64 image and its MIME type." });
