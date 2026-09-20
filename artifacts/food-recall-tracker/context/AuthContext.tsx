@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { getAuthRedirectUrl, supabase } from '@/lib/supabase';
+import { getAuthRedirectUrl, getSupabaseErrorDetails, supabase } from '@/lib/supabase';
 
 export type AllergySeverity = 'mild' | 'moderate' | 'severe' | null;
 
@@ -99,7 +99,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const loadProfile = async (user: { id: string; email?: string | null }) => {
     const email = user.email ?? '';
     const { data, error } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
-    if (error) throw error;
+    if (error) {
+      console.error('[Supabase] profiles select failed', getSupabaseErrorDetails(error));
+      throw error;
+    }
 
     if (data) {
       setProfile(toUserProfile(data as ProfileRow, email));
@@ -119,7 +122,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .upsert(initialProfile, { onConflict: 'id' })
       .select('*')
       .single();
-    if (insertError) throw insertError;
+    if (insertError) {
+      console.error('[Supabase] profiles upsert failed', getSupabaseErrorDetails(insertError));
+      throw insertError;
+    }
     setProfile(toUserProfile(inserted as ProfileRow, email));
   };
 
@@ -139,7 +145,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setAuthNotice(null);
           setStatus('authenticated');
         }
-      } catch {
+      } catch (error) {
+        console.error('[Supabase] session restore failed', getSupabaseErrorDetails(error));
         if (mounted) {
           await supabase.auth.signOut().catch(() => undefined);
           enterGuestMode('Profile sync is unavailable, so recall checks are continuing as a guest.');
@@ -161,7 +168,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setStatus('authenticated');
           }
         })
-        .catch(() => {
+        .catch((error) => {
+          console.error('[Supabase] auth state profile load failed', getSupabaseErrorDetails(error));
           if (mounted) enterGuestMode('Profile sync is unavailable, so recall checks are continuing as a guest.');
         });
     });
@@ -193,10 +201,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setStatus('authenticated');
       setGuestPromptDismissed(false);
     } catch (error) {
+      const details = getSupabaseErrorDetails(error);
+      console.error('[Supabase] signUp failed', details);
       if (error instanceof Error && error.message.startsWith('Check your email')) throw error;
       if (error instanceof Error && /already registered|already exists|invalid/i.test(error.message)) throw error;
       enterGuestMode('Profile sync is unavailable, so recall checks are continuing as a guest.');
-      throw new Error('We could not reach your profile service. You can continue as a guest.');
+      throw new Error(`Supabase sign-up failed: ${details.message}`);
     }
   };
 
@@ -219,11 +229,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setStatus('authenticated');
       setGuestPromptDismissed(false);
     } catch (error) {
+      const details = getSupabaseErrorDetails(error);
+      console.error('[Supabase] logIn failed', details);
       if (error instanceof Error && /invalid login|invalid credentials|email not confirmed/i.test(error.message)) {
         throw error;
       }
       enterGuestMode('Profile sync is unavailable, so recall checks are continuing as a guest.');
-      throw new Error('We could not reach your profile service. You can continue as a guest.');
+      throw new Error(`Supabase login failed: ${details.message}`);
     }
   };
 
@@ -233,7 +245,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
       redirectTo: getAuthRedirectUrl(),
     });
-    if (error) throw new Error(authErrorMessage(error, 'We could not send the reset email.'));
+    if (error) {
+      console.error('[Supabase] password reset failed', getSupabaseErrorDetails(error));
+      throw new Error(authErrorMessage(error, 'We could not send the reset email.'));
+    }
   };
 
   const logOut = async () => {
@@ -272,6 +287,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .select('*')
       .single();
     if (error) {
+      console.error('[Supabase] profile update failed', getSupabaseErrorDetails(error));
       enterGuestMode('Profile sync is unavailable, so recall checks are continuing as a guest.');
       throw new Error('Your profile could not be updated. Recall checks are still available as a guest.');
     }
@@ -287,7 +303,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       contentType: 'image/jpeg',
       upsert: true,
     });
-    if (error) throw new Error(authErrorMessage(error, 'We could not upload that photo.'));
+    if (error) {
+      console.error('[Supabase] avatar upload failed', getSupabaseErrorDetails(error));
+      throw new Error(authErrorMessage(error, 'We could not upload that photo.'));
+    }
     const { data } = supabase.storage.from('avatars').getPublicUrl(path);
     await updateProfile({ avatarUrl: `${data.publicUrl}?v=${Date.now()}` });
     return data.publicUrl;
