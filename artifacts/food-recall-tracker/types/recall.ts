@@ -15,12 +15,16 @@ export interface FoodRecall {
   summary?: string;
   recallType?: string;
   relatedToOutbreak?: boolean;
+  relevance?: RecallRelevance;
 }
+
+export type RecallRelevance = 'high' | 'medium' | 'low';
 
 export interface RecallSearchResult {
   recalls: FoodRecall[];
   lastUpdated: string;
   fromCache: boolean;
+  relevanceNotice?: string;
 }
 
 export interface OpenFoodFactsProduct {

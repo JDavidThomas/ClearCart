@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AllergenInsights } from '@/components/AllergenInsights';
 import { FDA_NOTICES_URL, FdaFreshnessNotice } from '@/components/FdaFreshnessNotice';
 import { RecallCard } from '@/components/RecallCard';
+import { RecallRelevanceNotice } from '@/components/RecallRelevanceNotice';
 import { useColors } from '@/hooks/useColors';
 import {
   lookupOpenFoodFactsProduct,
@@ -370,6 +371,7 @@ function VerdictView({
         ) : null}
       </View>
 
+      <RecallRelevanceNotice message={recallResult?.relevanceNotice} />
       {recallCards.map((recall, index) => (
         <RecallCard key={`${recall.recallNumber ?? recall.productDescription}-${index}`} recall={recall} />
       ))}

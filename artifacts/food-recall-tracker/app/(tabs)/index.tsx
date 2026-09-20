@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AllergenInsights } from '@/components/AllergenInsights';
 import { FdaFreshnessNotice } from '@/components/FdaFreshnessNotice';
 import { RecallCard } from '@/components/RecallCard';
+import { RecallRelevanceNotice } from '@/components/RecallRelevanceNotice';
 import { useColors } from '@/hooks/useColors';
 import { searchFoodRecalls } from '@/services/recallApi';
 import type { RecallSearchResult } from '@/types/recall';
@@ -218,21 +219,24 @@ export default function HomeScreen() {
             ) : recallCount === 0 ? (
               <NoResultsState term={submittedTerm} updatedAt={lastUpdated} colors={colors} />
             ) : (
-              <View style={styles.resultsHeader}>
-                <View>
-                  <Text style={[styles.resultsTitle, { color: colors.foreground }]}>
-                    {recallCount} active {recallCount === 1 ? 'recall' : 'recalls'} found
-                  </Text>
-                  <Text style={[styles.updatedText, { color: colors.mutedForeground }]}>
-                    Last updated {formatUpdatedAt(lastUpdated)}
-                  </Text>
-                </View>
-                {data?.fromCache ? (
-                  <View style={[styles.cachedBadge, { backgroundColor: colors.warningSoft }]}>
-                    <Feather name="wifi-off" size={13} color={colors.warning} />
-                    <Text style={[styles.cachedBadgeText, { color: colors.warning }]}>Saved result</Text>
+              <View style={styles.resultsBlock}>
+                <View style={styles.resultsHeader}>
+                  <View>
+                    <Text style={[styles.resultsTitle, { color: colors.foreground }]}>
+                      {recallCount} active {recallCount === 1 ? 'recall' : 'recalls'} found
+                    </Text>
+                    <Text style={[styles.updatedText, { color: colors.mutedForeground }]}>
+                      Last updated {formatUpdatedAt(lastUpdated)}
+                    </Text>
                   </View>
-                ) : null}
+                  {data?.fromCache ? (
+                    <View style={[styles.cachedBadge, { backgroundColor: colors.warningSoft }]}>
+                      <Feather name="wifi-off" size={13} color={colors.warning} />
+                      <Text style={[styles.cachedBadgeText, { color: colors.warning }]}>Saved result</Text>
+                    </View>
+                  ) : null}
+                </View>
+                <RecallRelevanceNotice message={data?.relevanceNotice} />
               </View>
             )}
           </View>
@@ -296,7 +300,9 @@ function NoResultsState({ term, updatedAt, colors }: NoResultsStateProps) {
   return (
     <View style={[styles.stateCard, { backgroundColor: colors.successSoft }]}>
       <Feather name="check-circle" size={22} color={colors.success} />
-      <Text style={[styles.stateTitle, { color: colors.foreground }]}>No active recalls found for this product</Text>
+      <Text style={[styles.stateTitle, { color: colors.foreground }]}>
+        No active recalls found for {term}
+      </Text>
       <Text style={[styles.stateBody, { color: colors.mutedForeground }]}>
         We didn’t find an active FDA food or drug recall matching “{term}”.
       </Text>
@@ -472,6 +478,9 @@ const styles = StyleSheet.create({
     marginTop: 4,
     minHeight: 42,
     gap: 12,
+  },
+  resultsBlock: {
+    gap: 10,
   },
   resultsTitle: {
     fontFamily: 'Inter_700Bold',

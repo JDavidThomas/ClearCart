@@ -45,6 +45,21 @@ export function RecallCard({ recall }: RecallCardProps) {
               {source}
             </Text>
           </View>
+          <View
+            style={[
+              styles.relevanceBadge,
+              { backgroundColor: recall.relevance === 'high' ? colors.successSoft : colors.warningSoft },
+            ]}
+          >
+            <Text
+              style={[
+                styles.relevanceBadgeText,
+                { color: recall.relevance === 'high' ? colors.success : colors.warning },
+              ]}
+            >
+              {recall.relevance === 'high' ? 'Highly relevant' : 'Possibly related'}
+            </Text>
+          </View>
         </View>
         <Text style={[styles.classification, { color: colors.destructive }]}>
           Class {recall.classification.replace(/^Class\s*/i, '')}
@@ -131,6 +146,15 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   sourceBadgeText: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 11,
+  },
+  relevanceBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  relevanceBadgeText: {
     fontFamily: 'Inter_600SemiBold',
     fontSize: 11,
   },

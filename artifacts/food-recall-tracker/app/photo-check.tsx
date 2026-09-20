@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AllergenInsights } from '@/components/AllergenInsights';
 import { FdaFreshnessNotice } from '@/components/FdaFreshnessNotice';
 import { RecallCard } from '@/components/RecallCard';
+import { RecallRelevanceNotice } from '@/components/RecallRelevanceNotice';
 import { useColors } from '@/hooks/useColors';
 import {
   identifyFoodFromImage,
@@ -498,7 +499,7 @@ function PhotoVerdictView({
           <Feather name={hasRecall ? 'alert-triangle' : 'check'} size={25} color={colors.primaryForeground} />
         </View>
         <Text style={[styles.verdictTitle, { color: colors.foreground }]}>
-          {hasRecall ? 'Active Recall Found' : 'No Active Recalls Found'}
+          {hasRecall ? 'Active Recall Found' : `No Active Recalls Found for ${verdict.productName}`}
         </Text>
         <Text style={[styles.productName, { color: colors.foreground }]}>{verdict.productName}</Text>
         <Text style={[styles.verdictBody, { color: colors.mutedForeground }]}>
@@ -508,6 +509,7 @@ function PhotoVerdictView({
         </Text>
         {!hasRecall ? <FdaFreshnessNotice colors={colors} /> : null}
       </View>
+      <RecallRelevanceNotice message={verdict.recallResult?.relevanceNotice} />
       {recalls.map((recall, index) => (
         <RecallCard key={`${recall.recallNumber ?? recall.productDescription}-${index}`} recall={recall} />
       ))}

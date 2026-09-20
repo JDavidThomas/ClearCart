@@ -1,5 +1,6 @@
 import type { FoodRecall } from '../types/recall';
 import { buildOpenFdaSearchQuery, cleanRecallSearchTerm } from './recallSearch.ts';
+import { rankAndFilterRecalls } from './recallRelevance';
 
 const OPENFDA_ENDPOINTS = [
   'https://api.fda.gov/food/enforcement.json',
@@ -154,5 +155,5 @@ export async function searchFdaRecalls(term: string): Promise<FoodRecall[]> {
     }
   }
 
-  return deduplicateRecalls(results);
+  return rankAndFilterRecalls(deduplicateRecalls(results), normalizedTerm);
 }

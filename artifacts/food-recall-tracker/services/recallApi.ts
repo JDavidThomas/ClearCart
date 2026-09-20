@@ -6,6 +6,7 @@ import type {
 } from '@/types/recall';
 import { searchFdaRecalls } from './fdaRecalls';
 import { buildOpenFdaSearchQuery, cleanRecallSearchTerm } from './recallSearch';
+import { getRecallRelevanceNotice, rankAndFilterRecalls } from './recallRelevance';
 
 export { buildOpenFdaSearchQuery, cleanRecallSearchTerm } from './recallSearch';
 
@@ -17,6 +18,7 @@ const MAX_CACHED_SEARCHES = 8;
 interface CachedSearch {
   recalls: FoodRecall[];
   lastUpdated: string;
+  relevanceNotice?: string;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -42,6 +44,8 @@ function normalizeCachedSearch(value: unknown): CachedSearch | null {
       return {
         recalls: candidate.recalls as FoodRecall[],
         lastUpdated,
+        relevanceNotice:
+          typeof candidate.relevanceNotice === 'string' ? candidate.relevanceNotice : undefined,
       };
     }
 
@@ -142,12 +146,19 @@ export async function searchFoodRecalls(term: string): Promise<RecallSearchResul
     const freshResult: CachedSearch = {
       recalls,
       lastUpdated: new Date().toISOString(),
+      relevanceNotice: getRecallRelevanceNotice(normalizedTerm, recalls),
     };
     await saveSearch(normalizedTerm, freshResult);
     return { ...freshResult, fromCache: false };
   } catch (error) {
     if (cached) {
-      return { ...cached, fromCache: true };
+      const recalls = rankAndFilterRecalls(cached.recalls, normalizedTerm);
+      return {
+        ...cached,
+        recalls,
+        relevanceNotice: getRecallRelevanceNotice(normalizedTerm, recalls),
+        fromCache: true,
+      };
     }
 
     throw new Error(formatRecallSearchError(error));
