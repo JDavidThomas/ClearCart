@@ -40,6 +40,15 @@ function RootLayoutNav() {
   );
 }
 
+function withTimeout<T>(promise: PromiseLike<T>, milliseconds: number) {
+  return Promise.race([
+    Promise.resolve(promise),
+    new Promise<T>((_, reject) => {
+      setTimeout(() => reject(new Error(`Supabase diagnostic timed out after ${milliseconds / 1000} seconds.`)), milliseconds);
+    }),
+  ]);
+}
+
 function SupabaseDebugBanner() {
   const config = getSupabaseConfigDiagnostics();
   const [status, setStatus] = React.useState('checking…');
@@ -50,7 +59,7 @@ function SupabaseDebugBanner() {
 
     const runDiagnostics = async () => {
       try {
-        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+        const { data: sessionData, error: sessionError } = await withTimeout(supabase.auth.getSession(), 8_000);
         if (sessionError) {
           const details = getSupabaseErrorDetails(sessionError);
           console.error('[Supabase] auth.getSession failed', details);
@@ -61,7 +70,7 @@ function SupabaseDebugBanner() {
           return;
         }
 
-        const { error: profilesError } = await supabase.from('profiles').select('id').limit(1);
+        const { error: profilesError } = await withTimeout(supabase.from('profiles').select('id').limit(1), 8_000);
         if (profilesError) {
           const details = getSupabaseErrorDetails(profilesError);
           console.error('[Supabase] profiles probe failed', details);
