@@ -107,7 +107,7 @@ export default function HomeScreen() {
                   { color: colors.success },
                 ]}
               >
-                Photo checks use secure server-side Gemini
+                Photo checks use Gemini AI on your device
               </Text>
             </View>
 

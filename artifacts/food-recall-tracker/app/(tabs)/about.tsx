@@ -33,8 +33,8 @@ export default function AboutScreen() {
         <Text style={[styles.sectionTitle, { color: colors.foreground }]}>How it works</Text>
         <HowItWorksStep
           number="1"
-          title="Search or scan"
-          body="Search by product name or ingredient, or scan a packaged food barcode."
+          title="Search, scan, or photograph"
+          body="Search by product name or ingredient, scan a packaged food barcode, or use AI photo identification for a food package."
           colors={colors}
         />
         <HowItWorksStep
@@ -50,6 +50,13 @@ export default function AboutScreen() {
           colors={colors}
           isLast
         />
+      </View>
+
+      <View style={[styles.aiNotice, { backgroundColor: colors.blueSoft, borderColor: colors.primary }]}>
+        <Feather name="cpu" size={20} color={colors.primary} />
+        <Text style={[styles.aiNoticeText, { color: colors.foreground }]}>
+          Photo identification uses AI and may not be 100% accurate. Confirm the identified product name before relying on the recall results.
+        </Text>
       </View>
 
       <View style={[styles.disclaimer, { backgroundColor: colors.warningSoft, borderColor: colors.warning }]}>
@@ -160,6 +167,20 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   disclaimerText: {
+    flex: 1,
+    fontFamily: 'Inter_500Medium',
+    fontSize: 14,
+    lineHeight: 21,
+  },
+  aiNotice: {
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 24,
+    padding: 16,
+  },
+  aiNoticeText: {
     flex: 1,
     fontFamily: 'Inter_500Medium',
     fontSize: 14,
