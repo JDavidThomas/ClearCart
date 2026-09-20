@@ -1,45 +1,55 @@
-import type { FoodRecall, RecallRelevance } from '@/types/recall';
+import type { FoodRecall, ProduceRecallGroup, RecallRelevance } from '@/types/recall';
 import { cleanRecallSearchTerm } from './recallSearch';
 
-const COMMON_PRODUCE_TERMS = new Set([
+const COMMON_PRODUCE_TERMS = [
   'apple',
   'avocado',
+  'asparagus',
   'banana',
   'blueberry',
   'broccoli',
   'cabbage',
+  'cantaloupe',
   'carrot',
   'celery',
+  'cauliflower',
+  'cherry',
+  'corn',
   'cucumber',
+  'eggplant',
   'garlic',
   'grape',
+  'ginger',
+  'honeydew',
   'kale',
+  'kiwi',
   'lemon',
   'lettuce',
   'lime',
   'mango',
+  'mushroom',
   'onion',
   'orange',
   'peach',
   'pear',
+  'pepper',
+  'pineapple',
+  'plum',
   'potato',
   'raspberry',
   'spinach',
   'strawberry',
+  'sweet potato',
   'tomato',
-]);
+] as const;
 
 const NON_FOOD_PRODUCT_WORDS = new Set([
   'aquarium',
   'cat',
-  'cosmetic',
-  'cough',
-  'cream',
-  'creme',
   'cleaner',
+  'cosmetic',
   'dog',
   'disinfectant',
-  'drops',
   'gel',
   'lotion',
   'medicine',
@@ -55,18 +65,59 @@ const NON_FOOD_PRODUCT_WORDS = new Set([
   'wipes',
 ]);
 
+const DIRECT_PRODUCE_WORDS = new Set([
+  'bag',
+  'bagged',
+  'bunch',
+  'bunches',
+  'chopped',
+  'count',
+  'cut',
+  'diced',
+  'each',
+  'fresh',
+  'frozen',
+  'fruit',
+  'organic',
+  'pack',
+  'packaged',
+  'peeled',
+  'piece',
+  'pieces',
+  'produce',
+  'ready',
+  'sliced',
+  'slices',
+  'stem',
+  'stems',
+  'to',
+  'vegetable',
+  'whole',
+]);
+
 function wordsFrom(value: string) {
   return cleanRecallSearchTerm(value).toLowerCase().split(' ').filter(Boolean);
 }
 
 function singularize(word: string) {
   if (word.endsWith('ies') && word.length > 3) return `${word.slice(0, -3)}y`;
+  if (word.endsWith('oes') && word.length > 3) return word.slice(0, -2);
   if (word.endsWith('s') && !word.endsWith('ss') && word.length > 2) return word.slice(0, -1);
   return word;
 }
 
 function wordsMatch(left: string, right: string) {
   return left === right || singularize(left) === singularize(right);
+}
+
+function getProduceItemFromWords(words: string[]) {
+  return (
+    COMMON_PRODUCE_TERMS.find((produceItem) => {
+      const produceWords = wordsFrom(produceItem);
+      if (produceWords.length !== words.length) return false;
+      return produceWords.every((produceWord, index) => wordsMatch(produceWord, words[index]));
+    }) ?? null
+  );
 }
 
 function sequenceStartsAt(descriptionWords: string[], termWords: string[], startIndex: number) {
@@ -84,7 +135,7 @@ function firstTermIndex(descriptionWords: string[], termWords: string[]) {
 }
 
 function hasObviousProduceMismatch(termWords: string[], descriptionWords: string[]) {
-  if (termWords.length !== 1 || !COMMON_PRODUCE_TERMS.has(singularize(termWords[0]))) {
+  if (!getProduceItemFromWords(termWords)) {
     return false;
   }
 
@@ -103,6 +154,34 @@ function hasKnownBrandMismatch(termWords: string[], descriptionWords: string[]) 
   );
 
   return chickenOfTheSeaIndex >= 0;
+}
+
+export function getProduceItem(term: string) {
+  return getProduceItemFromWords(wordsFrom(term));
+}
+
+function isDirectProduceDescription(description: string, produceItem: string) {
+  const descriptionWords = wordsFrom(description);
+  const produceWords = wordsFrom(produceItem);
+  const produceIndex = descriptionWords.findIndex((_, index) =>
+    sequenceStartsAt(descriptionWords, produceWords, index),
+  );
+  if (produceIndex < 0) return false;
+
+  const wordsAfterProduce = descriptionWords.slice(produceIndex + produceWords.length);
+  return wordsAfterProduce.every(
+    (word) =>
+      DIRECT_PRODUCE_WORDS.has(word) ||
+      wordsMatch(word, produceWords[produceWords.length - 1]) ||
+      /^\d+(?:\.\d+)?$/.test(word) ||
+      /^(?:oz|lb|lbs|kg|g|gram|grams|ounce|ounces|pound|pounds)$/.test(word),
+  );
+}
+
+function getProduceGroup(description: string, term: string): ProduceRecallGroup | undefined {
+  const produceItem = getProduceItem(term);
+  if (!produceItem) return undefined;
+  return isDirectProduceDescription(description, produceItem) ? 'direct' : 'related';
 }
 
 export function getRecallRelevance(description: string, term: string): RecallRelevance | null {
@@ -126,21 +205,50 @@ export function rankAndFilterRecalls(recalls: FoodRecall[], term: string) {
       recall: {
         ...recall,
         relevance: getRecallRelevance(recall.productDescription, term) ?? undefined,
+        produceGroup: getProduceGroup(recall.productDescription, term),
       },
       originalIndex,
     }))
     .filter(({ recall }) => recall.relevance)
     .sort((left, right) => {
       const relevanceRank = { high: 3, medium: 2, low: 1 } as const;
+      const produceGroupRank = { direct: 2, related: 1 } as const;
+      const leftGroupRank = produceGroupRank[left.recall.produceGroup as ProduceRecallGroup] ?? 0;
+      const rightGroupRank = produceGroupRank[right.recall.produceGroup as ProduceRecallGroup] ?? 0;
+      const groupDifference = rightGroupRank - leftGroupRank;
+      if (groupDifference) return groupDifference;
+
       const scoreDifference =
         relevanceRank[right.recall.relevance as RecallRelevance] -
         relevanceRank[left.recall.relevance as RecallRelevance];
-      return scoreDifference || left.originalIndex - right.originalIndex;
+      if (scoreDifference) return scoreDifference;
+
+      return left.originalIndex - right.originalIndex;
     })
     .map(({ recall }) => recall);
 }
 
 export function getRecallRelevanceNotice(term: string, recalls: FoodRecall[]) {
+  if (getProduceItem(term)) return undefined;
   if (recalls[0]?.relevance !== 'low') return undefined;
   return `The following recalls mention “${term}” but may not be the same product. Review the details carefully.`;
+}
+
+export function splitRecallGroups(term: string, recalls: FoodRecall[]) {
+  const produceItem = getProduceItem(term);
+  if (!produceItem) {
+    return {
+      isProduceSearch: false,
+      produceItem: undefined,
+      directRecalls: recalls,
+      relatedRecalls: [] as FoodRecall[],
+    };
+  }
+
+  return {
+    isProduceSearch: true,
+    produceItem,
+    directRecalls: recalls.filter((recall) => recall.produceGroup === 'direct'),
+    relatedRecalls: recalls.filter((recall) => recall.produceGroup === 'related'),
+  };
 }

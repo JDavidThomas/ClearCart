@@ -16,6 +16,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AllergenInsights } from '@/components/AllergenInsights';
 import { FDA_NOTICES_URL, FdaFreshnessNotice } from '@/components/FdaFreshnessNotice';
+import { PossiblyRelatedRecalls } from '@/components/PossiblyRelatedRecalls';
+import { ProduceRecallVerdict } from '@/components/ProduceRecallVerdict';
 import { RecallCard } from '@/components/RecallCard';
 import { RecallRelevanceNotice } from '@/components/RecallRelevanceNotice';
 import { useColors } from '@/hooks/useColors';
@@ -333,6 +335,26 @@ function VerdictView({
   const recallResult = verdict.recallResult;
   const hasRecall = verdict.kind === 'recalled';
   const recallCards: FoodRecall[] = recallResult?.recalls ?? [];
+  const relatedRecalls = recallResult?.relatedRecalls ?? [];
+  const produceItem = recallResult?.produceItem ?? productLabel;
+
+  if (recallResult?.isProduceSearch) {
+    return (
+      <View style={styles.verdictStack}>
+        <ProduceRecallVerdict item={produceItem} hasDirectRecall={recallCards.length > 0} />
+        {recallCards.map((recall, index) => (
+          <RecallCard key={`${recall.recallNumber ?? recall.productDescription}-${index}`} recall={recall} />
+        ))}
+        <PossiblyRelatedRecalls item={produceItem} recalls={relatedRecalls} />
+        <AllergenInsights
+          productText={`${productLabel} ${verdict.product?.ingredients ?? ''}`}
+          dataAvailable={Boolean(verdict.product?.ingredients)}
+          colors={colors}
+        />
+        <ScanAgainButton colors={colors} onPress={onScanAgain} />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.verdictStack}>

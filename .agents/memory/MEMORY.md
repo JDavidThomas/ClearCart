@@ -2,3 +2,4 @@
 - [Expo Camera SDK alignment](expo-camera-sdk.md) — use the workspace-compatible Expo SDK 57 camera package line for native scanning.
 - [Gemini model availability](gemini-model-availability.md) — verify the configured Gemini model against the live API; older model IDs can be retired without code changes.
 - [Supabase profile sync](local-profile-fallback.md) — profile sessions use server-mediated Supabase Auth, with guest access preserved during outages.
+- [openFDA produce relevance](openfda-produce-relevance.md) — client-side grouping is required because prefix-looking queries can still return broad matches.

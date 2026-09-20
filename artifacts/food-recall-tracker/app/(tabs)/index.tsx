@@ -16,6 +16,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AllergenInsights } from '@/components/AllergenInsights';
 import { FdaFreshnessNotice } from '@/components/FdaFreshnessNotice';
+import { PossiblyRelatedRecalls } from '@/components/PossiblyRelatedRecalls';
+import { ProduceRecallVerdict } from '@/components/ProduceRecallVerdict';
 import { RecallCard } from '@/components/RecallCard';
 import { RecallRelevanceNotice } from '@/components/RecallRelevanceNotice';
 import { useColors } from '@/hooks/useColors';
@@ -49,6 +51,7 @@ export default function HomeScreen() {
     retry: false,
   });
   const recalls = Array.isArray(data?.recalls) ? data.recalls : [];
+  const relatedRecalls = Array.isArray(data?.relatedRecalls) ? data.relatedRecalls : [];
   const recallCount = recalls.length;
   const lastUpdated = data?.lastUpdated ?? new Date().toISOString();
 
@@ -216,6 +219,11 @@ export default function HomeScreen() {
               <ErrorState message={error?.message ?? 'Something went wrong.'} onRetry={() => refetch()} colors={colors} />
             ) : isFetching ? (
               <LoadingState colors={colors} />
+            ) : data?.isProduceSearch ? (
+              <ProduceRecallVerdict
+                item={data.produceItem ?? submittedTerm}
+                hasDirectRecall={recallCount > 0}
+              />
             ) : recallCount === 0 ? (
               <NoResultsState term={submittedTerm} updatedAt={lastUpdated} colors={colors} />
             ) : (
@@ -243,7 +251,13 @@ export default function HomeScreen() {
         }
         ListFooterComponent={
           submittedTerm.length > 0 && data && !isFetching ? (
-            <AllergenInsights productText={submittedTerm} dataAvailable={false} colors={colors} />
+            <View style={styles.footerStack}>
+              <PossiblyRelatedRecalls
+                item={data.produceItem ?? submittedTerm}
+                recalls={relatedRecalls}
+              />
+              <AllergenInsights productText={submittedTerm} dataAvailable={false} colors={colors} />
+            </View>
           ) : null
         }
         ListEmptyComponent={null}
@@ -481,6 +495,9 @@ const styles = StyleSheet.create({
   },
   resultsBlock: {
     gap: 10,
+  },
+  footerStack: {
+    gap: 14,
   },
   resultsTitle: {
     fontFamily: 'Inter_700Bold',

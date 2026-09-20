@@ -17,6 +17,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AllergenInsights } from '@/components/AllergenInsights';
 import { FdaFreshnessNotice } from '@/components/FdaFreshnessNotice';
+import { PossiblyRelatedRecalls } from '@/components/PossiblyRelatedRecalls';
+import { ProduceRecallVerdict } from '@/components/ProduceRecallVerdict';
 import { RecallCard } from '@/components/RecallCard';
 import { RecallRelevanceNotice } from '@/components/RecallRelevanceNotice';
 import { useColors } from '@/hooks/useColors';
@@ -484,6 +486,23 @@ function PhotoVerdictView({
 
   const recalls = verdict.recallResult?.recalls ?? [];
   const hasRecall = recalls.length > 0;
+  const relatedRecalls = verdict.recallResult?.relatedRecalls ?? [];
+  const produceItem = verdict.recallResult?.produceItem ?? verdict.productName;
+
+  if (verdict.recallResult?.isProduceSearch) {
+    return (
+      <View style={styles.verdictStack}>
+        <ProduceRecallVerdict item={produceItem} hasDirectRecall={hasRecall} />
+        {recalls.map((recall, index) => (
+          <RecallCard key={`${recall.recallNumber ?? recall.productDescription}-${index}`} recall={recall} />
+        ))}
+        <PossiblyRelatedRecalls item={produceItem} recalls={relatedRecalls} />
+        <AllergenInsights productText={verdict.productName} dataAvailable={false} colors={colors} />
+        <RetakeButton colors={colors} onPress={onRetake} />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.verdictStack}>
       <View

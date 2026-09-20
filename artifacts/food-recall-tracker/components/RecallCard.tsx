@@ -6,6 +6,7 @@ import type { FoodRecall } from '@/types/recall';
 
 interface RecallCardProps {
   recall: FoodRecall;
+  deemphasized?: boolean;
 }
 
 function formatRecallDate(date: string) {
@@ -23,7 +24,7 @@ function formatRecallDate(date: string) {
       });
 }
 
-export function RecallCard({ recall }: RecallCardProps) {
+export function RecallCard({ recall, deemphasized = false }: RecallCardProps) {
   const colors = useColors();
   const source = recall.source ?? 'FDA';
 
@@ -33,12 +34,24 @@ export function RecallCard({ recall }: RecallCardProps) {
   };
 
   return (
-    <View style={[styles.card, { borderColor: colors.border, backgroundColor: colors.card }]}>
+    <View
+      style={[
+        styles.card,
+        deemphasized && styles.deemphasizedCard,
+        { borderColor: colors.border, backgroundColor: deemphasized ? colors.background : colors.card },
+      ]}
+    >
       <View style={styles.cardHeader}>
         <View style={styles.badgeRow}>
-          <View style={[styles.badge, { backgroundColor: colors.dangerSoft }]}>
-            <Feather name="alert-triangle" size={14} color={colors.destructive} />
-            <Text style={[styles.badgeText, { color: colors.destructive }]}>Active recall</Text>
+          <View style={[styles.badge, { backgroundColor: deemphasized ? colors.warningSoft : colors.dangerSoft }]}>
+            <Feather
+              name={deemphasized ? 'help-circle' : 'alert-triangle'}
+              size={14}
+              color={deemphasized ? colors.warning : colors.destructive}
+            />
+            <Text style={[styles.badgeText, { color: deemphasized ? colors.warning : colors.destructive }]}>
+              {deemphasized ? 'Possible match' : 'Active recall'}
+            </Text>
           </View>
           <View style={[styles.sourceBadge, { backgroundColor: source === 'FDA' ? colors.blueSoft : colors.warningSoft }]}>
             <Text style={[styles.sourceBadgeText, { color: source === 'FDA' ? colors.primary : colors.warning }]}>
@@ -66,7 +79,7 @@ export function RecallCard({ recall }: RecallCardProps) {
         </Text>
       </View>
 
-      <Text style={[styles.description, { color: colors.foreground }]}>
+      <Text style={[styles.description, deemphasized && styles.deemphasizedDescription, { color: colors.foreground }]}>
         {recall.productDescription}
       </Text>
 
@@ -113,6 +126,10 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 18,
     gap: 16,
+  },
+  deemphasizedCard: {
+    gap: 12,
+    padding: 14,
   },
   cardHeader: {
     alignItems: 'center',
@@ -166,6 +183,10 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_600SemiBold',
     fontSize: 17,
     lineHeight: 24,
+  },
+  deemphasizedDescription: {
+    fontSize: 15,
+    lineHeight: 21,
   },
   details: {
     gap: 11,
