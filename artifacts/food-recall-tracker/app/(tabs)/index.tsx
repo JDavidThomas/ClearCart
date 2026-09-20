@@ -256,7 +256,7 @@ export default function HomeScreen() {
                 item={data.produceItem ?? submittedTerm}
                 recalls={relatedRecalls}
               />
-              <AllergenInsights productText={submittedTerm} dataAvailable={false} colors={colors} />
+              <AllergenInsights productText={submittedTerm} dataAvailable={submittedTerm.length > 0} colors={colors} />
             </View>
           ) : null
         }

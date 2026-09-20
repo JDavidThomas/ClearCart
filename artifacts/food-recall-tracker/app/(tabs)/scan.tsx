@@ -161,7 +161,6 @@ export default function ScanScreen() {
           <View style={[styles.headingIcon, { backgroundColor: colors.blueSoft }]}>
             <Feather name="maximize" size={22} color={colors.primary} />
           </View>
-          <AllergenInsights productText="" dataAvailable={false} colors={colors} />
         </View>
         <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
           Hold the barcode inside the frame. We’ll check Open Food Facts, then search active FDA recalls.
@@ -376,7 +375,7 @@ function VerdictView({
           <Feather name={hasRecall ? 'alert-triangle' : 'check'} size={25} color={colors.primaryForeground} />
         </View>
         <Text style={[styles.verdictTitle, { color: colors.foreground }]}>
-          {hasRecall ? 'Recall Found' : 'Safe'}
+          {hasRecall ? 'Recall Found' : 'No Active Recall Found'}
         </Text>
         <Text style={[styles.productName, { color: colors.foreground }]}>{productLabel}</Text>
         <Text style={[styles.verdictBody, { color: colors.mutedForeground }]}>

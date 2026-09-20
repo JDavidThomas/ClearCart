@@ -1,10 +1,10 @@
 ---
 name: Supabase profile sync
-description: Cloud-backed profile behavior and guest fallback for the Food Recall Tracker.
+description: Direct Expo Supabase profile sessions and guest fallback for the Food Recall Tracker.
 ---
 
-The app uses Supabase Auth for profile sessions and stores only the access/refresh session tokens locally on the device. Recall checks remain available to guests if the profile service is unavailable.
+The mobile app uses a direct `@supabase/supabase-js` client with AsyncStorage-backed Auth persistence for profile sessions. Recall checks remain available to guests if Supabase is unavailable.
 
 **Why:** Personalized allergen alerts need a durable account, while public recall checks must continue working during auth outages.
 
-**How to apply:** Keep auth requests server-mediated with Supabase secrets. On auth failures, clear the session, show a small notice, and preserve guest access.
+**How to apply:** Keep the Supabase URL and anon key in `EXPO_PUBLIC_*` secrets and forward them through the Expo dev command. On auth/profile failures, enter guest mode, show a small notice, and preserve recall access.

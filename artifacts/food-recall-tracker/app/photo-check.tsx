@@ -497,7 +497,7 @@ function PhotoVerdictView({
           <RecallCard key={`${recall.recallNumber ?? recall.productDescription}-${index}`} recall={recall} />
         ))}
         <PossiblyRelatedRecalls item={produceItem} recalls={relatedRecalls} />
-        <AllergenInsights productText={verdict.productName} dataAvailable={false} colors={colors} />
+        <AllergenInsights productText={verdict.productName} dataAvailable={Boolean(verdict.productName)} colors={colors} />
         <RetakeButton colors={colors} onPress={onRetake} />
       </View>
     );
@@ -532,7 +532,7 @@ function PhotoVerdictView({
       {recalls.map((recall, index) => (
         <RecallCard key={`${recall.recallNumber ?? recall.productDescription}-${index}`} recall={recall} />
       ))}
-      <AllergenInsights productText={verdict.productName} dataAvailable={false} colors={colors} />
+        <AllergenInsights productText={verdict.productName} dataAvailable={Boolean(verdict.productName)} colors={colors} />
       <RetakeButton colors={colors} onPress={onRetake} />
     </View>
   );

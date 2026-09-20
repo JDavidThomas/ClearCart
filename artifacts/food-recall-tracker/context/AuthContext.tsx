@@ -1,37 +1,52 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import {
-  authGetMe,
-  authLogIn,
-  authSignUp,
-  authUpdateProfile,
-  type AuthProfilePayload,
-} from '@workspace/api-client-react';
+import { getAuthRedirectUrl, supabase } from '@/lib/supabase';
+
+export type AllergySeverity = 'mild' | 'moderate' | 'severe' | null;
 
 export interface UserProfile {
   id: string;
-  name: string;
+  displayName: string;
   email: string;
+  avatarUrl: string | null;
   allergies: string[];
+  customAllergy: string;
+  severity: AllergySeverity;
 }
 
 type AuthStatus = 'loading' | 'guest' | 'authenticated';
+
+interface ProfileRow {
+  id: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  allergies: string[] | null;
+  custom_allergy: string | null;
+  severity: AllergySeverity;
+  created_at?: string;
+}
 
 interface AuthContextValue {
   status: AuthStatus;
   profile: UserProfile | null;
   authNotice: string | null;
   guestPromptDismissed: boolean;
-  signUp: (name: string, email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string) => Promise<void>;
   logIn: (email: string, password: string) => Promise<void>;
+  sendPasswordReset: (email: string) => Promise<void>;
   logOut: () => Promise<void>;
   continueAsGuest: () => void;
-  updateAllergies: (allergies: string[]) => Promise<void>;
+  updateProfile: (updates: {
+    displayName?: string;
+    allergies?: string[];
+    customAllergy?: string;
+    severity?: AllergySeverity;
+    avatarUrl?: string | null;
+  }) => Promise<void>;
+  uploadAvatar: (uri: string) => Promise<string>;
   dismissGuestPrompt: () => void;
 }
 
 export const ACCESS_TOKEN_KEY = '@food-recall-tracker/access-token';
-const REFRESH_TOKEN_KEY = '@food-recall-tracker/refresh-token';
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
@@ -39,28 +54,34 @@ function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
 }
 
-export async function getStoredAccessToken() {
-  return AsyncStorage.getItem(ACCESS_TOKEN_KEY);
+function displayNameFromEmail(email: string) {
+  const localPart = email.split('@')[0]?.replace(/[._-]+/g, ' ').trim();
+  if (!localPart) return 'Food safety member';
+  return localPart.replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function toUserProfile(profile: AuthProfilePayload): UserProfile {
+function toUserProfile(row: ProfileRow, email: string): UserProfile {
   return {
-    id: profile.id,
-    name: profile.name,
-    email: profile.email,
-    allergies: profile.allergies,
+    id: row.id,
+    displayName: row.display_name?.trim() || displayNameFromEmail(email),
+    email,
+    avatarUrl: row.avatar_url,
+    allergies: row.allergies ?? [],
+    customAllergy: row.custom_allergy ?? '',
+    severity: row.severity ?? null,
   };
 }
 
-async function saveSession(accessToken: string, refreshToken: string | null) {
-  await AsyncStorage.multiSet([
-    [ACCESS_TOKEN_KEY, accessToken],
-    [REFRESH_TOKEN_KEY, refreshToken ?? ''],
-  ]);
+function authErrorMessage(error: unknown, fallback: string) {
+  if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
+    return error.message;
+  }
+  return fallback;
 }
 
-async function clearSession() {
-  await AsyncStorage.multiRemove([ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY]);
+export async function getStoredAccessToken() {
+  const { data } = await supabase.auth.getSession();
+  return data.session?.access_token ?? null;
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -69,71 +90,112 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [guestPromptDismissed, setGuestPromptDismissed] = useState(false);
 
+  const enterGuestMode = (notice?: string) => {
+    setProfile(null);
+    setStatus('guest');
+    if (notice) setAuthNotice(notice);
+  };
+
+  const loadProfile = async (user: { id: string; email?: string | null }) => {
+    const email = user.email ?? '';
+    const { data, error } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
+    if (error) throw error;
+
+    if (data) {
+      setProfile(toUserProfile(data as ProfileRow, email));
+      return;
+    }
+
+    const initialProfile = {
+      id: user.id,
+      display_name: displayNameFromEmail(email),
+      avatar_url: null,
+      allergies: [],
+      custom_allergy: null,
+      severity: null,
+    };
+    const { data: inserted, error: insertError } = await supabase
+      .from('profiles')
+      .upsert(initialProfile, { onConflict: 'id' })
+      .select('*')
+      .single();
+    if (insertError) throw insertError;
+    setProfile(toUserProfile(inserted as ProfileRow, email));
+  };
+
   useEffect(() => {
-    let active = true;
+    let mounted = true;
 
     const restoreSession = async () => {
       try {
-        const accessToken = await getStoredAccessToken();
-        if (!accessToken) {
+        const { data } = await supabase.auth.getSession();
+        if (!mounted) return;
+        if (!data.session?.user) {
           setStatus('guest');
           return;
         }
-
-        const currentProfile = await authGetMe();
-        if (!active) return;
-        if (currentProfile) {
-          setProfile(toUserProfile(currentProfile));
+        await loadProfile(data.session.user);
+        if (mounted) {
+          setAuthNotice(null);
           setStatus('authenticated');
-        } else {
-          setStatus('guest');
         }
       } catch {
-        if (active) {
-          await clearSession();
-          setProfile(null);
-          setStatus('guest');
-          setAuthNotice('Profile sync is unavailable, so recall checks are continuing as a guest.');
+        if (mounted) {
+          await supabase.auth.signOut().catch(() => undefined);
+          enterGuestMode('Profile sync is unavailable, so recall checks are continuing as a guest.');
         }
       }
     };
 
     void restoreSession();
+    const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!mounted || event === 'INITIAL_SESSION') return;
+      if (!session?.user) {
+        enterGuestMode();
+        return;
+      }
+      void loadProfile(session.user)
+        .then(() => {
+          if (mounted) {
+            setAuthNotice(null);
+            setStatus('authenticated');
+          }
+        })
+        .catch(() => {
+          if (mounted) enterGuestMode('Profile sync is unavailable, so recall checks are continuing as a guest.');
+        });
+    });
+
     return () => {
-      active = false;
+      mounted = false;
+      subscription.subscription.unsubscribe();
     };
   }, []);
 
-  const signUp = async (name: string, email: string, password: string) => {
-    const cleanName = name.trim();
+  const signUp = async (email: string, password: string) => {
     const cleanEmail = normalizeEmail(email);
-    if (cleanName.length < 2) throw new Error('Enter your name to create a profile.');
     if (!cleanEmail.includes('@')) throw new Error('Enter a valid email address.');
     if (password.length < 6) throw new Error('Use a password with at least 6 characters.');
 
     try {
-      const response = await authSignUp({
-        name: cleanName,
+      const { data, error } = await supabase.auth.signUp({
         email: cleanEmail,
         password,
+        options: { emailRedirectTo: getAuthRedirectUrl() },
       });
-      if (!response.accessToken || !response.profile) {
-        setProfile(null);
-        setStatus('guest');
-        setAuthNotice('Profile created. Confirm your email, then log in to use personalized alerts.');
-        throw new Error('Check your email to confirm your profile, then log in.');
+      if (error) throw new Error(authErrorMessage(error, 'We could not create your account.'));
+      if (!data.session || !data.user) {
+        throw new Error('Check your email to confirm your account, then log in.');
       }
-      await saveSession(response.accessToken, response.refreshToken);
-      setProfile(toUserProfile(response.profile));
-      setStatus('authenticated');
+
+      await loadProfile(data.user);
       setAuthNotice(null);
+      setStatus('authenticated');
       setGuestPromptDismissed(false);
     } catch (error) {
       if (error instanceof Error && error.message.startsWith('Check your email')) throw error;
-      await clearSession();
-      setProfile(null);
-      setStatus('guest');
-      setAuthNotice('Profile sync is unavailable, so recall checks are continuing as a guest.');
+      if (error instanceof Error && /already registered|already exists|invalid/i.test(error.message)) throw error;
+      enterGuestMode('Profile sync is unavailable, so recall checks are continuing as a guest.');
       throw new Error('We could not reach your profile service. You can continue as a guest.');
     }
   };
@@ -145,56 +207,90 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const response = await authLogIn({ email: cleanEmail, password });
-      if (!response.accessToken || !response.profile) {
-        throw new Error('Your profile needs email confirmation before you can log in.');
-      }
-      await saveSession(response.accessToken, response.refreshToken);
-      setProfile(toUserProfile(response.profile));
-      setStatus('authenticated');
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password,
+      });
+      if (error) throw new Error(authErrorMessage(error, 'We could not log you in.'));
+      if (!data.user) throw new Error('We could not load your account.');
+
+      await loadProfile(data.user);
       setAuthNotice(null);
+      setStatus('authenticated');
       setGuestPromptDismissed(false);
     } catch (error) {
-      const message = error instanceof Error ? error.message : '';
-      if (message.includes('confirmation')) throw error;
-      if (message.includes('Invalid') || message.includes('credentials')) {
+      if (error instanceof Error && /invalid login|invalid credentials|email not confirmed/i.test(error.message)) {
         throw error;
       }
-      await clearSession();
-      setProfile(null);
-      setStatus('guest');
-      setAuthNotice('Profile sync is unavailable, so recall checks are continuing as a guest.');
+      enterGuestMode('Profile sync is unavailable, so recall checks are continuing as a guest.');
       throw new Error('We could not reach your profile service. You can continue as a guest.');
     }
   };
 
+  const sendPasswordReset = async (email: string) => {
+    const cleanEmail = normalizeEmail(email);
+    if (!cleanEmail.includes('@')) throw new Error('Enter the email address for your account.');
+    const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+      redirectTo: getAuthRedirectUrl(),
+    });
+    if (error) throw new Error(authErrorMessage(error, 'We could not send the reset email.'));
+  };
+
   const logOut = async () => {
-    await clearSession();
-    setProfile(null);
-    setStatus('guest');
+    const { error } = await supabase.auth.signOut();
+    if (error) throw new Error(authErrorMessage(error, 'We could not log you out.'));
+    enterGuestMode();
     setAuthNotice(null);
     setGuestPromptDismissed(false);
   };
 
   const continueAsGuest = () => {
-    void clearSession();
-    setProfile(null);
-    setStatus('guest');
+    void supabase.auth.signOut().catch(() => undefined);
+    enterGuestMode();
     setAuthNotice(null);
   };
 
-  const updateAllergies = async (allergies: string[]) => {
-    if (!profile) return;
-    try {
-      const updatedProfile = await authUpdateProfile({ allergies });
-      setProfile(toUserProfile(updatedProfile));
-    } catch {
-      await clearSession();
-      setProfile(null);
-      setStatus('guest');
-      setAuthNotice('Profile sync is unavailable, so recall checks are continuing as a guest.');
+  const updateProfile = async (updates: {
+    displayName?: string;
+    allergies?: string[];
+    customAllergy?: string;
+    severity?: AllergySeverity;
+    avatarUrl?: string | null;
+  }) => {
+    if (!profile) throw new Error('Log in to update your profile.');
+    const payload: Partial<ProfileRow> = {};
+    if (updates.displayName !== undefined) payload.display_name = updates.displayName.trim();
+    if (updates.allergies !== undefined) payload.allergies = updates.allergies;
+    if (updates.customAllergy !== undefined) payload.custom_allergy = updates.customAllergy.trim() || null;
+    if (updates.severity !== undefined) payload.severity = updates.severity;
+    if (updates.avatarUrl !== undefined) payload.avatar_url = updates.avatarUrl;
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .update(payload)
+      .eq('id', profile.id)
+      .select('*')
+      .single();
+    if (error) {
+      enterGuestMode('Profile sync is unavailable, so recall checks are continuing as a guest.');
       throw new Error('Your profile could not be updated. Recall checks are still available as a guest.');
     }
+    setProfile(toUserProfile(data as ProfileRow, profile.email));
+  };
+
+  const uploadAvatar = async (uri: string) => {
+    if (!profile) throw new Error('Log in to upload a profile photo.');
+    const response = await fetch(uri);
+    const body = await response.arrayBuffer();
+    const path = `${profile.id}.jpg`;
+    const { error } = await supabase.storage.from('avatars').upload(path, body, {
+      contentType: 'image/jpeg',
+      upsert: true,
+    });
+    if (error) throw new Error(authErrorMessage(error, 'We could not upload that photo.'));
+    const { data } = supabase.storage.from('avatars').getPublicUrl(path);
+    await updateProfile({ avatarUrl: `${data.publicUrl}?v=${Date.now()}` });
+    return data.publicUrl;
   };
 
   const value = useMemo<AuthContextValue>(
@@ -205,9 +301,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       guestPromptDismissed,
       signUp,
       logIn,
+      sendPasswordReset,
       logOut,
       continueAsGuest,
-      updateAllergies,
+      updateProfile,
+      uploadAvatar,
       dismissGuestPrompt: () => setGuestPromptDismissed(true),
     }),
     [authNotice, guestPromptDismissed, profile, status],

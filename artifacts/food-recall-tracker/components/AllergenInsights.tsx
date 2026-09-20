@@ -5,29 +5,33 @@ import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
 
 export const ALLERGEN_OPTIONS = [
-  { id: 'peanuts', label: 'Peanuts' },
-  { id: 'tree-nuts', label: 'Tree nuts' },
   { id: 'milk', label: 'Milk' },
   { id: 'eggs', label: 'Eggs' },
+  { id: 'fish', label: 'Fish' },
+  { id: 'shellfish', label: 'Shellfish' },
+  { id: 'tree-nuts', label: 'Tree Nuts' },
+  { id: 'peanuts', label: 'Peanuts' },
   { id: 'wheat', label: 'Wheat' },
   { id: 'soy', label: 'Soy' },
   { id: 'sesame', label: 'Sesame' },
-  { id: 'fish', label: 'Fish' },
-  { id: 'shellfish', label: 'Shellfish' },
+  { id: 'gluten', label: 'Gluten' },
   { id: 'corn', label: 'Corn' },
+  { id: 'other', label: 'Other' },
 ] as const;
 
 const ALLERGEN_TERMS: Record<string, string[]> = {
-  peanuts: ['peanut', 'groundnut'],
-  'tree-nuts': ['almond', 'cashew', 'walnut', 'pecan', 'pistachio', 'hazelnut', 'macadamia'],
   milk: ['milk', 'whey', 'casein', 'butter', 'cream', 'cheese', 'lactose'],
   eggs: ['egg', 'albumen', 'mayonnaise', 'mayo'],
-  wheat: ['wheat', 'flour', 'gluten', 'barley', 'rye'],
+  fish: ['fish', 'salmon', 'tuna', 'cod', 'anchovy'],
+  shellfish: ['shrimp', 'crab', 'lobster', 'shellfish', 'prawn'],
+  'tree-nuts': ['almond', 'cashew', 'walnut', 'pecan', 'pistachio', 'hazelnut', 'macadamia'],
+  peanuts: ['peanut', 'groundnut'],
+  wheat: ['wheat', 'flour', 'barley', 'rye'],
   soy: ['soy', 'soybean', 'soya', 'lecithin'],
   sesame: ['sesame', 'tahini'],
-  fish: ['fish', 'salmon', 'tuna', 'cod', 'anchovy'],
-  shellfish: ['shrimp', 'crab', 'lobster', 'shellfish'],
+  gluten: ['gluten', 'wheat', 'barley', 'rye', 'malt'],
   corn: ['corn', 'maize'],
+  other: [],
 };
 
 interface AllergenInsightsProps {
@@ -40,11 +44,20 @@ function getLabel(id: string) {
   return ALLERGEN_OPTIONS.find((option) => option.id === id)?.label ?? id;
 }
 
-function findMatches(allergies: string[], productText: string) {
+function findMatches(allergies: string[], customAllergy: string, productText: string) {
   const normalized = productText.toLowerCase();
-  return allergies.filter((allergen) =>
+  const matches = allergies.filter((allergen) =>
     (ALLERGEN_TERMS[allergen] ?? []).some((term) => normalized.includes(term)),
   );
+
+  const customTerms = customAllergy
+    .toLowerCase()
+    .split(/[,;/]+/)
+    .map((term) => term.trim())
+    .filter((term) => term.length > 1);
+  if (customTerms.some((term) => normalized.includes(term))) matches.push('other');
+
+  return [...new Set(matches)];
 }
 
 export function AllergenInsights({ productText, dataAvailable, colors: providedColors }: AllergenInsightsProps) {
@@ -64,12 +77,12 @@ export function AllergenInsights({ productText, dataAvailable, colors: providedC
         </View>
         <Text style={[styles.promptTitle, { color: colors.foreground }]}>Personalized allergen alerts</Text>
         <Text style={[styles.promptBody, { color: colors.mutedForeground }]}>
-          Want to know if this product contains your allergens? Create a free profile to get personalized allergen alerts.
+          Create a profile to compare product information against your allergies. Recall searches still work fully as a guest.
         </Text>
         <View style={styles.promptActions}>
           <Pressable
             accessibilityRole="button"
-            onPress={() => router.push('/profile')}
+            onPress={() => router.push('/sign-up')}
             style={({ pressed }) => [
               styles.smallPrimaryButton,
               { backgroundColor: colors.primary, opacity: pressed ? 0.75 : 1 },
@@ -130,15 +143,41 @@ export function AllergenInsights({ productText, dataAvailable, colors: providedC
     );
   }
 
-  const matches = findMatches(profile.allergies, productText);
+  const matches = findMatches(profile.allergies, profile.customAllergy, productText);
+  const isSevere = profile.severity === 'severe';
   if (matches.length > 0) {
     return (
-      <View style={[styles.alertCard, { backgroundColor: colors.dangerSoft, borderColor: colors.destructive }]}>
-        <Feather name="alert-triangle" size={22} color={colors.destructive} />
+      <View
+        style={[
+          styles.alertCard,
+          isSevere
+            ? styles.severeAlert
+            : { backgroundColor: colors.dangerSoft, borderColor: colors.destructive },
+        ]}
+      >
+        <Feather
+          name="alert-triangle"
+          size={isSevere ? 26 : 22}
+          color={isSevere ? '#ffffff' : colors.destructive}
+        />
         <View style={styles.alertCopy}>
-          <Text style={[styles.alertTitle, { color: colors.foreground }]}>Allergen Alert</Text>
-          <Text style={[styles.alertBody, { color: colors.mutedForeground }]}>
-            This product contains {matches.map(getLabel).join(', ')}.
+          <Text
+            style={[
+              styles.alertTitle,
+              { color: isSevere ? '#ffffff' : colors.foreground },
+              isSevere ? styles.severeText : null,
+            ]}
+          >
+            {isSevere ? 'Severe Allergen Alert' : 'Allergen Alert'}
+          </Text>
+          <Text
+            style={[
+              styles.alertBody,
+              { color: isSevere ? '#ffffff' : colors.mutedForeground },
+              isSevere ? styles.severeText : null,
+            ]}
+          >
+            This product matches {matches.map(getLabel).join(', ')} in your profile. Review the product label and official information carefully.
           </Text>
         </View>
       </View>
@@ -200,8 +239,8 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   textButton: {
-    minHeight: 40,
     justifyContent: 'center',
+    minHeight: 40,
     paddingHorizontal: 2,
   },
   textButtonText: {
@@ -215,6 +254,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     padding: 16,
+  },
+  severeAlert: {
+    backgroundColor: '#991b1b',
+    borderColor: '#7f1d1d',
+  },
+  severeText: {
+    fontFamily: 'Inter_700Bold',
   },
   alertCopy: {
     flex: 1,
