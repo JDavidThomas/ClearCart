@@ -6,7 +6,11 @@ import type {
 } from '@/types/recall';
 import { searchFdaRecalls } from './fdaRecalls';
 import { buildOpenFdaSearchQuery, cleanRecallSearchTerm } from './recallSearch';
-import { getRecallRelevanceNotice, rankAndFilterRecalls } from './recallRelevance';
+import {
+  getRecallRelevanceNotice,
+  rankAndFilterRecalls,
+  splitRecallGroups,
+} from './recallRelevance';
 
 export { buildOpenFdaSearchQuery, cleanRecallSearchTerm } from './recallSearch';
 
@@ -53,6 +57,21 @@ function normalizeCachedSearch(value: unknown): CachedSearch | null {
   }
 
   return null;
+}
+
+function buildSearchResult(term: string, cached: CachedSearch, fromCache: boolean): RecallSearchResult {
+  const rankedRecalls = rankAndFilterRecalls(cached.recalls, term);
+  const groups = splitRecallGroups(term, rankedRecalls);
+
+  return {
+    recalls: groups.directRecalls,
+    relatedRecalls: groups.relatedRecalls,
+    lastUpdated: cached.lastUpdated,
+    fromCache,
+    relevanceNotice: getRecallRelevanceNotice(term, rankedRecalls),
+    isProduceSearch: groups.isProduceSearch,
+    produceItem: groups.produceItem,
+  };
 }
 
 interface OpenFoodFactsResponse {
@@ -146,19 +165,12 @@ export async function searchFoodRecalls(term: string): Promise<RecallSearchResul
     const freshResult: CachedSearch = {
       recalls,
       lastUpdated: new Date().toISOString(),
-      relevanceNotice: getRecallRelevanceNotice(normalizedTerm, recalls),
     };
     await saveSearch(normalizedTerm, freshResult);
-    return { ...freshResult, fromCache: false };
+    return buildSearchResult(normalizedTerm, freshResult, false);
   } catch (error) {
     if (cached) {
-      const recalls = rankAndFilterRecalls(cached.recalls, normalizedTerm);
-      return {
-        ...cached,
-        recalls,
-        relevanceNotice: getRecallRelevanceNotice(normalizedTerm, recalls),
-        fromCache: true,
-      };
+      return buildSearchResult(normalizedTerm, cached, true);
     }
 
     throw new Error(formatRecallSearchError(error));

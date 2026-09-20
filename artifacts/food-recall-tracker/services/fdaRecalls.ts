@@ -1,6 +1,6 @@
 import type { FoodRecall } from '../types/recall';
 import { buildOpenFdaSearchQuery, cleanRecallSearchTerm } from './recallSearch.ts';
-import { rankAndFilterRecalls } from './recallRelevance';
+import { getProduceItem, rankAndFilterRecalls } from './recallRelevance';
 
 const OPENFDA_ENDPOINTS = [
   'https://api.fda.gov/food/enforcement.json',
@@ -146,6 +146,16 @@ export async function searchFdaRecalls(term: string): Promise<FoodRecall[]> {
 
   const primaryQuery = buildOpenFdaSearchQuery(normalizedTerm);
   let results = await searchOpenFda(primaryQuery);
+  const produceItem = getProduceItem(normalizedTerm);
+
+  if (produceItem) {
+    try {
+      const strictResults = await searchOpenFda(`product_description:${produceItem}*`);
+      results = [...strictResults, ...results];
+    } catch {
+      // The broad query remains sufficient if openFDA rejects the prefix query.
+    }
+  }
 
   if (results.length === 0) {
     const firstWord = normalizedTerm.split(' ')[0];

@@ -16,15 +16,20 @@ export interface FoodRecall {
   recallType?: string;
   relatedToOutbreak?: boolean;
   relevance?: RecallRelevance;
+  produceGroup?: ProduceRecallGroup;
 }
 
 export type RecallRelevance = 'high' | 'medium' | 'low';
+export type ProduceRecallGroup = 'direct' | 'related';
 
 export interface RecallSearchResult {
   recalls: FoodRecall[];
+  relatedRecalls?: FoodRecall[];
   lastUpdated: string;
   fromCache: boolean;
   relevanceNotice?: string;
+  isProduceSearch?: boolean;
+  produceItem?: string;
 }
 
 export interface OpenFoodFactsProduct {
