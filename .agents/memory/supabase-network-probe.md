@@ -1,10 +1,10 @@
 ---
 name: Supabase network probe
-description: Replit shell connectivity can fail independently of the Expo app when probing Supabase REST endpoints.
+description: Distinguish an invalid Supabase hostname from Expo tunnel or container networking.
 ---
 
-The Replit container may fail to resolve the Supabase project hostname even while the Expo web preview bundles and runs with the configured Supabase client.
+The mobile Supabase client uses direct native fetch; Expo tunnel settings do not proxy its external requests. A public DNS `NXDOMAIN` result for the configured Supabase host means the URL/project reference is wrong or no longer exists.
 
-**Why:** A shell-level HTTP probe returning DNS status 000 does not establish that the mobile app cannot reach Supabase; the phone and Expo runtime use a separate network path.
+**Why:** The same `UnknownHostException` on Wi-Fi and mobile data, combined with public DNS status 3, rules out the Metro tunnel and points to the configured project URL.
 
-**How to apply:** Treat successful Expo bundling as configuration verification, and validate authenticated profile reads/writes through a real signup/login session on the target device when the container DNS probe fails.
+**How to apply:** Copy the exact Project URL from Supabase Settings → API into the Expo public URL secret, keep the mobile client direct, then restart Metro with a cleared cache.
