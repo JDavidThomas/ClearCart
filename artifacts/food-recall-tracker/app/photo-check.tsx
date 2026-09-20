@@ -19,7 +19,7 @@ import { AllergenInsights } from '@/components/AllergenInsights';
 import { FdaFreshnessNotice } from '@/components/FdaFreshnessNotice';
 import { RecallCard } from '@/components/RecallCard';
 import { useColors } from '@/hooks/useColors';
-import { identifyFoodFromImage } from '@/services/visionApi';
+import { identifyFoodFromImage, isUsableProductName } from '@/services/visionApi';
 import { searchFoodRecalls } from '@/services/recallApi';
 import type { RecallSearchResult } from '@/types/recall';
 
@@ -79,14 +79,15 @@ export default function PhotoCheckScreen() {
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setPhotoState('identifying');
 
-    const productName = await identifyFoodFromImage(encodedImage.base64, 'image/jpeg');
-    if (!productName) {
+    const identifiedProductName = await identifyFoodFromImage(encodedImage.base64, 'image/jpeg');
+    if (!isUsableProductName(identifiedProductName)) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setVerdict({ productName: null, recallResult: null });
       setPhotoState('verdict');
       return;
     }
 
+    const productName = identifiedProductName;
     setPhotoState('checking');
     const recallResult = await searchFoodRecalls(productName);
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

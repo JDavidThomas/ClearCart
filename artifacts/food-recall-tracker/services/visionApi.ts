@@ -2,6 +2,39 @@ const GEMINI_REQUEST_TIMEOUT_MS = 30_000;
 const GEMINI_MODELS = ['gemini-3.5-flash', 'gemini-3.7-flash', 'gemini-3.8-flash'] as const;
 const PHOTO_SERVICE_ERROR =
   'Photo identification service is temporarily unavailable. Please type the product name instead.';
+const GENERIC_LABEL_WORDS = new Set([
+  'classic',
+  'creamy',
+  'flavor',
+  'original',
+  'organic',
+  'peanut',
+  'sour',
+  'the',
+  'vanilla',
+]);
+const STANDALONE_PRODUCE_WORDS = new Set([
+  'apple',
+  'avocado',
+  'banana',
+  'broccoli',
+  'carrot',
+  'celery',
+  'cucumber',
+  'garlic',
+  'grape',
+  'kale',
+  'lemon',
+  'lettuce',
+  'lime',
+  'mango',
+  'onion',
+  'orange',
+  'pear',
+  'potato',
+  'spinach',
+  'tomato',
+]);
 
 interface GeminiResponse {
   candidates?: Array<{
@@ -21,11 +54,26 @@ function cleanProductName(value: unknown): string | null {
     .replace(/^["']|["']$/g, '')
     .replace(/\s+/g, ' ');
 
-  if (!normalized || /^(unknown|unclear|not a food|no food|none|null)$/i.test(normalized)) {
-    return null;
+  return isUsableProductName(normalized) ? normalized : null;
+}
+
+export function isUsableProductName(value: string | null | undefined): value is string {
+  if (!value) return false;
+
+  const normalized = value.trim().replace(/\s+/g, ' ');
+  if (normalized.length < 4 || normalized.length > 100) return false;
+  if (/^(unknown|unclear|not a food|no food|none|null)$/i.test(normalized)) return false;
+
+  const words = normalized.toLowerCase().match(/[a-z0-9]+/g) ?? [];
+  if (words.length === 0) return false;
+  if (words.length === 1) {
+    const word = words[0];
+    if (GENERIC_LABEL_WORDS.has(word)) return false;
+    if (STANDALONE_PRODUCE_WORDS.has(word)) return true;
+    if (normalized === normalized.toLowerCase() && word.length < 6) return false;
   }
-  if (normalized.length > 100) return null;
-  return normalized;
+
+  return true;
 }
 
 function parseProductName(text: string): string | null {
@@ -68,7 +116,7 @@ async function fetchGemini(
           {
             parts: [
               {
-                text: "Look at this image. Identify the food product in it. Reply with ONLY a short product name, like 'romaine lettuce', 'ground beef', 'chicken breast', or 'cheddar cheese'. Do not include any other text, explanation, or punctuation. If you cannot identify a food product, reply with 'unknown'.",
+                text: "Read the visible food package label carefully. Return ONLY one complete, coherent product name with no explanation, punctuation, or formatting. If a brand is visible, include the brand and the product type, such as 'Great Value Creamy Peanut Butter'. If the image shows unbranded produce, return the specific produce type, such as 'romaine lettuce'. Never return a partial word, an ingredient, a flavor or texture descriptor by itself, or a single fragment such as 'cre', 'creamy', or 'peanut'. If you cannot confidently identify the complete product name, return exactly 'unknown'.",
               },
               { inlineData: { mimeType, data: imageBase64 } },
             ],
@@ -103,6 +151,7 @@ export async function identifyFoodFromImage(imageBase64: string, mimeType = 'ima
   }
 
   let lastError: unknown = null;
+  let receivedIdentificationResponse = false;
 
   for (const model of GEMINI_MODELS) {
     try {
@@ -120,15 +169,19 @@ export async function identifyFoodFromImage(imageBase64: string, mimeType = 'ima
       const payload = (await response.json()) as GeminiResponse;
       const text = payload.candidates?.[0]?.content?.parts?.map((part) => part.text ?? '').join('') ?? '';
       if (!text.trim()) {
+        receivedIdentificationResponse = true;
         lastError = new Error(`Gemini ${model} returned an empty response.`);
         continue;
       }
-      return parseProductName(text);
+      const productName = parseProductName(text);
+      if (productName) return productName;
+      receivedIdentificationResponse = true;
     } catch (error) {
       lastError = error;
     }
   }
 
+  if (receivedIdentificationResponse) return null;
   if (lastError instanceof Error && lastError.message === 'GEMINI_TIMEOUT') {
     throw new Error('Food photo identification timed out. Please try again.');
   }
