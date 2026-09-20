@@ -3,7 +3,7 @@ import { IdentifyFoodBody, IdentifyFoodResponse } from "@workspace/api-zod";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
-const GEMINI_MODEL = "gemini-3.6-flash";
+const GEMINI_MODELS = ["gemini-3.5-flash", "gemini-3.7-flash", "gemini-3.8-flash"] as const;
 const MAX_IMAGE_BASE64_LENGTH = 2_000_000;
 const GEMINI_REQUEST_TIMEOUT_MS = 30_000;
 const SUPPORTED_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"]);
@@ -56,7 +56,7 @@ router.post("/vision/identify-food", async (req, res) => {
     {
       configured: Boolean(apiKey),
       apiKeyPreview: apiKey ? `${apiKey.slice(0, 4)}… (length ${apiKey.length})` : "missing",
-      model: GEMINI_MODEL,
+      models: GEMINI_MODELS,
     },
     "Gemini configuration check",
   );
@@ -98,37 +98,56 @@ router.post("/vision/identify-food", async (req, res) => {
   const timeoutId = setTimeout(() => controller.abort(), GEMINI_REQUEST_TIMEOUT_MS);
 
   try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        signal: controller.signal,
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                {
-                  text: "Look at this image. Identify the food product in it. Reply with ONLY a short product name, like 'romaine lettuce', 'ground beef', 'chicken breast', or 'cheddar cheese'. Do not include any other text, explanation, or punctuation. If you cannot identify a food product, reply with 'unknown'.",
-                },
-                { inlineData: { mimeType, data: imageBase64 } },
-              ],
-            },
-          ],
-          generationConfig: { temperature: 0 },
-        }),
-      },
-    );
+    let response: Response | null = null;
+    let modelUsed = GEMINI_MODELS[0];
+    let lastFailure: { model: string; status: number; statusText: string; responseBody: string } | null = null;
 
-    if (!response.ok) {
-      const errorBody = await response.text().catch(() => "");
+    for (const model of GEMINI_MODELS) {
+      const candidateResponse = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          signal: controller.signal,
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  {
+                    text: "Look at this image. Identify the food product in it. Reply with ONLY a short product name, like 'romaine lettuce', 'ground beef', 'chicken breast', or 'cheddar cheese'. Do not include any other text, explanation, or punctuation. If you cannot identify a food product, reply with 'unknown'.",
+                  },
+                  { inlineData: { mimeType, data: imageBase64 } },
+                ],
+              },
+            ],
+            generationConfig: { temperature: 0 },
+          }),
+        },
+      );
+
+      if (candidateResponse.ok) {
+        response = candidateResponse;
+        modelUsed = model;
+        break;
+      }
+
+      const responseBody = await candidateResponse.text().catch(() => "");
+      lastFailure = {
+        model,
+        status: candidateResponse.status,
+        statusText: candidateResponse.statusText,
+        responseBody: responseBody.slice(0, 500),
+      };
+      if (candidateResponse.status !== 404) break;
+    }
+
+    if (!response?.ok) {
       logger.error(
         {
           base64Length: imageBase64.length,
           mimeType,
-          status: response.status,
-          statusText: response.statusText,
-          responseBody: errorBody.slice(0, 500),
+          models: GEMINI_MODELS,
+          lastFailure,
         },
         "Gemini food identification request failed",
       );
@@ -143,6 +162,7 @@ router.post("/vision/identify-food", async (req, res) => {
       res.status(502).json({ message: "The food photo service returned an empty result. Please try again." });
       return;
     }
+    logger.info({ model: modelUsed }, "Gemini food identification succeeded");
     const data = IdentifyFoodResponse.parse({ productName: parseProductName(text) });
     res.json(data);
   } catch (error) {

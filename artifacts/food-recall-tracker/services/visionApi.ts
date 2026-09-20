@@ -3,6 +3,16 @@ const OCR_DEMO_KEY = 'helloworld';
 const OCR_REQUEST_TIMEOUT_MS = 30_000;
 const PHOTO_SERVICE_ERROR =
   'Photo identification service is temporarily unavailable. Please type the product name instead.';
+export const GEMINI_MODELS = ['gemini-3.5-flash', 'gemini-3.7-flash', 'gemini-3.8-flash'] as const;
+const GEMINI_HELLO_TIMEOUT_MS = 15_000;
+
+interface GeminiTextResponse {
+  candidates?: Array<{
+    content?: {
+      parts?: Array<{ text?: string }>;
+    };
+  }>;
+}
 
 interface OcrResponse {
   IsErroredOnProcessing?: boolean;
@@ -51,6 +61,61 @@ function extractProductLabel(payload: OcrResponse) {
     .filter(isUsefulProductLabel);
 
   return candidates[0] ?? null;
+}
+
+export async function runGeminiHelloTest() {
+  const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY?.trim();
+  if (!apiKey) {
+    throw new Error('EXPO_PUBLIC_GEMINI_API_KEY is not configured.');
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), GEMINI_HELLO_TIMEOUT_MS);
+
+  try {
+    for (const model of GEMINI_MODELS) {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: 'Reply with exactly: hello' }] }],
+            generationConfig: { temperature: 0, maxOutputTokens: 16 },
+          }),
+          signal: controller.signal,
+        },
+      );
+
+      if (response.ok) {
+        const payload = (await response.json()) as GeminiTextResponse;
+        const text =
+          payload.candidates?.[0]?.content?.parts?.map((part) => part.text ?? '').join('').trim() ?? '';
+        if (!text) throw new Error(`Gemini model ${model} returned an empty response.`);
+
+        console.info('[GeminiSmokeTest] success', {
+          model,
+          response: text.slice(0, 80),
+        });
+        return { model, text };
+      }
+
+      const responseBody = await response.text().catch(() => '');
+      if (response.status !== 404) {
+        throw new Error(`Gemini model ${model} returned HTTP ${response.status}.`);
+      }
+
+      console.warn('[GeminiSmokeTest] model unavailable', {
+        model,
+        status: response.status,
+        detail: responseBody.slice(0, 160),
+      });
+    }
+
+    throw new Error(`No configured Gemini model is available: ${GEMINI_MODELS.join(', ')}.`);
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 export async function identifyFoodFromImage(imageBase64: string, mimeType = 'image/jpeg') {
