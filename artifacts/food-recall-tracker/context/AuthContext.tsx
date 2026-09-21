@@ -325,6 +325,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const uploadAvatar = async (uri: string) => {
     if (!profile) throw new Error('Log in to upload a profile photo.');
+    const path = `${profile.id}.jpg`;
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    const session = sessionData.session;
+    console.info('[Supabase] avatar upload prepared', {
+      bucket: AVATAR_BUCKET,
+      path,
+      hasSession: Boolean(session),
+      sessionUserMatchesProfile: session?.user.id === profile.id,
+    });
+    if (sessionError || !session?.user) {
+      logSupabaseDiagnostic('storage.avatar-upload.session-missing', sessionError);
+      throw new Error('Your login session is not ready. Please log in again before uploading a photo.');
+    }
+    if (session.user.id !== profile.id) {
+      logSupabaseDiagnostic('storage.avatar-upload.session-user-mismatch');
+      throw new Error('Your login session does not match this profile. Please log in again before uploading a photo.');
+    }
+
     let uploadUri = uri;
     try {
       const { width, height } = await new Promise<{ width: number; height: number }>((resolve, reject) => {
@@ -346,7 +364,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const response = await fetch(uploadUri);
     const body = await response.arrayBuffer();
-    const path = `${profile.id}.jpg`;
     const { error } = await supabase.storage.from(AVATAR_BUCKET).upload(path, body, {
       contentType: 'image/jpeg',
       upsert: true,

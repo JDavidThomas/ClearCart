@@ -43,3 +43,9 @@ create policy "Users can update their own avatar"
   to authenticated
   using (bucket_id = 'Avatars' and name = (auth.uid()::text || '.jpg'))
   with check (bucket_id = 'Avatars' and name = (auth.uid()::text || '.jpg'));
+
+drop policy if exists "Users can view their own avatar" on storage.objects;
+create policy "Users can view their own avatar"
+  on storage.objects for select
+  to authenticated
+  using (bucket_id = 'Avatars' and name = (auth.uid()::text || '.jpg'));
