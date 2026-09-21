@@ -71,10 +71,10 @@ export default function AllergenSetupScreen() {
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.85,
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: false,
+      quality: 0.7,
+      exif: false,
     });
     if (result.canceled || !result.assets[0]) return;
     setPendingAvatarUri(result.assets[0].uri);
@@ -281,6 +281,9 @@ function PhotoStep({
             {uploading ? <ActivityIndicator color={colors.primaryForeground} /> : <Feather name="upload" size={17} color={colors.primaryForeground} />}
             <Text style={[styles.primaryButtonText, { color: colors.primaryForeground }]}>{uploading ? 'Uploading…' : 'Use this photo'}</Text>
           </Pressable>
+          <Pressable disabled={uploading} onPress={onChoose} style={styles.chooseDifferentButton}>
+            <Text style={[styles.chooseDifferentText, { color: colors.primary }]}>Choose a different one</Text>
+          </Pressable>
         </View>
       ) : null}
       {error ? <Text style={[styles.errorText, { color: colors.destructive }]}>{error}</Text> : null}
@@ -326,5 +329,7 @@ const styles = StyleSheet.create({
   photoActions: { alignItems: 'center', gap: 10, marginTop: 16, width: '100%' },
   previewText: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 19, textAlign: 'center' },
   confirmPhotoButton: { alignItems: 'center', borderRadius: 13, flexDirection: 'row', gap: 8, justifyContent: 'center', minHeight: 50, paddingHorizontal: 18, width: '100%' },
+  chooseDifferentButton: { alignItems: 'center', minHeight: 40, justifyContent: 'center', paddingHorizontal: 12 },
+  chooseDifferentText: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
   errorText: { fontFamily: 'Inter_500Medium', fontSize: 13, lineHeight: 19, marginTop: 12 },
 });

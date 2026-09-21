@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import * as ImageManipulator from 'expo-image-manipulator';
+import { Image as NativeImage } from 'react-native';
 import { AVATAR_BUCKET, getAuthRedirectUrl, getSupabaseErrorDetails, logSupabaseDiagnostic, supabase } from '@/lib/supabase';
 
 export type AllergySeverity = 'mild' | 'moderate' | 'severe' | null;
@@ -323,7 +325,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const uploadAvatar = async (uri: string) => {
     if (!profile) throw new Error('Log in to upload a profile photo.');
-    const response = await fetch(uri);
+    let uploadUri = uri;
+    try {
+      const { width, height } = await new Promise<{ width: number; height: number }>((resolve, reject) => {
+        NativeImage.getSize(uri, (imageWidth, imageHeight) => resolve({ width: imageWidth, height: imageHeight }), reject);
+      });
+      const scale = Math.min(1, 512 / Math.max(width, height));
+      const actions = scale < 1
+        ? [{ resize: { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) } }]
+        : [];
+      const compressed = await ImageManipulator.manipulateAsync(uri, actions, {
+        compress: 0.7,
+        format: ImageManipulator.SaveFormat.JPEG,
+        base64: false,
+      });
+      uploadUri = compressed.uri;
+    } catch (compressionError) {
+      console.warn('[Supabase] avatar compression skipped', compressionError);
+    }
+
+    const response = await fetch(uploadUri);
     const body = await response.arrayBuffer();
     const path = `${profile.id}.jpg`;
     const { error } = await supabase.storage.from(AVATAR_BUCKET).upload(path, body, {
