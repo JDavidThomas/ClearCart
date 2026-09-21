@@ -108,7 +108,9 @@ function SupabaseDebugBanner() {
   return (
     <View pointerEvents="none" style={styles.debugBanner}>
       <Text style={styles.debugTitle}>Supabase diagnostics</Text>
-      <Text style={styles.debugText}>URL: {config.urlPrefix} · Key: {config.anonKeyPrefix}</Text>
+      <Text style={styles.debugText}>
+        URL: {config.urlOrigin ?? 'missing'} · Key: {config.keyType} ({config.keyLength} chars)
+      </Text>
       <Text style={styles.debugText}>Status: {status}</Text>
       {errorMessage ? <Text style={styles.debugError}>Error: {errorMessage}</Text> : null}
     </View>

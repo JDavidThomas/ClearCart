@@ -1,5 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,6 +9,7 @@ import { useColors } from '@/hooks/useColors';
 export default function LoginScreen() {
   const colors = useColors();
   const router = useRouter();
+  const { next } = useLocalSearchParams<{ next?: string }>();
   const insets = useSafeAreaInsets();
   const { logIn, sendPasswordReset } = useAuth();
   const [email, setEmail] = useState('');
@@ -23,7 +24,7 @@ export default function LoginScreen() {
     setSaving(true);
     try {
       await logIn(email, password);
-      router.replace('/profile');
+      router.replace(next === '/allergen-setup' ? '/allergen-setup' : '/profile');
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : 'We could not log you in.');
     } finally {

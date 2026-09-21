@@ -4,12 +4,29 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
+function getKeyType(key: string | undefined) {
+  if (!key) return 'missing';
+  if (key.startsWith('sb_publishable_')) return 'publishable';
+  if (key.startsWith('eyJ')) return 'legacy-jwt';
+  return 'other';
+}
+
 export function getSupabaseConfigDiagnostics() {
+  let urlOrigin: string | null = null;
+  if (supabaseUrl) {
+    try {
+      urlOrigin = new URL(supabaseUrl).origin;
+    } catch {
+      urlOrigin = 'invalid-url';
+    }
+  }
+
   return {
-    urlPrefix: supabaseUrl?.slice(0, 12) || '(empty)',
-    anonKeyPrefix: supabaseAnonKey?.slice(0, 12) || '(empty)',
-    hasUrl: Boolean(supabaseUrl),
-    hasAnonKey: Boolean(supabaseAnonKey),
+    urlConfigured: Boolean(supabaseUrl),
+    urlOrigin,
+    keyConfigured: Boolean(supabaseAnonKey),
+    keyType: getKeyType(supabaseAnonKey),
+    keyLength: supabaseAnonKey?.length ?? 0,
   };
 }
 
@@ -37,10 +54,26 @@ export function getSupabaseErrorDetails(error: unknown) {
 
 const configDiagnostics = getSupabaseConfigDiagnostics();
 
+export function logSupabaseDiagnostic(operation: string, error?: unknown) {
+  const payload = {
+    operation,
+    config: getSupabaseConfigDiagnostics(),
+    ...(error ? { error: getSupabaseErrorDetails(error) } : {}),
+  };
+  if (error) {
+    console.warn('[Supabase diagnostic]', payload);
+  } else {
+    console.info('[Supabase diagnostic]', payload);
+  }
+}
+
 if (!supabaseUrl || !supabaseAnonKey) {
   console.error('[Supabase] Configuration missing', configDiagnostics);
+  logSupabaseDiagnostic('client.initialization.missing-config');
   throw new Error('Supabase is not configured. Add EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY.');
 }
+
+logSupabaseDiagnostic('client.initialization');
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {

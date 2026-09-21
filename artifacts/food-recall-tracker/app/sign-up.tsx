@@ -16,6 +16,7 @@ export default function SignUpScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [confirmationEmail, setConfirmationEmail] = useState<string | null>(null);
 
   const submit = async () => {
     setError(null);
@@ -31,11 +32,26 @@ export default function SignUpScreen() {
         params: { email: result.email },
       } : '/allergen-setup');
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : 'We could not create your account.');
+      const message = submitError instanceof Error ? submitError.message : 'We could not create your account.';
+      if (message.startsWith('Check your email')) {
+        setConfirmationEmail(email.trim().toLowerCase());
+      } else {
+        setError(message);
+      }
     } finally {
       setSaving(false);
     }
   };
+
+  if (confirmationEmail) {
+    return (
+      <ConfirmationScreen
+        colors={colors}
+        email={confirmationEmail}
+        onLogIn={() => router.replace({ pathname: '/login', params: { next: '/allergen-setup' } })}
+      />
+    );
+  }
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
@@ -78,6 +94,36 @@ export default function SignUpScreen() {
   );
 }
 
+function ConfirmationScreen({
+  colors,
+  email,
+  onLogIn,
+}: {
+  colors: ReturnType<typeof useColors>;
+  email: string;
+  onLogIn: () => void;
+}) {
+  return (
+    <View style={[styles.screen, { backgroundColor: colors.background }]}>
+      <ScrollView contentContainerStyle={styles.confirmationContent} showsVerticalScrollIndicator={false}>
+        <View style={[styles.confirmationIcon, { backgroundColor: colors.successSoft }]}>
+          <Feather name="mail" size={28} color={colors.success} />
+        </View>
+        <Text style={[styles.confirmationTitle, { color: colors.foreground }]}>Check your email</Text>
+        <Text style={[styles.confirmationBody, { color: colors.mutedForeground }]}>
+          We sent a confirmation link to {email}. Open it, then return here to log in and finish your allergy setup.
+        </Text>
+        <Pressable
+          onPress={onLogIn}
+          style={({ pressed }) => [styles.primaryButton, { backgroundColor: colors.primary, opacity: pressed ? 0.7 : 1 }]}
+        >
+          <Feather name="log-in" size={18} color={colors.primaryForeground} />
+          <Text style={[styles.primaryText, { color: colors.primaryForeground }]}>I’ve confirmed my email — Log In</Text>
+        </Pressable>
+      </ScrollView>
+    </View>
+  );
+}
 function Field({
   label,
   colors,
@@ -108,6 +154,10 @@ function ErrorBox({ message, colors }: { message: string; colors: ReturnType<typ
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   content: { paddingHorizontal: 24 },
+  confirmationContent: { flexGrow: 1, justifyContent: 'center', padding: 24 },
+  confirmationIcon: { alignItems: 'center', alignSelf: 'center', borderRadius: 18, height: 68, justifyContent: 'center', width: 68 },
+  confirmationTitle: { fontFamily: 'Inter_700Bold', fontSize: 30, letterSpacing: -0.7, marginTop: 22, textAlign: 'center' },
+  confirmationBody: { fontFamily: 'Inter_400Regular', fontSize: 15, lineHeight: 23, marginTop: 12, textAlign: 'center' },
   backButton: { alignItems: 'center', flexDirection: 'row', gap: 7, minHeight: 44 },
   backText: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
   icon: { alignItems: 'center', borderRadius: 16, height: 58, justifyContent: 'center', marginTop: 28, width: 58 },
