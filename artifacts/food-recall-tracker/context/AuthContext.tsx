@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { toByteArray } from 'base64-js';
 import * as ImageManipulator from 'expo-image-manipulator';
+import * as FileSystem from 'expo-file-system/legacy';
 import { Image as NativeImage } from 'react-native';
 import { AVATAR_BUCKET, getAuthRedirectUrl, getSupabaseErrorDetails, logSupabaseDiagnostic, supabase } from '@/lib/supabase';
 
@@ -368,19 +370,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.warn('[Supabase] avatar compression skipped', compressionError);
     }
 
-    let body: ArrayBuffer;
+    let body: Uint8Array;
     try {
-      const response = await fetch(uploadUri);
-      if (!response.ok) throw new Error(`Photo file could not be read (${response.status}).`);
-      body = await response.arrayBuffer();
-      console.info('[Supabase] avatar file read', { bucket: AVATAR_BUCKET, path, bytes: body.byteLength });
+      const sourceInfo = await FileSystem.getInfoAsync(uri);
+      console.info('[Supabase] avatar source file info', {
+        bucket: AVATAR_BUCKET,
+        path,
+        uri,
+        exists: sourceInfo.exists,
+        bytes: sourceInfo.exists ? sourceInfo.size : 0,
+      });
+      if (!sourceInfo.exists) throw new Error('The selected photo no longer exists on this device.');
+
+      const uploadInfo = await FileSystem.getInfoAsync(uploadUri);
+      console.info('[Supabase] avatar upload file info', {
+        bucket: AVATAR_BUCKET,
+        path,
+        uri: uploadUri,
+        exists: uploadInfo.exists,
+        bytes: uploadInfo.exists ? uploadInfo.size : 0,
+      });
+      if (!uploadInfo.exists) throw new Error('The prepared avatar file could not be found on this device.');
+
+      const base64 = await FileSystem.readAsStringAsync(uploadUri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      body = toByteArray(base64);
+      console.info('[Supabase] avatar base64 decoded', {
+        bucket: AVATAR_BUCKET,
+        path,
+        base64Characters: base64.length,
+        bytes: body.byteLength,
+      });
+      if (body.byteLength < 1024) {
+        throw new Error(`The prepared avatar is only ${body.byteLength} bytes. Please choose a different photo.`);
+      }
     } catch (fileError) {
       console.error('[Supabase] avatar file read failed', { bucket: AVATAR_BUCKET, path, error: fileError });
       throw new Error(authErrorMessage(fileError, 'We could not prepare that photo for upload.'));
     }
 
     const storage = supabase.storage.from(AVATAR_BUCKET);
-    console.info('[Supabase] avatar storage upload started', { bucket: AVATAR_BUCKET, path });
+    console.info('[Supabase] avatar storage upload started', { bucket: AVATAR_BUCKET, path, bytes: body.byteLength });
     const { data: uploadData, error } = await storage.upload(path, body, {
       contentType: 'image/jpeg',
       upsert: true,
