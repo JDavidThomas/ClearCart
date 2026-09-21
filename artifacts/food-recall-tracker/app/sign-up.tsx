@@ -25,8 +25,11 @@ export default function SignUpScreen() {
     }
     setSaving(true);
     try {
-      await signUp(email, password);
-      router.replace('/allergen-setup');
+      const result = await signUp(email, password);
+      router.replace(result.requiresEmailConfirmation ? {
+        pathname: '/email-confirmation',
+        params: { email: result.email },
+      } : '/allergen-setup');
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : 'We could not create your account.');
     } finally {

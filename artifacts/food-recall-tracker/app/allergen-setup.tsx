@@ -25,6 +25,7 @@ export default function AllergenSetupScreen() {
   const [customAllergy, setCustomAllergy] = useState(profile?.customAllergy ?? '');
   const [severity, setSeverity] = useState<AllergySeverity>(profile?.severity ?? null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(profile?.avatarUrl ?? null);
+  const [pendingAvatarUri, setPendingAvatarUri] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -76,10 +77,16 @@ export default function AllergenSetupScreen() {
       quality: 0.85,
     });
     if (result.canceled || !result.assets[0]) return;
+    setPendingAvatarUri(result.assets[0].uri);
+  };
+
+  const confirmAvatar = async () => {
+    if (!pendingAvatarUri) return;
     setUploading(true);
     try {
-      const publicUrl = await uploadAvatar(result.assets[0].uri);
+      const publicUrl = await uploadAvatar(pendingAvatarUri);
       setAvatarUrl(publicUrl);
+      setPendingAvatarUri(null);
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : 'We could not upload that photo.');
     } finally {
@@ -117,11 +124,13 @@ export default function AllergenSetupScreen() {
         ) : (
           <PhotoStep
             colors={colors}
-            avatarUrl={avatarUrl}
+            avatarUrl={pendingAvatarUri ?? avatarUrl}
+            hasPendingAvatar={Boolean(pendingAvatarUri)}
             uploading={uploading}
             saving={saving}
             error={error}
             onChoose={() => void chooseAvatar()}
+            onConfirm={() => void confirmAvatar()}
             onFinish={() => void finish()}
             onSkip={() => void finish()}
           />
@@ -231,19 +240,23 @@ function SeverityStep({
 function PhotoStep({
   colors,
   avatarUrl,
+  hasPendingAvatar,
   uploading,
   saving,
   error,
   onChoose,
+  onConfirm,
   onFinish,
   onSkip,
 }: {
   colors: ReturnType<typeof useColors>;
   avatarUrl: string | null;
+  hasPendingAvatar: boolean;
   uploading: boolean;
   saving: boolean;
   error: string | null;
   onChoose: () => void;
+  onConfirm: () => void;
   onFinish: () => void;
   onSkip: () => void;
 }) {
@@ -254,10 +267,24 @@ function PhotoStep({
       <Text style={[styles.body, { color: colors.mutedForeground }]}>Optional. A photo makes your profile easier to recognize.</Text>
       <Pressable onPress={onChoose} style={({ pressed }) => [styles.avatarButton, { opacity: pressed ? 0.7 : 1 }]}>
         {avatarUrl ? <Image source={{ uri: avatarUrl }} style={styles.largeAvatar} contentFit="cover" /> : <View style={[styles.largeAvatar, { backgroundColor: colors.blueSoft }]}><Feather name="camera" size={32} color={colors.primary} /></View>}
-        <Text style={[styles.changePhotoText, { color: colors.primary }]}>{uploading ? 'Uploading…' : 'Choose from Gallery'}</Text>
+        <Text style={[styles.changePhotoText, { color: colors.primary }]}>{uploading ? 'Uploading…' : hasPendingAvatar ? 'Photo selected' : 'Choose from Gallery'}</Text>
       </Pressable>
+      {hasPendingAvatar ? (
+        <View style={styles.photoActions}>
+          <Text style={[styles.previewText, { color: colors.mutedForeground }]}>Preview ready. Confirm to save it to your profile.</Text>
+          <Pressable
+            accessibilityRole="button"
+            disabled={uploading}
+            onPress={onConfirm}
+            style={({ pressed }) => [styles.confirmPhotoButton, { backgroundColor: colors.primary, opacity: pressed || uploading ? 0.7 : 1 }]}
+          >
+            {uploading ? <ActivityIndicator color={colors.primaryForeground} /> : <Feather name="upload" size={17} color={colors.primaryForeground} />}
+            <Text style={[styles.primaryButtonText, { color: colors.primaryForeground }]}>{uploading ? 'Uploading…' : 'Use this photo'}</Text>
+          </Pressable>
+        </View>
+      ) : null}
       {error ? <Text style={[styles.errorText, { color: colors.destructive }]}>{error}</Text> : null}
-      <Pressable disabled={uploading || saving} onPress={onFinish} style={({ pressed }) => [styles.primaryButton, { backgroundColor: colors.primary, opacity: pressed || uploading || saving ? 0.7 : 1 }]}>
+      <Pressable disabled={uploading || saving || hasPendingAvatar} onPress={onFinish} style={({ pressed }) => [styles.primaryButton, { backgroundColor: colors.primary, opacity: pressed || uploading || saving || hasPendingAvatar ? 0.7 : 1 }]}>
         {saving ? <ActivityIndicator color={colors.primaryForeground} /> : null}
         <Text style={[styles.primaryButtonText, { color: colors.primaryForeground }]}>{saving ? 'Saving…' : 'Finish Setup'}</Text>
       </Pressable>
@@ -296,5 +323,8 @@ const styles = StyleSheet.create({
   avatarButton: { alignItems: 'center', marginTop: 28 },
   largeAvatar: { alignItems: 'center', borderRadius: 999, height: 150, justifyContent: 'center', width: 150 },
   changePhotoText: { fontFamily: 'Inter_600SemiBold', fontSize: 14, marginTop: 14 },
+  photoActions: { alignItems: 'center', gap: 10, marginTop: 16, width: '100%' },
+  previewText: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 19, textAlign: 'center' },
+  confirmPhotoButton: { alignItems: 'center', borderRadius: 13, flexDirection: 'row', gap: 8, justifyContent: 'center', minHeight: 50, paddingHorizontal: 18, width: '100%' },
   errorText: { fontFamily: 'Inter_500Medium', fontSize: 13, lineHeight: 19, marginTop: 12 },
 });

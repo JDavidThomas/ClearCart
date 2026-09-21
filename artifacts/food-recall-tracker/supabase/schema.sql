@@ -35,11 +35,11 @@ drop policy if exists "Users can upload their own avatar" on storage.objects;
 create policy "Users can upload their own avatar"
   on storage.objects for insert
   to authenticated
-  with check (bucket_id = 'avatars' and name = (auth.uid()::text || '.jpg'));
+  with check (bucket_id = 'Avatars' and name = (auth.uid()::text || '.jpg'));
 
 drop policy if exists "Users can update their own avatar" on storage.objects;
 create policy "Users can update their own avatar"
   on storage.objects for update
   to authenticated
-  using (bucket_id = 'avatars' and name = (auth.uid()::text || '.jpg'))
-  with check (bucket_id = 'avatars' and name = (auth.uid()::text || '.jpg'));
+  using (bucket_id = 'Avatars' and name = (auth.uid()::text || '.jpg'))
+  with check (bucket_id = 'Avatars' and name = (auth.uid()::text || '.jpg'));

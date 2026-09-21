@@ -74,6 +74,10 @@ const SUSPICIOUS_END_WORDS = new Set([
   'sour',
   'value',
 ]);
+const STRICT_IDENTIFICATION_PROMPT =
+  "Read the ENTIRE product name from the front of the package. Include every word visible. Do not truncate at line breaks, wrap points, or the edge of the label. Return ONLY one complete, coherent product name with no explanation, punctuation, or formatting. If a brand is visible, include the brand and the product type, such as 'Great Value Creamy Peanut Butter'. For a jar labeled 'Great Value Creamy Peanut Butter', return: 'Great Value Creamy Peanut Butter'. Do NOT return 'Great', 'Creamy', or 'Peanut Butter'. If the label wraps across lines like 'Great Value' on one line and 'Creamy Peanut Butter' on the next, combine every line into 'Great Value Creamy Peanut Butter'. If the image shows unbranded produce, return the specific produce type, such as 'romaine lettuce'. Never return a partial word, an ingredient, a flavor or texture descriptor by itself, or a single fragment such as 'cre', 'creamy', or 'peanut'. If you can only read part of the label, or if the product name is ambiguous, return 'unknown' rather than guessing. It is better to return 'unknown' than to return an incomplete name. If you cannot confidently identify the complete product name, return exactly 'unknown'.";
+const RECOVERY_IDENTIFICATION_PROMPT =
+  "Look carefully at the food in this image a second time. Identify the most likely food item or complete product name that is visibly present. Pay special attention to unbranded produce and simple foods: if the image shows a tomato, return 'tomato'; if it shows another single food, return that specific food. For a packaged product, combine the visible brand and product type when readable. Return ONLY the name, with no explanation or punctuation. Return 'unknown' only if the image does not contain an identifiable food or is too blurry to read.";
 
 interface GeminiResponse {
   candidates?: Array<{
@@ -150,6 +154,7 @@ async function fetchGemini(
   apiKey: string,
   imageBase64: string,
   mimeType: string,
+  prompt: string,
 ) {
   const controller = new AbortController();
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -164,7 +169,7 @@ async function fetchGemini(
           {
             parts: [
               {
-                text: "Read the ENTIRE product name from the front of the package. Include every word visible. Do not truncate at line breaks, wrap points, or the edge of the label. Return ONLY one complete, coherent product name with no explanation, punctuation, or formatting. If a brand is visible, include the brand and the product type, such as 'Great Value Creamy Peanut Butter'. For a jar labeled 'Great Value Creamy Peanut Butter', return: 'Great Value Creamy Peanut Butter'. Do NOT return 'Great', 'Creamy', or 'Peanut Butter'. If the label wraps across lines like 'Great Value' on one line and 'Creamy Peanut Butter' on the next, combine every line into 'Great Value Creamy Peanut Butter'. If the image shows unbranded produce, return the specific produce type, such as 'romaine lettuce'. Never return a partial word, an ingredient, a flavor or texture descriptor by itself, or a single fragment such as 'cre', 'creamy', or 'peanut'. If you can only read part of the label, or if the product name is ambiguous, return 'unknown' rather than guessing. It is better to return 'unknown' than to return an incomplete name. If you cannot confidently identify the complete product name, return exactly 'unknown'.",
+                text: prompt,
               },
               { inlineData: { mimeType, data: imageBase64 } },
             ],
@@ -192,26 +197,31 @@ async function fetchGemini(
   }
 }
 
-export async function identifyFoodFromImage(imageBase64: string, mimeType = 'image/jpeg') {
-  const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY?.trim();
-  if (!apiKey) {
-    throw new Error('Photo identification is not configured in this app bundle.');
-  }
+interface IdentificationAttempt {
+  productName: string | null;
+  suspiciousCandidate: string | null;
+  receivedIdentificationResponse: boolean;
+  lastError: unknown;
+}
 
+async function identifyWithPrompt(
+  apiKey: string,
+  imageBase64: string,
+  mimeType: string,
+  prompt: string,
+): Promise<IdentificationAttempt> {
   let lastError: unknown = null;
   let receivedIdentificationResponse = false;
   let suspiciousCandidate: string | null = null;
 
   for (const model of GEMINI_MODELS) {
     try {
-      const response = await fetchGemini(model, apiKey, imageBase64, mimeType);
+      const response = await fetchGemini(model, apiKey, imageBase64, mimeType, prompt);
       if (!response.ok) {
         const responseBody = await response.text().catch(() => '');
         lastError = new Error(`Gemini ${model} returned HTTP ${response.status}: ${responseBody.slice(0, 160)}`);
 
-        if (response.status === 400 || response.status === 401 || response.status === 403) {
-          break;
-        }
+        if (response.status === 400 || response.status === 401 || response.status === 403) break;
         continue;
       }
 
@@ -222,6 +232,7 @@ export async function identifyFoodFromImage(imageBase64: string, mimeType = 'ima
         lastError = new Error(`Gemini ${model} returned an empty response.`);
         continue;
       }
+
       const productName = parseProductName(text);
       if (productName) {
         if (isPossiblyTruncatedProductName(productName)) {
@@ -229,7 +240,7 @@ export async function identifyFoodFromImage(imageBase64: string, mimeType = 'ima
           receivedIdentificationResponse = true;
           continue;
         }
-        return productName;
+        return { productName, suspiciousCandidate, receivedIdentificationResponse: true, lastError };
       }
       receivedIdentificationResponse = true;
     } catch (error) {
@@ -237,9 +248,27 @@ export async function identifyFoodFromImage(imageBase64: string, mimeType = 'ima
     }
   }
 
-  if (suspiciousCandidate) return suspiciousCandidate;
-  if (receivedIdentificationResponse) return null;
-  if (lastError instanceof Error && lastError.message === 'GEMINI_TIMEOUT') {
+  return { productName: null, suspiciousCandidate, receivedIdentificationResponse, lastError };
+}
+
+export async function identifyFoodFromImage(imageBase64: string, mimeType = 'image/jpeg') {
+  const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY?.trim();
+  if (!apiKey) {
+    throw new Error('Photo identification is not configured in this app bundle.');
+  }
+
+  const primaryAttempt = await identifyWithPrompt(apiKey, imageBase64, mimeType, STRICT_IDENTIFICATION_PROMPT);
+  if (primaryAttempt.productName) return primaryAttempt.productName;
+
+  if (primaryAttempt.receivedIdentificationResponse) {
+    const recoveryAttempt = await identifyWithPrompt(apiKey, imageBase64, mimeType, RECOVERY_IDENTIFICATION_PROMPT);
+    if (recoveryAttempt.productName) return recoveryAttempt.productName;
+    if (recoveryAttempt.suspiciousCandidate) return recoveryAttempt.suspiciousCandidate;
+    if (primaryAttempt.suspiciousCandidate) return primaryAttempt.suspiciousCandidate;
+    return null;
+  }
+
+  if (primaryAttempt.lastError instanceof Error && primaryAttempt.lastError.message === 'GEMINI_TIMEOUT') {
     throw new Error('Food photo identification timed out. Please try again.');
   }
   throw new Error(PHOTO_SERVICE_ERROR);

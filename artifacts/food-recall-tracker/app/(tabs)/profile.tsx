@@ -85,6 +85,7 @@ function LoggedInProfile() {
   const [name, setName] = useState(profile?.displayName ?? '');
   const [savingName, setSavingName] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [pendingAvatarUri, setPendingAvatarUri] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   if (!profile) return null;
@@ -101,9 +102,15 @@ function LoggedInProfile() {
     }
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.85 });
     if (result.canceled || !result.assets[0]) return;
+    setPendingAvatarUri(result.assets[0].uri);
+  };
+
+  const confirmAvatar = async () => {
+    if (!pendingAvatarUri) return;
     setUploading(true);
     try {
-      await uploadAvatar(result.assets[0].uri);
+      await uploadAvatar(pendingAvatarUri);
+      setPendingAvatarUri(null);
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : 'We could not upload that photo.');
     } finally {
@@ -131,10 +138,24 @@ function LoggedInProfile() {
   return (
     <View>
       <Pressable onPress={() => void chooseAvatar()} style={({ pressed }) => [styles.avatarButton, { opacity: pressed || uploading ? 0.7 : 1 }]} disabled={uploading}>
-        {profile.avatarUrl ? <Image source={{ uri: profile.avatarUrl }} style={styles.avatar} contentFit="cover" /> : <View style={[styles.avatar, { backgroundColor: colors.primary }]}><Text style={[styles.avatarText, { color: colors.primaryForeground }]}>{initials}</Text></View>}
+        {pendingAvatarUri || profile.avatarUrl ? <Image source={{ uri: pendingAvatarUri ?? profile.avatarUrl ?? undefined }} style={styles.avatar} contentFit="cover" /> : <View style={[styles.avatar, { backgroundColor: colors.primary }]}><Text style={[styles.avatarText, { color: colors.primaryForeground }]}>{initials}</Text></View>}
         <View style={[styles.cameraBadge, { backgroundColor: colors.primary }]}><Feather name="camera" size={15} color={colors.primaryForeground} /></View>
       </Pressable>
-      <Text style={[styles.changePhoto, { color: colors.primary }]}>{uploading ? 'Uploading photo…' : 'Tap to change photo'}</Text>
+      <Text style={[styles.changePhoto, { color: colors.primary }]}>{uploading ? 'Uploading photo…' : pendingAvatarUri ? 'Photo selected' : 'Tap to change photo'}</Text>
+      {pendingAvatarUri ? (
+        <View style={styles.photoActions}>
+          <Text style={[styles.previewText, { color: colors.mutedForeground }]}>Preview ready. Confirm to save it to your profile.</Text>
+          <Pressable
+            accessibilityRole="button"
+            disabled={uploading}
+            onPress={() => void confirmAvatar()}
+            style={({ pressed }) => [styles.confirmPhotoButton, { backgroundColor: colors.primary, opacity: pressed || uploading ? 0.7 : 1 }]}
+          >
+            {uploading ? <ActivityIndicator color={colors.primaryForeground} /> : <Feather name="upload" size={17} color={colors.primaryForeground} />}
+            <Text style={[styles.primaryButtonText, { color: colors.primaryForeground }]}>{uploading ? 'Uploading…' : 'Use this photo'}</Text>
+          </Pressable>
+        </View>
+      ) : null}
       {editingName ? (
         <View style={styles.nameEdit}>
           <TextInput autoFocus onChangeText={setName} onSubmitEditing={() => void saveName()} style={[styles.nameInput, { color: colors.foreground, borderColor: colors.input }]} value={name} />
@@ -198,6 +219,9 @@ const styles = StyleSheet.create({
   avatarText: { fontFamily: 'Inter_700Bold', fontSize: 34 },
   cameraBadge: { alignItems: 'center', borderColor: '#ffffff', borderRadius: 999, borderWidth: 3, bottom: 1, height: 35, justifyContent: 'center', position: 'absolute', right: 0, width: 35 },
   changePhoto: { fontFamily: 'Inter_600SemiBold', fontSize: 13, marginTop: 10, textAlign: 'center' },
+  photoActions: { alignItems: 'center', gap: 10, marginTop: 16 },
+  previewText: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 19, textAlign: 'center' },
+  confirmPhotoButton: { alignItems: 'center', borderRadius: 13, flexDirection: 'row', gap: 8, justifyContent: 'center', minHeight: 50, paddingHorizontal: 18, width: '100%' },
   nameButton: { alignItems: 'center', flexDirection: 'row', gap: 8, justifyContent: 'center', marginTop: 18 },
   profileName: { fontFamily: 'Inter_700Bold', fontSize: 24 },
   profileEmail: { fontFamily: 'Inter_400Regular', fontSize: 14, marginTop: 5, textAlign: 'center' },

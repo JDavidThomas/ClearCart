@@ -55,3 +55,5 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 export function getAuthRedirectUrl() {
   return 'food-recall-tracker://password-reset';
 }
+
+export const AVATAR_BUCKET = 'Avatars';

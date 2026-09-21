@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { getAuthRedirectUrl, getSupabaseErrorDetails, supabase } from '@/lib/supabase';
+import { AVATAR_BUCKET, getAuthRedirectUrl, getSupabaseErrorDetails, supabase } from '@/lib/supabase';
 
 export type AllergySeverity = 'mild' | 'moderate' | 'severe' | null;
 
@@ -30,7 +30,8 @@ interface AuthContextValue {
   profile: UserProfile | null;
   authNotice: string | null;
   guestPromptDismissed: boolean;
-  signUp: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string) => Promise<SignUpResult>;
+  resendConfirmationEmail: (email: string) => Promise<void>;
   logIn: (email: string, password: string) => Promise<void>;
   sendPasswordReset: (email: string) => Promise<void>;
   logOut: () => Promise<void>;
@@ -47,6 +48,11 @@ interface AuthContextValue {
 }
 
 export const ACCESS_TOKEN_KEY = '@food-recall-tracker/access-token';
+
+export interface SignUpResult {
+  requiresEmailConfirmation: boolean;
+  email: string;
+}
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
@@ -180,7 +186,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const signUp = async (email: string, password: string) => {
+  const signUp = async (email: string, password: string): Promise<SignUpResult> => {
     const cleanEmail = normalizeEmail(email);
     if (!cleanEmail.includes('@')) throw new Error('Enter a valid email address.');
     if (password.length < 6) throw new Error('Use a password with at least 6 characters.');
@@ -193,20 +199,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       if (error) throw new Error(authErrorMessage(error, 'We could not create your account.'));
       if (!data.session || !data.user) {
-        throw new Error('Check your email to confirm your account, then log in.');
+        return { requiresEmailConfirmation: true, email: cleanEmail };
       }
 
       await loadProfile(data.user);
       setAuthNotice(null);
       setStatus('authenticated');
       setGuestPromptDismissed(false);
+      return { requiresEmailConfirmation: false, email: cleanEmail };
     } catch (error) {
       const details = getSupabaseErrorDetails(error);
       console.error('[Supabase] signUp failed', details);
-      if (error instanceof Error && error.message.startsWith('Check your email')) throw error;
       if (error instanceof Error && /already registered|already exists|invalid/i.test(error.message)) throw error;
       enterGuestMode('Profile sync is unavailable, so recall checks are continuing as a guest.');
       throw new Error(`Supabase sign-up failed: ${details.message}`);
+    }
+  };
+
+  const resendConfirmationEmail = async (email: string) => {
+    const cleanEmail = normalizeEmail(email);
+    if (!cleanEmail.includes('@')) throw new Error('Enter a valid email address.');
+
+    const { error } = await supabase.auth.resend({ type: 'signup', email: cleanEmail });
+    if (error) {
+      console.error('[Supabase] confirmation email resend failed', getSupabaseErrorDetails(error));
+      throw new Error(authErrorMessage(error, 'We could not resend the confirmation email.'));
     }
   };
 
@@ -299,7 +316,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const response = await fetch(uri);
     const body = await response.arrayBuffer();
     const path = `${profile.id}.jpg`;
-    const { error } = await supabase.storage.from('avatars').upload(path, body, {
+    const { error } = await supabase.storage.from(AVATAR_BUCKET).upload(path, body, {
       contentType: 'image/jpeg',
       upsert: true,
     });
@@ -307,7 +324,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error('[Supabase] avatar upload failed', getSupabaseErrorDetails(error));
       throw new Error(authErrorMessage(error, 'We could not upload that photo.'));
     }
-    const { data } = supabase.storage.from('avatars').getPublicUrl(path);
+    const { data } = supabase.storage.from(AVATAR_BUCKET).getPublicUrl(path);
     await updateProfile({ avatarUrl: `${data.publicUrl}?v=${Date.now()}` });
     return data.publicUrl;
   };
@@ -319,6 +336,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       authNotice,
       guestPromptDismissed,
       signUp,
+      resendConfirmationEmail,
       logIn,
       sendPasswordReset,
       logOut,
