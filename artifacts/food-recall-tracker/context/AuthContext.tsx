@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { toByteArray } from 'base64-js';
+import { Blob as ExpoBlob } from 'expo-blob';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Image as NativeImage } from 'react-native';
@@ -370,7 +371,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.warn('[Supabase] avatar compression skipped', compressionError);
     }
 
-    let body: Uint8Array;
+    let body: ExpoBlob;
     try {
       const sourceInfo = await FileSystem.getInfoAsync(uri);
       console.info('[Supabase] avatar source file info', {
@@ -395,23 +396,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const base64 = await FileSystem.readAsStringAsync(uploadUri, {
         encoding: FileSystem.EncodingType.Base64,
       });
-      body = toByteArray(base64);
+      const decodedBytes = toByteArray(base64);
       console.info('[Supabase] avatar base64 decoded', {
         bucket: AVATAR_BUCKET,
         path,
         base64Characters: base64.length,
-        bytes: body.byteLength,
+        bytes: decodedBytes.byteLength,
       });
-      if (body.byteLength < 1024) {
-        throw new Error(`The prepared avatar is only ${body.byteLength} bytes. Please choose a different photo.`);
+      if (decodedBytes.byteLength < 1024) {
+        throw new Error(`The prepared avatar is only ${decodedBytes.byteLength} bytes. Please choose a different photo.`);
       }
+      body = new ExpoBlob([decodedBytes], { type: 'image/jpeg' });
+      console.info('[Supabase] avatar ExpoBlob prepared', {
+        bucket: AVATAR_BUCKET,
+        path,
+        bytes: body.size,
+        contentType: body.type,
+      });
     } catch (fileError) {
       console.error('[Supabase] avatar file read failed', { bucket: AVATAR_BUCKET, path, error: fileError });
       throw new Error(authErrorMessage(fileError, 'We could not prepare that photo for upload.'));
     }
 
     const storage = supabase.storage.from(AVATAR_BUCKET);
-    console.info('[Supabase] avatar storage upload started', { bucket: AVATAR_BUCKET, path, bytes: body.byteLength });
+    console.info('[Supabase] avatar storage upload started', {
+      bucket: AVATAR_BUCKET,
+      path,
+      bytes: body.size,
+      transport: 'expo-blob',
+    });
     const { data: uploadData, error } = await storage.upload(path, body, {
       contentType: 'image/jpeg',
       upsert: true,
@@ -423,7 +436,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     console.info('[Supabase] avatar storage upload succeeded', { bucket: AVATAR_BUCKET, path, result: uploadData });
 
-    const { data: verifiedFile, error: verificationError } = await storage.download(path);
+    const { data: storedFiles, error: verificationError } = await storage.list('', {
+      limit: 100,
+      search: profile.id,
+    });
+    const verifiedFile = storedFiles?.find((file) => file.name === path && file.id !== null);
     if (verificationError || !verifiedFile) {
       console.error('[Supabase] avatar storage verification failed', {
         bucket: AVATAR_BUCKET,
@@ -432,10 +449,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       throw new Error(authErrorMessage(verificationError, 'The photo uploaded but could not be verified in storage.'));
     }
+    const storedBytes = Number(verifiedFile.metadata?.size ?? verifiedFile.metadata?.contentLength ?? 0);
+    if (storedBytes !== body.size) {
+      console.error('[Supabase] avatar storage size mismatch', {
+        bucket: AVATAR_BUCKET,
+        path,
+        uploadedBytes: body.size,
+        storedBytes,
+      });
+      throw new Error('The photo uploaded, but its stored size could not be verified.');
+    }
     console.info('[Supabase] avatar storage verification succeeded', {
       bucket: AVATAR_BUCKET,
       path,
-      bytes: verifiedFile.size,
+      bytes: storedBytes,
+      transport: 'storage.list',
     });
 
     const { data: publicUrlData } = storage.getPublicUrl(path);
