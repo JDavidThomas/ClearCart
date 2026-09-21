@@ -113,8 +113,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (data) {
-      setProfile(toUserProfile(data as ProfileRow, email));
-      return;
+      const nextProfile = toUserProfile(data as ProfileRow, email);
+      setProfile(nextProfile);
+      return nextProfile;
     }
 
     const initialProfile = {
@@ -134,7 +135,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       logSupabaseDiagnostic('profiles.upsert.failed', insertError);
       throw insertError;
     }
-    setProfile(toUserProfile(inserted as ProfileRow, email));
+    const nextProfile = toUserProfile(inserted as ProfileRow, email);
+    setProfile(nextProfile);
+    return nextProfile;
   };
 
   useEffect(() => {
@@ -316,9 +319,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .select('*')
       .single();
     if (error) {
+      const details = getSupabaseErrorDetails(error);
       logSupabaseDiagnostic('profiles.update.failed', error);
       enterGuestMode('Profile sync is unavailable, so recall checks are continuing as a guest.');
-      throw new Error('Your profile could not be updated. Recall checks are still available as a guest.');
+      throw new Error(`Your profile could not be updated: ${details.message}`);
     }
     setProfile(toUserProfile(data as ProfileRow, profile.email));
   };
@@ -343,6 +347,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw new Error('Your login session does not match this profile. Please log in again before uploading a photo.');
     }
 
+    console.info('[Supabase] avatar upload started', { bucket: AVATAR_BUCKET, path, sourceUri: uri });
     let uploadUri = uri;
     try {
       const { width, height } = await new Promise<{ width: number; height: number }>((resolve, reject) => {
@@ -358,23 +363,71 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         base64: false,
       });
       uploadUri = compressed.uri;
+      console.info('[Supabase] avatar compression complete', { bucket: AVATAR_BUCKET, path, uploadUri });
     } catch (compressionError) {
       console.warn('[Supabase] avatar compression skipped', compressionError);
     }
 
-    const response = await fetch(uploadUri);
-    const body = await response.arrayBuffer();
-    const { error } = await supabase.storage.from(AVATAR_BUCKET).upload(path, body, {
+    let body: ArrayBuffer;
+    try {
+      const response = await fetch(uploadUri);
+      if (!response.ok) throw new Error(`Photo file could not be read (${response.status}).`);
+      body = await response.arrayBuffer();
+      console.info('[Supabase] avatar file read', { bucket: AVATAR_BUCKET, path, bytes: body.byteLength });
+    } catch (fileError) {
+      console.error('[Supabase] avatar file read failed', { bucket: AVATAR_BUCKET, path, error: fileError });
+      throw new Error(authErrorMessage(fileError, 'We could not prepare that photo for upload.'));
+    }
+
+    const storage = supabase.storage.from(AVATAR_BUCKET);
+    console.info('[Supabase] avatar storage upload started', { bucket: AVATAR_BUCKET, path });
+    const { data: uploadData, error } = await storage.upload(path, body, {
       contentType: 'image/jpeg',
       upsert: true,
     });
     if (error) {
+      console.error('[Supabase] avatar storage upload failed', { bucket: AVATAR_BUCKET, path, error });
       logSupabaseDiagnostic('storage.avatar-upload.failed', error);
       throw new Error(authErrorMessage(error, 'We could not upload that photo.'));
     }
-    const { data } = supabase.storage.from(AVATAR_BUCKET).getPublicUrl(path);
-    await updateProfile({ avatarUrl: `${data.publicUrl}?v=${Date.now()}` });
-    return data.publicUrl;
+    console.info('[Supabase] avatar storage upload succeeded', { bucket: AVATAR_BUCKET, path, result: uploadData });
+
+    const { data: verifiedFile, error: verificationError } = await storage.download(path);
+    if (verificationError || !verifiedFile) {
+      console.error('[Supabase] avatar storage verification failed', {
+        bucket: AVATAR_BUCKET,
+        path,
+        error: verificationError ?? 'No file returned',
+      });
+      throw new Error(authErrorMessage(verificationError, 'The photo uploaded but could not be verified in storage.'));
+    }
+    console.info('[Supabase] avatar storage verification succeeded', {
+      bucket: AVATAR_BUCKET,
+      path,
+      bytes: verifiedFile.size,
+    });
+
+    const { data: publicUrlData } = storage.getPublicUrl(path);
+    const avatarUrl = `${publicUrlData.publicUrl}${publicUrlData.publicUrl.includes('?') ? '&' : '?'}v=${Date.now()}`;
+    console.info('[Supabase] avatar public URL generated', { bucket: AVATAR_BUCKET, path, avatarUrl });
+
+    try {
+      await updateProfile({ avatarUrl });
+      console.info('[Supabase] profile avatar_url update succeeded', { profileId: profile.id, avatarUrl });
+    } catch (profileError) {
+      console.error('[Supabase] profile avatar_url update failed', { profileId: profile.id, avatarUrl, error: profileError });
+      throw profileError;
+    }
+
+    const refreshedProfile = await loadProfile(session.user);
+    console.info('[Supabase] profile re-fetch succeeded', {
+      profileId: refreshedProfile.id,
+      avatarUrl: refreshedProfile.avatarUrl,
+    });
+    if (!refreshedProfile.avatarUrl) {
+      throw new Error('The photo uploaded, but the refreshed profile has no avatar URL.');
+    }
+    return refreshedProfile.avatarUrl;
   };
 
   const value = useMemo<AuthContextValue>(

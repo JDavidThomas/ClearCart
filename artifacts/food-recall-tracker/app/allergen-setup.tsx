@@ -28,6 +28,7 @@ export default function AllergenSetupScreen() {
   const [pendingAvatarUri, setPendingAvatarUri] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [avatarNotice, setAvatarNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   if (!profile) {
@@ -65,6 +66,7 @@ export default function AllergenSetupScreen() {
 
   const chooseAvatar = async () => {
     setError(null);
+    setAvatarNotice(null);
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
       setError('Photo library access is needed to choose a profile photo.');
@@ -83,10 +85,13 @@ export default function AllergenSetupScreen() {
   const confirmAvatar = async () => {
     if (!pendingAvatarUri) return;
     setUploading(true);
+    setError(null);
+    setAvatarNotice(null);
     try {
       const publicUrl = await uploadAvatar(pendingAvatarUri);
       setAvatarUrl(publicUrl);
       setPendingAvatarUri(null);
+      setAvatarNotice('Upload complete');
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : 'We could not upload that photo.');
     } finally {
@@ -129,6 +134,7 @@ export default function AllergenSetupScreen() {
             uploading={uploading}
             saving={saving}
             error={error}
+            successMessage={avatarNotice}
             onChoose={() => void chooseAvatar()}
             onConfirm={() => void confirmAvatar()}
             onFinish={() => void finish()}
@@ -244,6 +250,7 @@ function PhotoStep({
   uploading,
   saving,
   error,
+  successMessage,
   onChoose,
   onConfirm,
   onFinish,
@@ -255,6 +262,7 @@ function PhotoStep({
   uploading: boolean;
   saving: boolean;
   error: string | null;
+  successMessage: string | null;
   onChoose: () => void;
   onConfirm: () => void;
   onFinish: () => void;
@@ -287,6 +295,7 @@ function PhotoStep({
         </View>
       ) : null}
       {error ? <Text style={[styles.errorText, { color: colors.destructive }]}>{error}</Text> : null}
+      {successMessage ? <Text style={[styles.successText, { color: colors.success }]}>{successMessage}</Text> : null}
       <Pressable disabled={uploading || saving || hasPendingAvatar} onPress={onFinish} style={({ pressed }) => [styles.primaryButton, { backgroundColor: colors.primary, opacity: pressed || uploading || saving || hasPendingAvatar ? 0.7 : 1 }]}>
         {saving ? <ActivityIndicator color={colors.primaryForeground} /> : null}
         <Text style={[styles.primaryButtonText, { color: colors.primaryForeground }]}>{saving ? 'Saving…' : 'Finish Setup'}</Text>
@@ -332,4 +341,5 @@ const styles = StyleSheet.create({
   chooseDifferentButton: { alignItems: 'center', minHeight: 40, justifyContent: 'center', paddingHorizontal: 12 },
   chooseDifferentText: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
   errorText: { fontFamily: 'Inter_500Medium', fontSize: 13, lineHeight: 19, marginTop: 12 },
+  successText: { fontFamily: 'Inter_600SemiBold', fontSize: 13, lineHeight: 19, marginTop: 12 },
 });

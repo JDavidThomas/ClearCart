@@ -86,6 +86,7 @@ function LoggedInProfile() {
   const [savingName, setSavingName] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [pendingAvatarUri, setPendingAvatarUri] = useState<string | null>(null);
+  const [avatarNotice, setAvatarNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   if (!profile) return null;
@@ -95,6 +96,7 @@ function LoggedInProfile() {
 
   const chooseAvatar = async () => {
     setError(null);
+    setAvatarNotice(null);
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
       setError('Photo library access is needed to choose a profile photo.');
@@ -113,9 +115,12 @@ function LoggedInProfile() {
   const confirmAvatar = async () => {
     if (!pendingAvatarUri) return;
     setUploading(true);
+    setError(null);
+    setAvatarNotice(null);
     try {
       await uploadAvatar(pendingAvatarUri);
       setPendingAvatarUri(null);
+      setAvatarNotice('Upload complete');
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : 'We could not upload that photo.');
     } finally {
@@ -163,7 +168,19 @@ function LoggedInProfile() {
       ) : (
         <>
           <Pressable onPress={() => void chooseAvatar()} style={({ pressed }) => [styles.avatarButton, { opacity: pressed || uploading ? 0.7 : 1 }]} disabled={uploading}>
-            {profile.avatarUrl ? <Image source={{ uri: profile.avatarUrl }} style={styles.avatar} contentFit="cover" /> : <View style={[styles.avatar, { backgroundColor: colors.primary }]}><Text style={[styles.avatarText, { color: colors.primaryForeground }]}>{initials}</Text></View>}
+            {profile.avatarUrl ? (
+              <Image
+                source={{ uri: profile.avatarUrl }}
+                style={styles.avatar}
+                contentFit="cover"
+                cachePolicy="none"
+                onLoad={() => console.info('[Supabase] avatar image rendered', { avatarUrl: profile.avatarUrl })}
+                onError={() => {
+                  console.error('[Supabase] avatar image failed to render', { avatarUrl: profile.avatarUrl });
+                  setError('The avatar uploaded, but the image could not be displayed.');
+                }}
+              />
+            ) : <View style={[styles.avatar, { backgroundColor: colors.primary }]}><Text style={[styles.avatarText, { color: colors.primaryForeground }]}>{initials}</Text></View>}
             <View style={[styles.cameraBadge, { backgroundColor: colors.primary }]}><Feather name="camera" size={15} color={colors.primaryForeground} /></View>
           </Pressable>
           <Text style={[styles.changePhoto, { color: colors.primary }]}>{uploading ? 'Uploading photo…' : 'Tap to change photo'}</Text>
@@ -184,6 +201,7 @@ function LoggedInProfile() {
       )}
       <Text style={[styles.profileEmail, { color: colors.mutedForeground }]}>{profile.email}</Text>
       {error ? <Text style={[styles.errorText, { color: colors.destructive }]}>{error}</Text> : null}
+      {avatarNotice ? <Text style={[styles.successText, { color: colors.success }]}>{avatarNotice}</Text> : null}
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Allergies</Text>
         {allergyLabels.length > 0 ? (
@@ -247,6 +265,7 @@ const styles = StyleSheet.create({
   nameInput: { borderBottomWidth: 1, fontFamily: 'Inter_600SemiBold', fontSize: 22, minWidth: 190, paddingBottom: 5, textAlign: 'center' },
   saveNameButton: { alignItems: 'center', borderRadius: 10, height: 38, justifyContent: 'center', width: 42 },
   errorText: { fontFamily: 'Inter_500Medium', fontSize: 13, lineHeight: 19, marginTop: 12, textAlign: 'center' },
+  successText: { fontFamily: 'Inter_600SemiBold', fontSize: 13, lineHeight: 19, marginTop: 12, textAlign: 'center' },
   section: { marginTop: 32 },
   sectionTitle: { fontFamily: 'Inter_700Bold', fontSize: 18 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 14 },
