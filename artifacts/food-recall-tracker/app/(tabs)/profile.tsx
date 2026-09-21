@@ -142,13 +142,10 @@ function LoggedInProfile() {
 
   return (
     <View>
-      <Pressable onPress={() => void chooseAvatar()} style={({ pressed }) => [styles.avatarButton, { opacity: pressed || uploading ? 0.7 : 1 }]} disabled={uploading}>
-        {pendingAvatarUri || profile.avatarUrl ? <Image source={{ uri: pendingAvatarUri ?? profile.avatarUrl ?? undefined }} style={styles.avatar} contentFit="cover" /> : <View style={[styles.avatar, { backgroundColor: colors.primary }]}><Text style={[styles.avatarText, { color: colors.primaryForeground }]}>{initials}</Text></View>}
-        <View style={[styles.cameraBadge, { backgroundColor: colors.primary }]}><Feather name="camera" size={15} color={colors.primaryForeground} /></View>
-      </Pressable>
-      <Text style={[styles.changePhoto, { color: colors.primary }]}>{uploading ? 'Uploading photo…' : pendingAvatarUri ? 'Photo selected' : 'Tap to change photo'}</Text>
       {pendingAvatarUri ? (
-        <View style={styles.photoActions}>
+        <View style={styles.avatarPreview}>
+          <Text style={[styles.previewTitle, { color: colors.foreground }]}>Preview your new photo</Text>
+          <Image source={{ uri: pendingAvatarUri }} style={styles.previewAvatar} contentFit="cover" />
           <Text style={[styles.previewText, { color: colors.mutedForeground }]}>Preview ready. Confirm to save it to your profile.</Text>
           <Pressable
             accessibilityRole="button"
@@ -159,11 +156,19 @@ function LoggedInProfile() {
             {uploading ? <ActivityIndicator color={colors.primaryForeground} /> : <Feather name="upload" size={17} color={colors.primaryForeground} />}
             <Text style={[styles.primaryButtonText, { color: colors.primaryForeground }]}>{uploading ? 'Uploading…' : 'Use this photo'}</Text>
           </Pressable>
-          <Pressable disabled={uploading} onPress={() => void chooseAvatar()} style={styles.chooseDifferentButton}>
+          <Pressable disabled={uploading} onPress={() => void chooseAvatar()} style={[styles.chooseDifferentButton, { borderColor: colors.border }]}>
             <Text style={[styles.chooseDifferentText, { color: colors.primary }]}>Choose a different one</Text>
           </Pressable>
         </View>
-      ) : null}
+      ) : (
+        <>
+          <Pressable onPress={() => void chooseAvatar()} style={({ pressed }) => [styles.avatarButton, { opacity: pressed || uploading ? 0.7 : 1 }]} disabled={uploading}>
+            {profile.avatarUrl ? <Image source={{ uri: profile.avatarUrl }} style={styles.avatar} contentFit="cover" /> : <View style={[styles.avatar, { backgroundColor: colors.primary }]}><Text style={[styles.avatarText, { color: colors.primaryForeground }]}>{initials}</Text></View>}
+            <View style={[styles.cameraBadge, { backgroundColor: colors.primary }]}><Feather name="camera" size={15} color={colors.primaryForeground} /></View>
+          </Pressable>
+          <Text style={[styles.changePhoto, { color: colors.primary }]}>{uploading ? 'Uploading photo…' : 'Tap to change photo'}</Text>
+        </>
+      )}
       {editingName ? (
         <View style={styles.nameEdit}>
           <TextInput autoFocus onChangeText={setName} onSubmitEditing={() => void saveName()} style={[styles.nameInput, { color: colors.foreground, borderColor: colors.input }]} value={name} />
@@ -227,10 +232,13 @@ const styles = StyleSheet.create({
   avatarText: { fontFamily: 'Inter_700Bold', fontSize: 34 },
   cameraBadge: { alignItems: 'center', borderColor: '#ffffff', borderRadius: 999, borderWidth: 3, bottom: 1, height: 35, justifyContent: 'center', position: 'absolute', right: 0, width: 35 },
   changePhoto: { fontFamily: 'Inter_600SemiBold', fontSize: 13, marginTop: 10, textAlign: 'center' },
+  avatarPreview: { alignItems: 'center', marginTop: 26, width: '100%' },
+  previewTitle: { fontFamily: 'Inter_700Bold', fontSize: 18 },
+  previewAvatar: { borderRadius: 999, height: 164, marginTop: 16, width: 164 },
   photoActions: { alignItems: 'center', gap: 10, marginTop: 16 },
   previewText: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 19, textAlign: 'center' },
   confirmPhotoButton: { alignItems: 'center', borderRadius: 13, flexDirection: 'row', gap: 8, justifyContent: 'center', minHeight: 50, paddingHorizontal: 18, width: '100%' },
-  chooseDifferentButton: { alignItems: 'center', minHeight: 40, justifyContent: 'center', paddingHorizontal: 12 },
+  chooseDifferentButton: { alignItems: 'center', borderRadius: 13, borderWidth: 1, minHeight: 48, justifyContent: 'center', paddingHorizontal: 12, width: '100%' },
   chooseDifferentText: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
   nameButton: { alignItems: 'center', flexDirection: 'row', gap: 8, justifyContent: 'center', marginTop: 18 },
   profileName: { fontFamily: 'Inter_700Bold', fontSize: 24 },
