@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AllergenInsights } from '@/components/AllergenInsights';
+import { HealthDietInsights } from '@/components/HealthInsights';
 import { FDA_NOTICES_URL, FdaFreshnessNotice } from '@/components/FdaFreshnessNotice';
 import { PossiblyRelatedRecalls } from '@/components/PossiblyRelatedRecalls';
 import { ProduceRecallVerdict } from '@/components/ProduceRecallVerdict';
@@ -326,6 +327,7 @@ function VerdictView({
           </Pressable>
         </View>
         <AllergenInsights productText="" dataAvailable={false} colors={colors} />
+        <HealthDietInsights productText="" colors={colors} />
         <ScanAgainButton colors={colors} onPress={onScanAgain} />
       </View>
     );
@@ -350,6 +352,7 @@ function VerdictView({
           dataAvailable={Boolean(verdict.product?.ingredients)}
           colors={colors}
         />
+        <HealthDietInsights productText={`${productLabel} ${verdict.product?.ingredients ?? ''}`} colors={colors} />
         <ScanAgainButton colors={colors} onPress={onScanAgain} />
       </View>
     );
@@ -402,6 +405,7 @@ function VerdictView({
         dataAvailable={Boolean(verdict.product?.ingredients)}
         colors={colors}
       />
+      <HealthDietInsights productText={`${productLabel} ${verdict.product?.ingredients ?? ''}`} colors={colors} />
       <ScanAgainButton colors={colors} onPress={onScanAgain} />
     </View>
   );

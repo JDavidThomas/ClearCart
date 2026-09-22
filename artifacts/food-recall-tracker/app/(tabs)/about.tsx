@@ -59,6 +59,22 @@ export default function AboutScreen() {
         </Text>
       </View>
 
+      <View style={[styles.healthDataSection, { backgroundColor: colors.warningSoft, borderColor: colors.warning }]}>
+        <View style={styles.healthDataHeading}>
+          <Feather name="lock" size={20} color={colors.warning} />
+          <Text style={[styles.healthDataTitle, { color: colors.foreground }]}>Your Health Data</Text>
+        </View>
+        <Text style={[styles.healthDataText, { color: colors.mutedForeground }]}>
+          If you opt in, we store the health conditions, dietary preferences, and optional note you add to your profile.
+        </Text>
+        <Text style={[styles.healthDataText, { color: colors.mutedForeground }]}>
+          This information is only used for personalized reminders inside this app. It is never shared, sold, or used for ads.
+        </Text>
+        <Text style={[styles.healthDataText, { color: colors.mutedForeground }]}>
+          These reminders are not medical advice. To delete your health data, use Edit Health Conditions in Profile and turn off the consent switch.
+        </Text>
+      </View>
+
       <View style={[styles.disclaimer, { backgroundColor: colors.warningSoft, borderColor: colors.warning }]}>
         <Feather name="info" size={20} color={colors.warning} />
         <Text style={[styles.disclaimerText, { color: colors.foreground }]}>
@@ -183,6 +199,28 @@ const styles = StyleSheet.create({
   aiNoticeText: {
     flex: 1,
     fontFamily: 'Inter_500Medium',
+    fontSize: 14,
+    lineHeight: 21,
+  },
+  healthDataSection: {
+    alignSelf: 'stretch',
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 9,
+    marginTop: 24,
+    padding: 16,
+  },
+  healthDataHeading: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 9,
+  },
+  healthDataTitle: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 16,
+  },
+  healthDataText: {
+    fontFamily: 'Inter_400Regular',
     fontSize: 14,
     lineHeight: 21,
   },

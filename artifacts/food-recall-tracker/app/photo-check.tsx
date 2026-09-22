@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AllergenInsights } from '@/components/AllergenInsights';
+import { HealthDietInsights } from '@/components/HealthInsights';
 import { FdaFreshnessNotice } from '@/components/FdaFreshnessNotice';
 import { PossiblyRelatedRecalls } from '@/components/PossiblyRelatedRecalls';
 import { ProduceRecallVerdict } from '@/components/ProduceRecallVerdict';
@@ -507,6 +508,7 @@ function PhotoVerdictView({
         <PossiblyRelatedRecalls item={produceItem} recalls={relatedRecalls} />
         <IdentificationBadge source={verdict.sourceOfIdentification} colors={colors} />
         <AllergenInsights productText={verdict.productName} dataAvailable={Boolean(verdict.productName)} colors={colors} />
+        <HealthDietInsights productText={verdict.productName} colors={colors} />
         <RetakeButton colors={colors} onPress={onRetake} />
       </View>
     );
@@ -543,6 +545,7 @@ function PhotoVerdictView({
         <RecallCard key={`${recall.recallNumber ?? recall.productDescription}-${index}`} recall={recall} />
       ))}
         <AllergenInsights productText={verdict.productName} dataAvailable={Boolean(verdict.productName)} colors={colors} />
+        <HealthDietInsights productText={verdict.productName} colors={colors} />
       <RetakeButton colors={colors} onPress={onRetake} />
     </View>
   );

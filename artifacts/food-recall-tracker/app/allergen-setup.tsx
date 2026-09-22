@@ -1,11 +1,12 @@
 import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ALLERGEN_OPTIONS } from '@/components/AllergenInsights';
+import { DIETARY_PREFERENCE_OPTIONS, HEALTH_CONDITION_OPTIONS } from '@/components/HealthInsights';
 import { useAuth, type AllergySeverity } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
 
@@ -18,12 +19,22 @@ const SEVERITY_OPTIONS: { id: Exclude<AllergySeverity, null>; title: string; des
 export default function AllergenSetupScreen() {
   const colors = useColors();
   const router = useRouter();
+  const { step: requestedStep } = useLocalSearchParams<{ step?: string }>();
   const insets = useSafeAreaInsets();
   const { profile, updateProfile, uploadAvatar } = useAuth();
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState(() => {
+    const parsedStep = Number(requestedStep);
+    return Number.isInteger(parsedStep) && parsedStep >= 0 && parsedStep <= 4 ? parsedStep : 0;
+  });
   const [selected, setSelected] = useState<string[]>(profile?.allergies ?? []);
   const [customAllergy, setCustomAllergy] = useState(profile?.customAllergy ?? '');
   const [severity, setSeverity] = useState<AllergySeverity>(profile?.severity ?? null);
+  const [healthConsentGiven, setHealthConsentGiven] = useState(profile?.healthConsentGiven ?? false);
+  const [healthConditions, setHealthConditions] = useState<string[]>(profile?.healthConditions ?? []);
+  const [customHealthNote, setCustomHealthNote] = useState(profile?.customHealthNote ?? '');
+  const [dietaryPreferences, setDietaryPreferences] = useState<string[]>(profile?.dietaryPreferences ?? []);
+  const [healthSkipped, setHealthSkipped] = useState(false);
+  const [dietSkipped, setDietSkipped] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(profile?.avatarUrl ?? null);
   const [pendingAvatarUri, setPendingAvatarUri] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -46,19 +57,111 @@ export default function AllergenSetupScreen() {
     setSelected((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
   };
 
-  const finish = async (answers = {
-    allergies: selected,
-    customAllergy,
-    severity,
-    avatarUrl,
-  }) => {
+  const toggleHealthCondition = (id: string) => {
+    setHealthConditions((current) => {
+      const next = current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
+      if (id === 'other' && !next.includes('other')) setCustomHealthNote('');
+      return next;
+    });
+  };
+
+  const toggleDietaryPreference = (id: string) => {
+    setDietaryPreferences((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+  };
+
+  const finish = async () => {
     setError(null);
     setSaving(true);
     try {
-      await updateProfile(answers);
+      const updates: Parameters<typeof updateProfile>[0] = {
+        allergies: selected,
+        customAllergy,
+        severity,
+        avatarUrl,
+      };
+      if (!healthSkipped) {
+        updates.healthConditions = healthConditions;
+        updates.customHealthNote = customHealthNote;
+        updates.healthConsentGiven = healthConsentGiven;
+      }
+      if (!dietSkipped) updates.dietaryPreferences = dietaryPreferences;
+      await updateProfile(updates);
       router.replace('/profile');
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'We could not save your profile.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveHealth = async () => {
+    if (!healthConsentGiven) {
+      setSaving(true);
+      try {
+        await updateProfile({
+          healthConditions: [],
+          dietaryPreferences: [],
+          customHealthNote: '',
+          healthConsentGiven: false,
+        });
+        setHealthConditions([]);
+        setDietaryPreferences([]);
+        setCustomHealthNote('');
+        setHealthSkipped(true);
+        setDietSkipped(true);
+        setStep(3);
+      } catch (saveError) {
+        setError(saveError instanceof Error ? saveError.message : 'We could not remove your health data.');
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+    setError(null);
+    setSaving(true);
+    try {
+      await updateProfile({
+        healthConditions,
+        customHealthNote,
+        healthConsentGiven: true,
+      });
+      setHealthSkipped(false);
+      setStep(3);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'We could not save your health preferences.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleHealthConsent = async (enabled: boolean) => {
+    setHealthConsentGiven(enabled);
+    if (enabled) return;
+    setHealthConditions([]);
+    setDietaryPreferences([]);
+    setCustomHealthNote('');
+    setError(null);
+    try {
+      await updateProfile({
+        healthConditions: [],
+        dietaryPreferences: [],
+        customHealthNote: '',
+        healthConsentGiven: false,
+      });
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'We could not remove your health data.');
+    }
+  };
+
+  const saveDietaryPreferences = async () => {
+    setError(null);
+    setSaving(true);
+    try {
+      await updateProfile({ dietaryPreferences });
+      setDietSkipped(false);
+      setStep(4);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'We could not save your dietary preferences.');
     } finally {
       setSaving(false);
     }
@@ -107,7 +210,7 @@ export default function AllergenSetupScreen() {
           <Text style={[styles.backText, { color: colors.primary }]}>{step === 0 ? 'Profile' : 'Back'}</Text>
         </Pressable>
         <View style={styles.progressRow}>
-          {[0, 1, 2].map((item) => <View key={item} style={[styles.progressDot, { backgroundColor: item <= step ? colors.primary : colors.input }]} />)}
+          {[0, 1, 2, 3, 4].map((item) => <View key={item} style={[styles.progressDot, { backgroundColor: item <= step ? colors.primary : colors.input }]} />)}
         </View>
         {step === 0 ? (
           <AllergyStep
@@ -117,7 +220,7 @@ export default function AllergenSetupScreen() {
             onToggle={toggleAllergen}
             onCustomChange={setCustomAllergy}
             onNext={() => setStep(1)}
-            onSkip={() => void finish({ allergies: [], customAllergy: '', severity: null, avatarUrl })}
+            onSkip={() => void finish()}
           />
         ) : step === 1 ? (
           <SeverityStep
@@ -125,6 +228,36 @@ export default function AllergenSetupScreen() {
             severity={severity}
             onSelect={setSeverity}
             onNext={() => setStep(2)}
+          />
+        ) : step === 2 ? (
+          <HealthStep
+            colors={colors}
+            consentGiven={healthConsentGiven}
+            conditions={healthConditions}
+            customNote={customHealthNote}
+            saving={saving}
+            error={error}
+            onConsentChange={(value) => void toggleHealthConsent(value)}
+            onToggleCondition={toggleHealthCondition}
+            onCustomNoteChange={setCustomHealthNote}
+            onSave={() => void saveHealth()}
+            onSkip={() => {
+              setHealthSkipped(true);
+              setStep(3);
+            }}
+          />
+        ) : step === 3 ? (
+          <DietaryStep
+            colors={colors}
+            selected={dietaryPreferences}
+            consentGiven={healthConsentGiven}
+            saving={saving}
+            onToggle={toggleDietaryPreference}
+            onSave={() => void saveDietaryPreferences()}
+            onSkip={() => {
+              setDietSkipped(true);
+              setStep(4);
+            }}
           />
         ) : (
           <PhotoStep
@@ -243,6 +376,187 @@ function SeverityStep({
   );
 }
 
+function HealthStep({
+  colors,
+  consentGiven,
+  conditions,
+  customNote,
+  saving,
+  error,
+  onConsentChange,
+  onToggleCondition,
+  onCustomNoteChange,
+  onSave,
+  onSkip,
+}: {
+  colors: ReturnType<typeof useColors>;
+  consentGiven: boolean;
+  conditions: string[];
+  customNote: string;
+  saving: boolean;
+  error: string | null;
+  onConsentChange: (value: boolean) => void;
+  onToggleCondition: (id: string) => void;
+  onCustomNoteChange: (value: string) => void;
+  onSave: () => void;
+  onSkip: () => void;
+}) {
+  return (
+    <View>
+      <View style={[styles.headingIcon, { backgroundColor: colors.warningSoft }]}>
+        <Feather name="heart" size={25} color={colors.warning} />
+      </View>
+      <Text style={[styles.title, { color: colors.foreground }]}>Want to add health conditions? (Optional)</Text>
+      <View style={[styles.consentNotice, { backgroundColor: colors.warningSoft, borderColor: colors.warning }]}>
+        <Feather name="lock" size={17} color={colors.warning} />
+        <Text style={[styles.consentText, { color: colors.foreground }]}>
+          Your health information is private and optional. If you add it, we only use it to give you personalized product reminders inside this app. We never share it, sell it, or use it for ads. You can remove it anytime. This is not medical advice.
+        </Text>
+      </View>
+      <View style={[styles.consentToggle, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={styles.consentCopy}>
+          <Text style={[styles.optionText, { color: colors.foreground }]}>I understand and want to add health conditions</Text>
+          <Text style={[styles.smallBody, { color: colors.mutedForeground }]}>You can turn this off later in Profile.</Text>
+        </View>
+        <Switch
+          accessibilityLabel="I understand and want to add health conditions"
+          onValueChange={onConsentChange}
+          trackColor={{ false: colors.border, true: colors.primary }}
+          value={consentGiven}
+          thumbColor={colors.primaryForeground}
+        />
+      </View>
+      {consentGiven ? (
+        <>
+          <View style={styles.grid}>
+            {HEALTH_CONDITION_OPTIONS.map((option) => {
+              const active = conditions.includes(option.id);
+              return (
+                <Pressable
+                  key={option.id}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: active }}
+                  onPress={() => onToggleCondition(option.id)}
+                  style={({ pressed }) => [
+                    styles.option,
+                    {
+                      backgroundColor: active ? colors.blueSoft : colors.card,
+                      borderColor: active ? colors.primary : colors.border,
+                      opacity: pressed ? 0.7 : 1,
+                    },
+                  ]}
+                >
+                  <View style={[styles.checkbox, { backgroundColor: active ? colors.primary : colors.background, borderColor: active ? colors.primary : colors.input }]}>
+                    {active ? <Feather name="check" size={14} color={colors.primaryForeground} /> : null}
+                  </View>
+                  <Text style={[styles.optionText, { color: colors.foreground }]}>{option.label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          {conditions.includes('other') ? (
+            <TextInput
+              autoCapitalize="sentences"
+              onChangeText={onCustomNoteChange}
+              placeholder="Add another health note"
+              placeholderTextColor={colors.mutedForeground}
+              style={[styles.customInput, { backgroundColor: colors.card, borderColor: colors.input, color: colors.foreground }]}
+              value={customNote}
+            />
+          ) : null}
+        </>
+      ) : null}
+      {error ? <Text style={[styles.errorText, { color: colors.destructive }]}>{error}</Text> : null}
+      <Pressable
+        disabled={saving}
+        onPress={onSave}
+        style={({ pressed }) => [styles.primaryButton, { backgroundColor: colors.primary, opacity: pressed || saving ? 0.7 : 1 }]}
+      >
+        {saving ? <ActivityIndicator color={colors.primaryForeground} /> : null}
+        <Text style={[styles.primaryButtonText, { color: colors.primaryForeground }]}>{saving ? 'Saving…' : 'Save'}</Text>
+        {!saving ? <Feather name="arrow-right" size={18} color={colors.primaryForeground} /> : null}
+      </Pressable>
+      <Pressable disabled={saving} onPress={onSkip} style={styles.skipButton}>
+        <Text style={[styles.skipText, { color: colors.mutedForeground }]}>Skip for now</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function DietaryStep({
+  colors,
+  selected,
+  consentGiven,
+  saving,
+  onToggle,
+  onSave,
+  onSkip,
+}: {
+  colors: ReturnType<typeof useColors>;
+  selected: string[];
+  consentGiven: boolean;
+  saving: boolean;
+  onToggle: (id: string) => void;
+  onSave: () => void;
+  onSkip: () => void;
+}) {
+  return (
+    <View>
+      <View style={[styles.headingIcon, { backgroundColor: colors.blueSoft }]}>
+        <Feather name="coffee" size={25} color={colors.primary} />
+      </View>
+      <Text style={[styles.title, { color: colors.foreground }]}>Any dietary preferences? (Optional)</Text>
+      <Text style={[styles.body, { color: colors.mutedForeground }]}>
+        Choose anything you want to consider when reviewing product labels. You can skip this and change it later.
+      </Text>
+      {!consentGiven ? (
+        <View style={[styles.consentHint, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+          <Feather name="info" size={16} color={colors.mutedForeground} />
+          <Text style={[styles.smallBody, { color: colors.mutedForeground }]}>Opt in on the previous screen before saving dietary preferences.</Text>
+        </View>
+      ) : null}
+      <View style={styles.grid}>
+        {DIETARY_PREFERENCE_OPTIONS.map((option) => {
+          const active = selected.includes(option.id);
+          return (
+            <Pressable
+              key={option.id}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: active }}
+              onPress={() => onToggle(option.id)}
+              style={({ pressed }) => [
+                styles.option,
+                {
+                  backgroundColor: active ? colors.blueSoft : colors.card,
+                  borderColor: active ? colors.primary : colors.border,
+                  opacity: pressed ? 0.7 : 1,
+                },
+              ]}
+            >
+              <View style={[styles.checkbox, { backgroundColor: active ? colors.primary : colors.background, borderColor: active ? colors.primary : colors.input }]}>
+                {active ? <Feather name="check" size={14} color={colors.primaryForeground} /> : null}
+              </View>
+              <Text style={[styles.optionText, { color: colors.foreground }]}>{option.label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      <Pressable
+        disabled={saving || !consentGiven}
+        onPress={onSave}
+        style={({ pressed }) => [styles.primaryButton, { backgroundColor: colors.primary, opacity: pressed || saving || !consentGiven ? 0.5 : 1 }]}
+      >
+        {saving ? <ActivityIndicator color={colors.primaryForeground} /> : null}
+        <Text style={[styles.primaryButtonText, { color: colors.primaryForeground }]}>{saving ? 'Saving…' : consentGiven ? 'Save' : 'Opt in first'}</Text>
+        {!saving && consentGiven ? <Feather name="arrow-right" size={18} color={colors.primaryForeground} /> : null}
+      </Pressable>
+      <Pressable disabled={saving} onPress={onSkip} style={styles.skipButton}>
+        <Text style={[styles.skipText, { color: colors.mutedForeground }]}>Skip for now</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 function PhotoStep({
   colors,
   avatarUrl,
@@ -316,6 +630,12 @@ const styles = StyleSheet.create({
   headingIcon: { alignItems: 'center', borderRadius: 16, height: 56, justifyContent: 'center', marginTop: 26, width: 56 },
   title: { fontFamily: 'Inter_700Bold', fontSize: 29, letterSpacing: -0.6, lineHeight: 36, marginTop: 18 },
   body: { fontFamily: 'Inter_400Regular', fontSize: 15, lineHeight: 23, marginTop: 10 },
+  consentNotice: { alignItems: 'flex-start', borderRadius: 14, borderWidth: 1, flexDirection: 'row', gap: 9, marginTop: 18, padding: 13 },
+  consentText: { flex: 1, fontFamily: 'Inter_500Medium', fontSize: 12, lineHeight: 18 },
+  consentToggle: { alignItems: 'center', borderRadius: 14, borderWidth: 1, flexDirection: 'row', gap: 10, marginTop: 13, paddingHorizontal: 13, paddingVertical: 11 },
+  consentCopy: { flex: 1, gap: 4 },
+  consentHint: { alignItems: 'flex-start', borderRadius: 12, borderWidth: 1, flexDirection: 'row', gap: 8, marginTop: 14, padding: 11 },
+  smallBody: { fontFamily: 'Inter_400Regular', fontSize: 12, lineHeight: 17 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 26 },
   option: { alignItems: 'center', borderRadius: 13, borderWidth: 1, flexDirection: 'row', gap: 8, minHeight: 50, paddingHorizontal: 11, width: '48%' },
   checkbox: { alignItems: 'center', borderRadius: 6, borderWidth: 1, height: 23, justifyContent: 'center', width: 23 },

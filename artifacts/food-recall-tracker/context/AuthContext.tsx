@@ -16,6 +16,10 @@ export interface UserProfile {
   allergies: string[];
   customAllergy: string;
   severity: AllergySeverity;
+  healthConditions: string[];
+  dietaryPreferences: string[];
+  customHealthNote: string;
+  healthConsentGiven: boolean;
 }
 
 type AuthStatus = 'loading' | 'guest' | 'authenticated';
@@ -27,6 +31,10 @@ interface ProfileRow {
   allergies: string[] | null;
   custom_allergy: string | null;
   severity: AllergySeverity;
+  health_conditions: string[] | null;
+  dietary_preferences: string[] | null;
+  custom_health_note: string | null;
+  health_consent_given: boolean | null;
   created_at?: string;
 }
 
@@ -47,6 +55,10 @@ interface AuthContextValue {
     allergies?: string[];
     customAllergy?: string;
     severity?: AllergySeverity;
+    healthConditions?: string[];
+    dietaryPreferences?: string[];
+    customHealthNote?: string;
+    healthConsentGiven?: boolean;
     avatarUrl?: string | null;
   }) => Promise<void>;
   uploadAvatar: (uri: string) => Promise<string>;
@@ -81,6 +93,10 @@ function toUserProfile(row: ProfileRow, email: string): UserProfile {
     allergies: row.allergies ?? [],
     customAllergy: row.custom_allergy ?? '',
     severity: row.severity ?? null,
+    healthConditions: row.health_conditions ?? [],
+    dietaryPreferences: row.dietary_preferences ?? [],
+    customHealthNote: row.custom_health_note ?? '',
+    healthConsentGiven: row.health_consent_given ?? false,
   };
 }
 
@@ -129,6 +145,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       allergies: [],
       custom_allergy: null,
       severity: null,
+      health_conditions: [],
+      dietary_preferences: [],
+      custom_health_note: null,
+      health_consent_given: false,
     };
     const { data: inserted, error: insertError } = await supabase
       .from('profiles')
@@ -342,6 +362,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     allergies?: string[];
     customAllergy?: string;
     severity?: AllergySeverity;
+    healthConditions?: string[];
+    dietaryPreferences?: string[];
+    customHealthNote?: string;
+    healthConsentGiven?: boolean;
     avatarUrl?: string | null;
   }) => {
     if (!profile) throw new Error('Log in to update your profile.');
@@ -350,6 +374,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (updates.allergies !== undefined) payload.allergies = updates.allergies;
     if (updates.customAllergy !== undefined) payload.custom_allergy = updates.customAllergy.trim() || null;
     if (updates.severity !== undefined) payload.severity = updates.severity;
+    if (updates.healthConditions !== undefined) payload.health_conditions = updates.healthConditions;
+    if (updates.dietaryPreferences !== undefined) payload.dietary_preferences = updates.dietaryPreferences;
+    if (updates.customHealthNote !== undefined) payload.custom_health_note = updates.customHealthNote.trim() || null;
+    if (updates.healthConsentGiven !== undefined) payload.health_consent_given = updates.healthConsentGiven;
     if (updates.avatarUrl !== undefined) payload.avatar_url = updates.avatarUrl;
 
     const { data, error } = await supabase

@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Linking, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ALLERGEN_OPTIONS } from '@/components/AllergenInsights';
+import { DIETARY_PREFERENCE_OPTIONS, HEALTH_CONDITION_OPTIONS } from '@/components/HealthInsights';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
 import {
@@ -98,6 +99,8 @@ function LoggedInProfile() {
   const [biometricAvailability, setBiometricAvailability] = useState<BiometricAvailability | null>(null);
   const [biometricSaving, setBiometricSaving] = useState(false);
   const [biometricNotice, setBiometricNotice] = useState<string | null>(null);
+  const [healthSaving, setHealthSaving] = useState(false);
+  const [healthNotice, setHealthNotice] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -208,6 +211,39 @@ function LoggedInProfile() {
     }
   };
 
+  const toggleHealthConsent = async (nextEnabled: boolean) => {
+    if (healthSaving || !profile) return;
+    setHealthSaving(true);
+    setError(null);
+    setHealthNotice(null);
+    try {
+      if (nextEnabled) {
+        await updateProfile({ healthConsentGiven: true });
+        setHealthNotice('Health and dietary reminders enabled.');
+      } else {
+        await updateProfile({
+          healthConditions: [],
+          dietaryPreferences: [],
+          customHealthNote: '',
+          healthConsentGiven: false,
+        });
+        setHealthNotice('Health data removed and reminders disabled.');
+      }
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'We could not update your health preferences.');
+    } finally {
+      setHealthSaving(false);
+    }
+  };
+
+  const healthLabels = profile.healthConditions.map(
+    (id) => HEALTH_CONDITION_OPTIONS.find((option) => option.id === id)?.label ?? id,
+  );
+  if (profile.customHealthNote) healthLabels.push(profile.customHealthNote);
+  const dietaryLabels = profile.dietaryPreferences.map(
+    (id) => DIETARY_PREFERENCE_OPTIONS.find((option) => option.id === id)?.label ?? id,
+  );
+
   return (
     <View>
       {pendingAvatarUri ? (
@@ -280,6 +316,77 @@ function LoggedInProfile() {
           <Text style={[styles.secondaryButtonText, { color: colors.primary }]}>Edit Allergies</Text>
         </Pressable>
       </View>
+      {profile.healthConsentGiven ? (
+        <>
+          <View style={styles.section}>
+            <View style={styles.sectionHeaderRow}>
+              <View style={styles.sectionHeaderCopy}>
+                <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Health Conditions</Text>
+                <Text style={[styles.sectionDescription, { color: colors.mutedForeground }]}>Optional reminders based on your profile.</Text>
+              </View>
+              <Switch
+                accessibilityLabel="Use health and dietary reminders"
+                disabled={healthSaving}
+                onValueChange={(value) => void toggleHealthConsent(value)}
+                trackColor={{ false: colors.border, true: colors.primary }}
+                value
+                thumbColor={colors.primaryForeground}
+              />
+            </View>
+            {healthLabels.length > 0 ? (
+              <View style={styles.chips}>
+                {healthLabels.map((label) => <View key={label} style={[styles.chip, { backgroundColor: colors.warningSoft }]}><Text style={[styles.chipText, { color: colors.warning }]}>{label}</Text></View>)}
+              </View>
+            ) : (
+              <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No health conditions added.</Text>
+            )}
+            <Pressable
+              onPress={() => router.push({ pathname: '/allergen-setup', params: { step: '2' } })}
+              style={({ pressed }) => [styles.secondaryButton, { borderColor: colors.border, marginTop: 16, opacity: pressed ? 0.65 : 1 }]}
+              testID="edit-health-conditions-button"
+            >
+              <Feather name="edit-3" size={17} color={colors.primary} />
+              <Text style={[styles.secondaryButtonText, { color: colors.primary }]}>Edit Health Conditions</Text>
+            </Pressable>
+          </View>
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Dietary Preferences</Text>
+            {dietaryLabels.length > 0 ? (
+              <View style={styles.chips}>
+                {dietaryLabels.map((label) => <View key={label} style={[styles.chip, { backgroundColor: colors.blueSoft }]}><Text style={[styles.chipText, { color: colors.primary }]}>{label}</Text></View>)}
+              </View>
+            ) : (
+              <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No dietary preferences added.</Text>
+            )}
+            <Pressable
+              onPress={() => router.push({ pathname: '/allergen-setup', params: { step: '3' } })}
+              style={({ pressed }) => [styles.secondaryButton, { borderColor: colors.border, marginTop: 16, opacity: pressed ? 0.65 : 1 }]}
+              testID="edit-dietary-preferences-button"
+            >
+              <Feather name="edit-3" size={17} color={colors.primary} />
+              <Text style={[styles.secondaryButtonText, { color: colors.primary }]}>Edit Dietary Preferences</Text>
+            </Pressable>
+          </View>
+          {healthNotice ? <Text style={[styles.healthNoticeText, { color: colors.success }]}>{healthNotice}</Text> : null}
+        </>
+      ) : (
+        <View style={[styles.optionalHealthCard, { backgroundColor: colors.warningSoft, borderColor: colors.warning }]}>
+          <Feather name="info" size={19} color={colors.warning} />
+          <View style={styles.optionalHealthCopy}>
+            <Text style={[styles.optionalHealthTitle, { color: colors.foreground }]}>Health &amp; Diet Notes are optional</Text>
+            <Text style={[styles.optionalHealthBody, { color: colors.mutedForeground }]}>
+              Add private, in-app reminders for health conditions and dietary preferences. This is not medical advice.
+            </Text>
+            <Pressable
+              onPress={() => router.push({ pathname: '/allergen-setup', params: { step: '2' } })}
+              style={({ pressed }) => [styles.addHealthButton, { borderColor: colors.warning, opacity: pressed ? 0.65 : 1 }]}
+              testID="add-health-needs-button"
+            >
+              <Text style={[styles.addHealthButtonText, { color: colors.warning }]}>Add health &amp; diet needs</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
       <View style={styles.section}>
         <View style={styles.biometricRow}>
           <View style={styles.biometricCopy}>
@@ -367,11 +474,21 @@ const styles = StyleSheet.create({
   successText: { fontFamily: 'Inter_600SemiBold', fontSize: 13, lineHeight: 19, marginTop: 12, textAlign: 'center' },
   section: { marginTop: 32 },
   sectionTitle: { fontFamily: 'Inter_700Bold', fontSize: 18 },
+  sectionHeaderRow: { alignItems: 'center', flexDirection: 'row', gap: 12 },
+  sectionHeaderCopy: { flex: 1, gap: 5 },
+  sectionDescription: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 18 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 14 },
   chip: { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
   chipText: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
   emptyText: { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 21, marginTop: 10 },
   severityLabel: { fontFamily: 'Inter_400Regular', fontSize: 13, marginTop: 16 },
+  healthNoticeText: { fontFamily: 'Inter_600SemiBold', fontSize: 13, lineHeight: 19, marginTop: 12, textAlign: 'center' },
+  optionalHealthCard: { alignItems: 'flex-start', borderRadius: 16, borderWidth: 1, flexDirection: 'row', gap: 10, marginTop: 32, padding: 14 },
+  optionalHealthCopy: { flex: 1, gap: 6 },
+  optionalHealthTitle: { fontFamily: 'Inter_700Bold', fontSize: 15 },
+  optionalHealthBody: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 19 },
+  addHealthButton: { alignSelf: 'flex-start', borderRadius: 10, borderWidth: 1, marginTop: 4, minHeight: 40, justifyContent: 'center', paddingHorizontal: 12 },
+  addHealthButtonText: { fontFamily: 'Inter_700Bold', fontSize: 13 },
   biometricRow: { alignItems: 'center', flexDirection: 'row', gap: 14 },
   biometricCopy: { flex: 1 },
   biometricDescription: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 19, marginTop: 6 },

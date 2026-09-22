@@ -16,6 +16,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AllergenInsights } from '@/components/AllergenInsights';
 import { FdaFreshnessNotice } from '@/components/FdaFreshnessNotice';
+import { HealthDietInsights } from '@/components/HealthInsights';
 import { PossiblyRelatedRecalls } from '@/components/PossiblyRelatedRecalls';
 import { ProduceRecallVerdict } from '@/components/ProduceRecallVerdict';
 import { RecallCard } from '@/components/RecallCard';
@@ -257,6 +258,7 @@ export default function HomeScreen() {
                 recalls={relatedRecalls}
               />
               <AllergenInsights productText={submittedTerm} dataAvailable={submittedTerm.length > 0} colors={colors} />
+              <HealthDietInsights productText={submittedTerm} colors={colors} />
             </View>
           ) : null
         }
