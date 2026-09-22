@@ -23,6 +23,7 @@ import { RecallCard } from '@/components/RecallCard';
 import { RecallRelevanceNotice } from '@/components/RecallRelevanceNotice';
 import { useColors } from '@/hooks/useColors';
 import {
+  type FoodIdentification,
   identifyFoodFromImage,
   isPossiblyTruncatedProductName,
   isUsableProductName,
@@ -36,6 +37,9 @@ const MAX_PHOTO_WIDTH = 1024;
 interface PhotoVerdict {
   productName: string | null;
   recallResult: RecallSearchResult | null;
+  contextText: string;
+  confidence: FoodIdentification['confidence'];
+  sourceOfIdentification: FoodIdentification['sourceOfIdentification'];
 }
 
 export default function PhotoCheckScreen() {
@@ -57,11 +61,11 @@ export default function PhotoCheckScreen() {
     setErrorMessage(null);
   };
 
-  const checkProduct = async (productName: string) => {
+  const checkProduct = async (productName: string, identification: FoodIdentification) => {
     setPhotoState('checking');
     const recallResult = await searchFoodRecalls(productName);
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setVerdict({ productName, recallResult });
+    setVerdict({ ...identification, productName, recallResult });
     setPhotoState('verdict');
   };
 
@@ -94,21 +98,28 @@ export default function PhotoCheckScreen() {
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setPhotoState('identifying');
 
-    const identifiedProductName = await identifyFoodFromImage(encodedImage.base64, 'image/jpeg');
-    if (!isUsableProductName(identifiedProductName)) {
+    const identification = await identifyFoodFromImage(encodedImage.base64, 'image/jpeg');
+    console.info('[Gemini] photo identification result', identification);
+    const identifiedProductName = identification.productName;
+    const contextSearchTerm = identification.contextText.trim();
+    const searchTerm = isUsableProductName(identifiedProductName)
+      ? identifiedProductName
+      : contextSearchTerm || null;
+
+    if (!searchTerm) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setVerdict({ productName: null, recallResult: null });
+      setVerdict({ ...identification, productName: null, recallResult: null });
       setPhotoState('verdict');
       return;
     }
 
-    if (isPossiblyTruncatedProductName(identifiedProductName)) {
-      setVerdict({ productName: identifiedProductName, recallResult: null });
+    if (identifiedProductName && isPossiblyTruncatedProductName(identifiedProductName)) {
+      setVerdict({ ...identification, productName: identifiedProductName, recallResult: null });
       setPhotoState('confirming');
       return;
     }
 
-    await checkProduct(identifiedProductName);
+    await checkProduct(searchTerm, identification);
   };
 
   const confirmProduct = async () => {
@@ -116,7 +127,7 @@ export default function PhotoCheckScreen() {
     if (!productName) return;
 
     try {
-      await checkProduct(productName);
+      await checkProduct(productName, verdict);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'We could not check that product. Please try again.');
       setPhotoState('error');
@@ -295,6 +306,7 @@ export default function PhotoCheckScreen() {
           <PhotoConfirmationView
             colors={colors}
             productName={verdict.productName}
+            sourceOfIdentification={verdict.sourceOfIdentification}
             onConfirm={() => void confirmProduct()}
             onManualSearch={() => router.push('/')}
             onRetake={reset}
@@ -360,9 +372,11 @@ function StatusScreen({
 function ManualSearchButton({
   colors,
   onPress,
+  label = 'Search manually instead',
 }: {
   colors: ReturnType<typeof useColors>;
   onPress: () => void;
+  label?: string;
 }) {
   return (
     <Pressable
@@ -372,7 +386,7 @@ function ManualSearchButton({
       testID="photo-manual-search-button"
     >
       <Feather name="search" size={17} color={colors.primary} />
-      <Text style={[styles.secondaryButtonText, { color: colors.primary }]}>Search manually instead</Text>
+      <Text style={[styles.secondaryButtonText, { color: colors.primary }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -403,12 +417,14 @@ function GalleryButton({
 function PhotoConfirmationView({
   colors,
   productName,
+  sourceOfIdentification,
   onConfirm,
   onManualSearch,
   onRetake,
 }: {
   colors: ReturnType<typeof useColors>;
   productName: string;
+  sourceOfIdentification: FoodIdentification['sourceOfIdentification'];
   onConfirm: () => void;
   onManualSearch: () => void;
   onRetake: () => void;
@@ -423,6 +439,7 @@ function PhotoConfirmationView({
         We identified this as:
       </Text>
       <Text style={[styles.confirmedProductName, { color: colors.foreground }]}>{productName}</Text>
+      <IdentificationBadge source={sourceOfIdentification} colors={colors} />
       <Text style={[styles.feedbackBody, { color: colors.mutedForeground }]}>
         Confirm it before we search FDA recall records.
       </Text>
@@ -467,20 +484,11 @@ function PhotoVerdictView({
   const router = useRouter();
   if (!verdict.productName) {
     return (
-      <View style={styles.verdictStack}>
-        <View style={[styles.verdictCard, { backgroundColor: colors.warningSoft, borderColor: colors.warning }]}>
-          <View style={[styles.verdictIcon, { backgroundColor: colors.warning }]}>
-            <Feather name="help-circle" size={25} color={colors.primaryForeground} />
-          </View>
-          <Text style={[styles.verdictTitle, { color: colors.foreground }]}>Product Not Found</Text>
-          <Text style={[styles.verdictBody, { color: colors.mutedForeground }]}>
-            We couldn’t confidently read a food product from this photo. Try a clearer image or search manually instead.
-          </Text>
-        </View>
-        <AllergenInsights productText="" dataAvailable={false} colors={colors} />
-        <ManualSearchButton colors={colors} onPress={() => router.push('/')} />
-        <RetakeButton colors={colors} onPress={onRetake} />
-      </View>
+      <PhotoSuggestionView
+        colors={colors}
+        onManualSearch={() => router.push('/')}
+        onRetake={onRetake}
+      />
     );
   }
 
@@ -497,6 +505,7 @@ function PhotoVerdictView({
           <RecallCard key={`${recall.recallNumber ?? recall.productDescription}-${index}`} recall={recall} />
         ))}
         <PossiblyRelatedRecalls item={produceItem} recalls={relatedRecalls} />
+        <IdentificationBadge source={verdict.sourceOfIdentification} colors={colors} />
         <AllergenInsights productText={verdict.productName} dataAvailable={Boolean(verdict.productName)} colors={colors} />
         <RetakeButton colors={colors} onPress={onRetake} />
       </View>
@@ -521,6 +530,7 @@ function PhotoVerdictView({
           {hasRecall ? 'Active Recall Found' : `No Active Recalls Found for ${verdict.productName}`}
         </Text>
         <Text style={[styles.productName, { color: colors.foreground }]}>{verdict.productName}</Text>
+        <IdentificationBadge source={verdict.sourceOfIdentification} colors={colors} />
         <Text style={[styles.verdictBody, { color: colors.mutedForeground }]}>
           {hasRecall
             ? 'This product matches an active FDA recall. Review the details below and follow the official notice.'
@@ -534,6 +544,66 @@ function PhotoVerdictView({
       ))}
         <AllergenInsights productText={verdict.productName} dataAvailable={Boolean(verdict.productName)} colors={colors} />
       <RetakeButton colors={colors} onPress={onRetake} />
+    </View>
+  );
+}
+
+function IdentificationBadge({
+  source,
+  colors,
+}: {
+  source: FoodIdentification['sourceOfIdentification'];
+  colors: ReturnType<typeof useColors>;
+}) {
+  if (source === 'unknown') return null;
+  return (
+    <View style={[styles.identificationBadge, { backgroundColor: colors.blueSoft }]}>
+      <Feather name={source === 'sign' ? 'tag' : 'check-circle'} size={13} color={colors.primary} />
+      <Text style={[styles.identificationBadgeText, { color: colors.primary }]}>
+        {source === 'sign' ? 'Identified from shelf sign' : 'Identified from product'}
+      </Text>
+    </View>
+  );
+}
+
+function PhotoSuggestionView({
+  colors,
+  onRetake,
+  onManualSearch,
+}: {
+  colors: ReturnType<typeof useColors>;
+  onRetake: () => void;
+  onManualSearch: () => void;
+}) {
+  const tips = [
+    'Try photographing just one item instead of a whole shelf.',
+    'Get closer so the product fills the frame.',
+    'Tilt the package slightly or move away from bright lights.',
+    'Pick up one piece of produce and hold it in your hand.',
+    'Make sure the brand name is facing the camera.',
+  ];
+
+  return (
+    <View style={styles.verdictStack}>
+      <View style={[styles.suggestionCard, { backgroundColor: colors.warningSoft, borderColor: colors.warning }]}>
+        <View style={[styles.verdictIcon, { backgroundColor: colors.warning }]}>
+          <Feather name="help-circle" size={25} color={colors.primaryForeground} />
+        </View>
+        <Text style={[styles.verdictTitle, { color: colors.foreground }]}>We couldn't quite make that out</Text>
+        <Text style={[styles.verdictBody, { color: colors.mutedForeground }]}>
+          Some photos are hard for the AI to read. Here are a few tips that usually help:
+        </Text>
+        <View style={styles.tipList}>
+          {tips.map((tip) => (
+            <View key={tip} style={styles.tipRow}>
+              <Text style={[styles.tipBullet, { color: colors.primary }]}>•</Text>
+              <Text style={[styles.tipText, { color: colors.foreground }]}>{tip}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+      <RetakeButton colors={colors} onPress={onRetake} />
+      <ManualSearchButton colors={colors} onPress={onManualSearch} label="Search by Name Instead" />
     </View>
   );
 }
@@ -579,10 +649,17 @@ const styles = StyleSheet.create({
   feedbackTitle: { fontFamily: 'Inter_700Bold', fontSize: 18, marginTop: 3 },
   feedbackBody: { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 21, maxWidth: 310, textAlign: 'center' },
   confirmedProductName: { fontFamily: 'Inter_700Bold', fontSize: 20, lineHeight: 27, maxWidth: 320, textAlign: 'center' },
+  identificationBadge: { alignItems: 'center', alignSelf: 'flex-start', borderRadius: 999, flexDirection: 'row', gap: 6, paddingHorizontal: 10, paddingVertical: 6 },
+  identificationBadgeText: { fontFamily: 'Inter_600SemiBold', fontSize: 12 },
   inlineButton: { borderRadius: 10, borderWidth: 1, marginTop: 4, minHeight: 44, justifyContent: 'center', paddingHorizontal: 16 },
   inlineButtonText: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
   verdictStack: { gap: 14 },
   verdictCard: { borderRadius: 20, borderWidth: 1, gap: 9, padding: 22 },
+  suggestionCard: { borderRadius: 20, borderWidth: 1, gap: 12, padding: 22 },
+  tipList: { alignSelf: 'stretch', gap: 10, marginTop: 4 },
+  tipRow: { alignItems: 'flex-start', flexDirection: 'row', gap: 8 },
+  tipBullet: { fontFamily: 'Inter_700Bold', fontSize: 18, lineHeight: 21 },
+  tipText: { flex: 1, fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 21 },
   verdictIcon: { alignItems: 'center', borderRadius: 999, height: 48, justifyContent: 'center', width: 48 },
   verdictTitle: { fontFamily: 'Inter_700Bold', fontSize: 25, marginTop: 3 },
   productName: { fontFamily: 'Inter_600SemiBold', fontSize: 16, lineHeight: 22 },

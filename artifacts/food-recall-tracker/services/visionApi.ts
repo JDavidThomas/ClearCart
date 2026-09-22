@@ -21,6 +21,7 @@ const GENERIC_LABEL_WORDS = new Set([
 ]);
 const STANDALONE_FOOD_WORDS = new Set([
   'apple',
+  'apples',
   'avocado',
   'banana',
   'beef',
@@ -74,10 +75,20 @@ const SUSPICIOUS_END_WORDS = new Set([
   'sour',
   'value',
 ]);
-const STRICT_IDENTIFICATION_PROMPT =
-  "Read the ENTIRE product name from the front of the package. Include every word visible. Do not truncate at line breaks, wrap points, or the edge of the label. Return ONLY one complete, coherent product name with no explanation, punctuation, or formatting. If a brand is visible, include the brand and the product type, such as 'Great Value Creamy Peanut Butter'. For a jar labeled 'Great Value Creamy Peanut Butter', return: 'Great Value Creamy Peanut Butter'. Do NOT return 'Great', 'Creamy', or 'Peanut Butter'. If the label wraps across lines like 'Great Value' on one line and 'Creamy Peanut Butter' on the next, combine every line into 'Great Value Creamy Peanut Butter'. If the image shows unbranded produce, return the specific produce type, such as 'romaine lettuce'. Never return a partial word, an ingredient, a flavor or texture descriptor by itself, or a single fragment such as 'cre', 'creamy', or 'peanut'. If you can only read part of the label, or if the product name is ambiguous, return 'unknown' rather than guessing. It is better to return 'unknown' than to return an incomplete name. If you cannot confidently identify the complete product name, return exactly 'unknown'.";
 const RECOVERY_IDENTIFICATION_PROMPT =
-  "Look carefully at the food in this image a second time. Identify the most likely food item or complete product name that is visibly present. Pay special attention to unbranded produce and simple foods: if the image shows a tomato, return 'tomato'; if it shows another single food, return that specific food. For a packaged product, combine the visible brand and product type when readable. Return ONLY the name, with no explanation or punctuation. Return 'unknown' only if the image does not contain an identifiable food or is too blurry to read.";
+  "Look carefully at the entire image a second time. Read any visible package text, shelf labels, handwritten signs, price tags, or other scene context. Identify the most likely food item or complete product name that is visibly present. Pay special attention to unbranded produce and simple foods: if the image shows a tomato, return 'tomato'; if it shows another single food, return that specific food. For a packaged product, combine the visible brand and product type when readable. Return the same structured JSON fields. Use sourceOfIdentification 'sign' when a sign or shelf label supplies the product name. Return productName 'unknown' and an empty contextText only if the image does not contain an identifiable food or useful text.";
+const IDENTIFICATION_RESPONSE_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    productName: { type: 'STRING' },
+    contextText: { type: 'STRING' },
+    confidence: { type: 'STRING', enum: ['high', 'medium', 'low'] },
+    sourceOfIdentification: { type: 'STRING', enum: ['product', 'sign', 'unknown'] },
+  },
+  required: ['productName', 'contextText', 'confidence', 'sourceOfIdentification'],
+} as const;
+const STRICT_IDENTIFICATION_PROMPT =
+  "Read the ENTIRE image, not only the package. Identify the complete food product name using the product itself and any surrounding scene text such as shelf signs, handwritten signs, shelf labels, price tags, or other visible context. Include every readable brand and product word; combine words across line breaks. For unbranded produce, return the specific produce type. If a sign identifies the food, use that sign context even when the product itself is not packaged. Return only the requested JSON object. Use productName 'unknown' when the product cannot be identified confidently. Copy any useful visible sign, shelf-label, or price-tag text into contextText, otherwise use an empty string. Set sourceOfIdentification to 'product' when the item/package supplies the name, 'sign' when surrounding text supplies it, and 'unknown' when neither does.";
 
 interface GeminiResponse {
   candidates?: Array<{
@@ -85,6 +96,16 @@ interface GeminiResponse {
       parts?: Array<{ text?: string }>;
     };
   }>;
+}
+
+export type IdentificationConfidence = 'high' | 'medium' | 'low';
+export type IdentificationSource = 'product' | 'sign' | 'unknown';
+
+export interface FoodIdentification {
+  productName: string | null;
+  contextText: string;
+  confidence: IdentificationConfidence;
+  sourceOfIdentification: IdentificationSource;
 }
 
 function cleanProductName(value: unknown): string | null {
@@ -98,6 +119,19 @@ function cleanProductName(value: unknown): string | null {
     .replace(/\s+/g, ' ');
 
   return isUsableProductName(normalized) ? normalized : null;
+}
+
+function cleanContextText(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  return value.trim().replace(/\s+/g, ' ').slice(0, 240);
+}
+
+function cleanConfidence(value: unknown): IdentificationConfidence {
+  return value === 'high' || value === 'low' ? value : 'medium';
+}
+
+function cleanIdentificationSource(value: unknown): IdentificationSource {
+  return value === 'product' || value === 'sign' ? value : 'unknown';
 }
 
 export function isUsableProductName(value: string | null | undefined): value is string {
@@ -128,25 +162,41 @@ export function isPossiblyTruncatedProductName(value: string): boolean {
   return SUSPICIOUS_END_WORDS.has(words[words.length - 1]);
 }
 
-function parseProductName(text: string): string | null {
+function parseIdentification(text: string): FoodIdentification {
   const trimmed = text.trim().replace(/^```json/i, '').replace(/```$/i, '').trim();
 
-  try {
-    const parsed = JSON.parse(trimmed) as { productName?: unknown };
-    return cleanProductName(parsed.productName);
-  } catch {
-    const objectStart = trimmed.indexOf('{');
-    const objectEnd = trimmed.lastIndexOf('}');
-    if (objectStart >= 0 && objectEnd > objectStart) {
-      try {
-        const parsed = JSON.parse(trimmed.slice(objectStart, objectEnd + 1)) as { productName?: unknown };
-        return cleanProductName(parsed.productName);
-      } catch {
-        return null;
-      }
-    }
-    return cleanProductName(trimmed);
+  const candidates = [trimmed];
+  const objectStart = trimmed.indexOf('{');
+  const objectEnd = trimmed.lastIndexOf('}');
+  if (objectStart >= 0 && objectEnd > objectStart) {
+    candidates.push(trimmed.slice(objectStart, objectEnd + 1));
   }
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate) as {
+        productName?: unknown;
+        contextText?: unknown;
+        confidence?: unknown;
+        sourceOfIdentification?: unknown;
+      };
+      return {
+        productName: cleanProductName(parsed.productName),
+        contextText: cleanContextText(parsed.contextText),
+        confidence: cleanConfidence(parsed.confidence),
+        sourceOfIdentification: cleanIdentificationSource(parsed.sourceOfIdentification),
+      };
+    } catch {
+      // Try the next JSON candidate, then preserve the previous plain-text fallback.
+    }
+  }
+
+  return {
+    productName: cleanProductName(trimmed),
+    contextText: '',
+    confidence: 'medium',
+    sourceOfIdentification: 'product',
+  };
 }
 
 async function fetchGemini(
@@ -177,7 +227,9 @@ async function fetchGemini(
         ],
         generationConfig: {
           temperature: 0,
-          maxOutputTokens: 64,
+          maxOutputTokens: 256,
+          responseMimeType: 'application/json',
+          responseSchema: IDENTIFICATION_RESPONSE_SCHEMA,
         },
       }),
     },
@@ -198,8 +250,9 @@ async function fetchGemini(
 }
 
 interface IdentificationAttempt {
-  productName: string | null;
+  identification: FoodIdentification | null;
   suspiciousCandidate: string | null;
+  suspiciousIdentification: FoodIdentification | null;
   receivedIdentificationResponse: boolean;
   lastError: unknown;
 }
@@ -213,6 +266,8 @@ async function identifyWithPrompt(
   let lastError: unknown = null;
   let receivedIdentificationResponse = false;
   let suspiciousCandidate: string | null = null;
+  let suspiciousIdentification: FoodIdentification | null = null;
+  let identification: FoodIdentification | null = null;
 
   for (const model of GEMINI_MODELS) {
     try {
@@ -233,39 +288,57 @@ async function identifyWithPrompt(
         continue;
       }
 
-      const productName = parseProductName(text);
-      if (productName) {
-        if (isPossiblyTruncatedProductName(productName)) {
-          suspiciousCandidate = productName;
+       const parsedIdentification = parseIdentification(text);
+       identification = parsedIdentification;
+       if (parsedIdentification.productName) {
+         if (isPossiblyTruncatedProductName(parsedIdentification.productName)) {
+           suspiciousCandidate = parsedIdentification.productName;
+           suspiciousIdentification = parsedIdentification;
           receivedIdentificationResponse = true;
           continue;
         }
-        return { productName, suspiciousCandidate, receivedIdentificationResponse: true, lastError };
+         return { identification: parsedIdentification, suspiciousCandidate, suspiciousIdentification, receivedIdentificationResponse: true, lastError };
       }
       receivedIdentificationResponse = true;
+       if (parsedIdentification.contextText) {
+         return { identification: parsedIdentification, suspiciousCandidate, suspiciousIdentification, receivedIdentificationResponse: true, lastError };
+       }
     } catch (error) {
       lastError = error;
     }
   }
 
-  return { productName: null, suspiciousCandidate, receivedIdentificationResponse, lastError };
+  return { identification, suspiciousCandidate, suspiciousIdentification, receivedIdentificationResponse, lastError };
 }
 
-export async function identifyFoodFromImage(imageBase64: string, mimeType = 'image/jpeg') {
+export async function identifyFoodFromImage(imageBase64: string, mimeType = 'image/jpeg'): Promise<FoodIdentification> {
   const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY?.trim();
   if (!apiKey) {
     throw new Error('Photo identification is not configured in this app bundle.');
   }
 
   const primaryAttempt = await identifyWithPrompt(apiKey, imageBase64, mimeType, STRICT_IDENTIFICATION_PROMPT);
-  if (primaryAttempt.productName) return primaryAttempt.productName;
+  if (primaryAttempt.identification?.productName || primaryAttempt.identification?.contextText) {
+    return primaryAttempt.identification;
+  }
 
   if (primaryAttempt.receivedIdentificationResponse) {
     const recoveryAttempt = await identifyWithPrompt(apiKey, imageBase64, mimeType, RECOVERY_IDENTIFICATION_PROMPT);
-    if (recoveryAttempt.productName) return recoveryAttempt.productName;
-    if (recoveryAttempt.suspiciousCandidate) return recoveryAttempt.suspiciousCandidate;
-    if (primaryAttempt.suspiciousCandidate) return primaryAttempt.suspiciousCandidate;
-    return null;
+    if (recoveryAttempt.identification?.productName || recoveryAttempt.identification?.contextText) {
+      return recoveryAttempt.identification;
+    }
+    if (recoveryAttempt.suspiciousCandidate && recoveryAttempt.suspiciousIdentification) {
+      return { ...recoveryAttempt.suspiciousIdentification, productName: recoveryAttempt.suspiciousCandidate };
+    }
+    if (primaryAttempt.suspiciousCandidate && primaryAttempt.suspiciousIdentification) {
+      return { ...primaryAttempt.suspiciousIdentification, productName: primaryAttempt.suspiciousCandidate };
+    }
+    return {
+      productName: null,
+      contextText: '',
+      confidence: 'low',
+      sourceOfIdentification: 'unknown',
+    };
   }
 
   if (primaryAttempt.lastError instanceof Error && primaryAttempt.lastError.message === 'GEMINI_TIMEOUT') {
