@@ -1,23 +1,47 @@
-import { Feather } from '@expo/vector-icons';
+import { Feather, Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { PasswordField } from '@/components/PasswordField';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
+import {
+  authenticateWithBiometrics,
+  getBiometricAvailability,
+  isBiometricCancellation,
+  type BiometricAvailability,
+} from '@/services/biometrics';
 
 export default function LoginScreen() {
   const colors = useColors();
   const router = useRouter();
   const { next } = useLocalSearchParams<{ next?: string }>();
   const insets = useSafeAreaInsets();
-  const { logIn, sendPasswordReset } = useAuth();
+  const { logIn, logInWithBiometrics, sendPasswordReset } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [resetMessage, setResetMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [sendingReset, setSendingReset] = useState(false);
+  const [biometric, setBiometric] = useState<BiometricAvailability | null>(null);
+  const [biometricBusy, setBiometricBusy] = useState(false);
+  const [biometricPromptVisible, setBiometricPromptVisible] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    void getBiometricAvailability().then((availability) => {
+      if (mounted) setBiometric(availability);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const biometricReady = Boolean(
+    biometric?.enabled && biometric.hasHardware && biometric.isEnrolled && biometric.kind,
+  );
 
   const submit = async () => {
     setError(null);
@@ -46,6 +70,35 @@ export default function LoginScreen() {
     }
   };
 
+  const signInWithBiometrics = async () => {
+    if (!biometricReady || biometricBusy) return;
+    setError(null);
+    setResetMessage(null);
+    setBiometricBusy(true);
+    setBiometricPromptVisible(true);
+    try {
+      const result = await authenticateWithBiometrics('Sign in to Food Recall Tracker');
+      if (!result.success) {
+        if (!isBiometricCancellation(result.error)) {
+          setError('Biometric authentication failed. Please log in with your password.');
+        }
+        return;
+      }
+
+      await logInWithBiometrics();
+      router.replace(next === '/allergen-setup' ? '/allergen-setup' : '/profile');
+    } catch (biometricError) {
+      setError(
+        biometricError instanceof Error
+          ? biometricError.message
+          : 'Biometric authentication failed. Please log in with your password.',
+      );
+    } finally {
+      setBiometricBusy(false);
+      setBiometricPromptVisible(false);
+    }
+  };
+
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
       <ScrollView
@@ -66,7 +119,14 @@ export default function LoginScreen() {
         </Text>
         <View style={styles.form}>
           <Field label="Email" value={email} onChangeText={setEmail} placeholder="you@example.com" colors={colors} autoCapitalize="none" keyboardType="email-address" />
-          <Field label="Password" value={password} onChangeText={setPassword} placeholder="Your password" colors={colors} secureTextEntry />
+          <PasswordField
+            label="Password"
+            value={password}
+            onChangeText={setPassword}
+            placeholder="Your password"
+            colors={colors}
+            testID="login-password"
+          />
           <Pressable disabled={sendingReset} onPress={() => void sendReset()} style={styles.forgotButton}>
             {sendingReset ? <ActivityIndicator color={colors.primary} size="small" /> : null}
             <Text style={[styles.forgotText, { color: colors.primary }]}>{sendingReset ? 'Sending reset email…' : 'Forgot Password?'}</Text>
@@ -82,6 +142,61 @@ export default function LoginScreen() {
             {saving ? <ActivityIndicator color={colors.primaryForeground} /> : <Feather name="log-in" size={18} color={colors.primaryForeground} />}
             <Text style={[styles.primaryText, { color: colors.primaryForeground }]}>{saving ? 'Logging in…' : 'Log In'}</Text>
           </Pressable>
+          {biometricReady ? (
+            <View style={[styles.biometricPrompt, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <Pressable
+                accessibilityRole="button"
+                disabled={biometricBusy || saving}
+                onPress={() => void signInWithBiometrics()}
+                style={({ pressed }) => [
+                  styles.biometricButton,
+                  { borderColor: colors.border, opacity: pressed || biometricBusy ? 0.65 : 1 },
+                ]}
+                testID="sign-in-with-biometrics-button"
+              >
+                {biometricBusy ? (
+                  <ActivityIndicator color={colors.primary} />
+                ) : (
+                  <Ionicons
+                    name={biometric?.kind === 'face' ? 'scan-outline' : 'finger-print-outline'}
+                    size={21}
+                    color={colors.primary}
+                  />
+                )}
+                <Text style={[styles.biometricButtonText, { color: colors.primary }]}>
+                  {biometricBusy
+                    ? 'Waiting for verification…'
+                    : biometric?.kind === 'face'
+                      ? 'Sign in with Face ID'
+                      : 'Sign in with Fingerprint'}
+                </Text>
+              </Pressable>
+              {biometricPromptVisible ? (
+                <Text style={[styles.biometricPromptText, { color: colors.mutedForeground }]}>
+                  Confirm your identity with your device unlock.
+                </Text>
+              ) : null}
+              <Pressable
+                accessibilityRole="button"
+                disabled={biometricBusy}
+                onPress={() => {
+                  setBiometricPromptVisible(false);
+                  setError(null);
+                }}
+                style={styles.passwordEscape}
+              >
+                <Text style={[styles.passwordEscapeText, { color: colors.primary }]}>Use password instead</Text>
+              </Pressable>
+            </View>
+          ) : null}
+          {biometric?.enabled && biometric.hasHardware && !biometric.isEnrolled ? (
+            <View style={[styles.settingsNotice, { backgroundColor: colors.warningSoft }]}>
+              <Feather name="settings" size={16} color={colors.warning} />
+              <Text style={[styles.settingsNoticeText, { color: colors.foreground }]}>
+                Set up fingerprint or face unlock in your phone settings to use biometric sign-in.
+              </Text>
+            </View>
+          ) : null}
           <Pressable onPress={() => router.replace('/sign-up')} style={styles.linkButton}>
             <Text style={[styles.linkText, { color: colors.primary }]}>Need an account? Sign Up</Text>
           </Pressable>
@@ -138,6 +253,14 @@ const styles = StyleSheet.create({
   successText: { flex: 1, fontFamily: 'Inter_500Medium', fontSize: 13, lineHeight: 19 },
   primaryButton: { alignItems: 'center', borderRadius: 14, flexDirection: 'row', gap: 9, justifyContent: 'center', minHeight: 56, marginTop: 4 },
   primaryText: { fontFamily: 'Inter_700Bold', fontSize: 15 },
+  biometricPrompt: { borderRadius: 16, borderWidth: 1, gap: 10, padding: 12 },
+  biometricButton: { alignItems: 'center', borderRadius: 12, borderWidth: 1, flexDirection: 'row', gap: 9, justifyContent: 'center', minHeight: 50, paddingHorizontal: 14 },
+  biometricButtonText: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
+  biometricPromptText: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 19, textAlign: 'center' },
+  passwordEscape: { alignItems: 'center', minHeight: 30, justifyContent: 'center' },
+  passwordEscapeText: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
+  settingsNotice: { alignItems: 'flex-start', borderRadius: 12, flexDirection: 'row', gap: 9, padding: 12 },
+  settingsNoticeText: { flex: 1, fontFamily: 'Inter_500Medium', fontSize: 12, lineHeight: 18 },
   linkButton: { alignItems: 'center', minHeight: 44, justifyContent: 'center' },
   linkText: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
 });

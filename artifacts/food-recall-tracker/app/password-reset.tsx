@@ -2,8 +2,9 @@ import { Feather } from '@expo/vector-icons';
 import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { PasswordField } from '@/components/PasswordField';
 import { supabase } from '@/lib/supabase';
 import { useColors } from '@/hooks/useColors';
 
@@ -99,8 +100,22 @@ export default function PasswordResetScreen() {
         </Text>
         {hasSession ? (
           <View style={styles.form}>
-            <Field label="New password" value={password} onChangeText={setPassword} placeholder="At least 6 characters" colors={colors} secureTextEntry />
-            <Field label="Confirm new password" value={confirmPassword} onChangeText={setConfirmPassword} placeholder="Enter it again" colors={colors} secureTextEntry />
+            <PasswordField
+              label="New password"
+              value={password}
+              onChangeText={setPassword}
+              placeholder="At least 6 characters"
+              colors={colors}
+              testID="reset-password"
+            />
+            <PasswordField
+              label="Confirm new password"
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              placeholder="Enter it again"
+              colors={colors}
+              testID="reset-confirm-password"
+            />
             {error ? <ErrorBox message={error} colors={colors} /> : null}
             {message ? <View style={[styles.successBox, { backgroundColor: colors.successSoft }]}><Feather name="check-circle" size={17} color={colors.success} /><Text style={[styles.successText, { color: colors.foreground }]}>{message}</Text></View> : null}
             <Pressable disabled={saving} onPress={() => void submit()} style={({ pressed }) => [styles.primaryButton, { backgroundColor: colors.primary, opacity: pressed || saving ? 0.7 : 1 }]}>
@@ -118,19 +133,6 @@ export default function PasswordResetScreen() {
   );
 }
 
-function Field({
-  label,
-  colors,
-  ...props
-}: { label: string; colors: ReturnType<typeof useColors> } & React.ComponentProps<typeof TextInput>) {
-  return (
-    <View style={styles.field}>
-      <Text style={[styles.label, { color: colors.foreground }]}>{label}</Text>
-      <TextInput {...props} autoCorrect={false} placeholderTextColor={colors.mutedForeground} style={[styles.input, { backgroundColor: colors.card, borderColor: colors.input, color: colors.foreground }]} />
-    </View>
-  );
-}
-
 function ErrorBox({ message, colors }: { message: string; colors: ReturnType<typeof useColors> }) {
   return <View style={[styles.errorBox, { backgroundColor: colors.dangerSoft }]}><Feather name="alert-circle" size={17} color={colors.destructive} /><Text style={[styles.errorText, { color: colors.destructive }]}>{message}</Text></View>;
 }
@@ -144,9 +146,6 @@ const styles = StyleSheet.create({
   title: { fontFamily: 'Inter_700Bold', fontSize: 30, letterSpacing: -0.7, lineHeight: 38, marginTop: 18 },
   subtitle: { fontFamily: 'Inter_400Regular', fontSize: 15, lineHeight: 23, marginTop: 10 },
   form: { gap: 15, marginTop: 30 },
-  field: { gap: 7 },
-  label: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
-  input: { borderRadius: 14, borderWidth: 1, fontFamily: 'Inter_400Regular', fontSize: 16, minHeight: 54, paddingHorizontal: 15 },
   errorBox: { alignItems: 'flex-start', borderRadius: 12, flexDirection: 'row', gap: 9, padding: 12 },
   errorText: { flex: 1, fontFamily: 'Inter_500Medium', fontSize: 13, lineHeight: 19 },
   successBox: { alignItems: 'flex-start', borderRadius: 12, flexDirection: 'row', gap: 9, padding: 12 },

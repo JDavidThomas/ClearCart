@@ -28,6 +28,12 @@
           "cameraPermission": "Food Recall Tracker uses your camera to identify food products.",
           "photosPermission": "Food Recall Tracker uses your photos to identify food products."
         }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Food Recall Tracker uses Face ID to sign you in securely."
+        }
       ]
     ],
     "experiments": {

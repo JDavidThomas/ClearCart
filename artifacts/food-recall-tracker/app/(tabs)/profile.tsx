@@ -2,12 +2,19 @@ import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Linking, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ALLERGEN_OPTIONS } from '@/components/AllergenInsights';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
+import {
+  authenticateWithBiometrics,
+  getBiometricAvailability,
+  isBiometricCancellation,
+  setBiometricEnabled,
+  type BiometricAvailability,
+} from '@/services/biometrics';
 
 export default function ProfileScreen() {
   const colors = useColors();
@@ -88,6 +95,19 @@ function LoggedInProfile() {
   const [pendingAvatarUri, setPendingAvatarUri] = useState<string | null>(null);
   const [avatarNotice, setAvatarNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [biometricAvailability, setBiometricAvailability] = useState<BiometricAvailability | null>(null);
+  const [biometricSaving, setBiometricSaving] = useState(false);
+  const [biometricNotice, setBiometricNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    void getBiometricAvailability().then((availability) => {
+      if (mounted) setBiometricAvailability(availability);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   if (!profile) return null;
   const allergyLabels = profile.allergies.map((id) => ALLERGEN_OPTIONS.find((option) => option.id === id)?.label ?? id);
@@ -142,6 +162,49 @@ function LoggedInProfile() {
       setError(saveError instanceof Error ? saveError.message : 'We could not update your name.');
     } finally {
       setSavingName(false);
+    }
+  };
+
+  const toggleBiometricSignIn = async (nextEnabled: boolean) => {
+    if (biometricSaving) return;
+    setBiometricSaving(true);
+    setError(null);
+    setBiometricNotice(null);
+
+    try {
+      if (!nextEnabled) {
+        await setBiometricEnabled(false);
+        setBiometricAvailability((current) => current ? { ...current, enabled: false } : current);
+        setBiometricNotice('Biometric sign-in disabled.');
+        return;
+      }
+
+      const availability = await getBiometricAvailability();
+      setBiometricAvailability(availability);
+      if (!availability.hasHardware) {
+        setBiometricNotice('Biometric sign-in is not available on this device.');
+        return;
+      }
+      if (!availability.isEnrolled) {
+        setBiometricNotice('Set up fingerprint or face unlock in your phone settings, then try again.');
+        return;
+      }
+
+      const result = await authenticateWithBiometrics('Enable biometric sign-in');
+      if (!result.success) {
+        if (!isBiometricCancellation(result.error)) {
+          setBiometricNotice('Biometric authentication failed. Try again to enable sign-in.');
+        }
+        return;
+      }
+
+      await setBiometricEnabled(true);
+      setBiometricAvailability({ ...availability, enabled: true });
+      setBiometricNotice('Biometric sign-in enabled.');
+    } catch (biometricError) {
+      setError(biometricError instanceof Error ? biometricError.message : 'We could not update biometric sign-in.');
+    } finally {
+      setBiometricSaving(false);
     }
   };
 
@@ -217,6 +280,42 @@ function LoggedInProfile() {
           <Text style={[styles.secondaryButtonText, { color: colors.primary }]}>Edit Allergies</Text>
         </Pressable>
       </View>
+      <View style={styles.section}>
+        <View style={styles.biometricRow}>
+          <View style={styles.biometricCopy}>
+            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Enable biometric sign-in</Text>
+            <Text style={[styles.biometricDescription, { color: colors.mutedForeground }]}>
+              Use {biometricAvailability?.kind === 'face' ? 'Face ID' : 'your fingerprint'} instead of typing your password.
+            </Text>
+          </View>
+          <Switch
+            accessibilityLabel="Enable biometric sign-in"
+            disabled={biometricSaving}
+            onValueChange={(value) => void toggleBiometricSignIn(value)}
+            trackColor={{ false: colors.border, true: colors.primary }}
+            value={biometricAvailability?.enabled ?? false}
+            thumbColor={colors.primaryForeground}
+          />
+        </View>
+        {biometricNotice ? (
+          <View style={[styles.biometricNotice, { backgroundColor: colors.blueSoft }]}>
+            <Feather name="info" size={16} color={colors.primary} />
+            <Text style={[styles.biometricNoticeText, { color: colors.foreground }]}>{biometricNotice}</Text>
+          </View>
+        ) : null}
+        {biometricAvailability && biometricAvailability.enabled && !biometricAvailability.isEnrolled ? (
+          <Pressable
+            disabled={Platform.OS === 'web'}
+            onPress={() => {
+              if (Platform.OS !== 'web') void Linking.openSettings();
+            }}
+            style={({ pressed }) => [styles.settingsButton, { borderColor: colors.border, opacity: pressed ? 0.65 : 1 }]}
+          >
+            <Feather name="settings" size={16} color={colors.primary} />
+            <Text style={[styles.settingsButtonText, { color: colors.primary }]}>Open phone settings</Text>
+          </Pressable>
+        ) : null}
+      </View>
       <Pressable onPress={() => void logOut()} style={({ pressed }) => [styles.logoutButton, { opacity: pressed ? 0.6 : 1 }]} testID="profile-log-out-button">
         <Feather name="log-out" size={16} color={colors.destructive} />
         <Text style={[styles.logoutText, { color: colors.destructive }]}>Log Out</Text>
@@ -273,6 +372,13 @@ const styles = StyleSheet.create({
   chipText: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
   emptyText: { fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 21, marginTop: 10 },
   severityLabel: { fontFamily: 'Inter_400Regular', fontSize: 13, marginTop: 16 },
+  biometricRow: { alignItems: 'center', flexDirection: 'row', gap: 14 },
+  biometricCopy: { flex: 1 },
+  biometricDescription: { fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 19, marginTop: 6 },
+  biometricNotice: { alignItems: 'flex-start', borderRadius: 12, flexDirection: 'row', gap: 9, marginTop: 13, padding: 12 },
+  biometricNoticeText: { flex: 1, fontFamily: 'Inter_500Medium', fontSize: 12, lineHeight: 18 },
+  settingsButton: { alignItems: 'center', alignSelf: 'flex-start', borderRadius: 10, borderWidth: 1, flexDirection: 'row', gap: 7, marginTop: 10, minHeight: 40, paddingHorizontal: 12 },
+  settingsButtonText: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
   logoutButton: { alignItems: 'center', flexDirection: 'row', gap: 7, justifyContent: 'center', marginTop: 42, minHeight: 44 },
   logoutText: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
 });

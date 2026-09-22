@@ -38,6 +38,7 @@ interface AuthContextValue {
   signUp: (email: string, password: string) => Promise<SignUpResult>;
   resendConfirmationEmail: (email: string) => Promise<void>;
   logIn: (email: string, password: string) => Promise<void>;
+  logInWithBiometrics: () => Promise<void>;
   sendPasswordReset: (email: string) => Promise<void>;
   logOut: () => Promise<void>;
   continueAsGuest: () => void;
@@ -274,6 +275,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const logInWithBiometrics = async () => {
+    try {
+      logSupabaseDiagnostic('auth.biometric-log-in.started');
+      const { data, error } = await supabase.auth.getSession();
+      if (error) throw error;
+
+      let session = data.session;
+      if (!session?.user) {
+        throw new Error('Your saved sign-in has expired. Please log in with your password.');
+      }
+
+      if (session.expires_at && session.expires_at * 1000 <= Date.now() + 30_000) {
+        const refreshed = await supabase.auth.refreshSession();
+        if (refreshed.error || !refreshed.data.session?.user) {
+          throw new Error('Your saved sign-in has expired. Please log in with your password.');
+        }
+        session = refreshed.data.session;
+      }
+
+      await loadProfile(session.user);
+      setAuthNotice(null);
+      setStatus('authenticated');
+      setGuestPromptDismissed(false);
+      logSupabaseDiagnostic('auth.biometric-log-in.succeeded');
+    } catch (error) {
+      const message = authErrorMessage(error, 'We could not restore your saved sign-in.');
+      logSupabaseDiagnostic('auth.biometric-log-in.failed', error);
+      if (/saved sign-in has expired/i.test(message)) {
+        enterGuestMode();
+        throw new Error(message);
+      }
+      enterGuestMode('Profile sync is unavailable, so recall checks are continuing as a guest.');
+      throw new Error(`Biometric sign-in failed: ${message}`);
+    }
+  };
+
   const sendPasswordReset = async (email: string) => {
     const cleanEmail = normalizeEmail(email);
     if (!cleanEmail.includes('@')) throw new Error('Enter the email address for your account.');
@@ -498,6 +535,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signUp,
       resendConfirmationEmail,
       logIn,
+      logInWithBiometrics,
       sendPasswordReset,
       logOut,
       continueAsGuest,

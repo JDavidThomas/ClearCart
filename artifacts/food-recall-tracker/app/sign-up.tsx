@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { PasswordField } from '@/components/PasswordField';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
 
@@ -73,8 +74,22 @@ export default function SignUpScreen() {
         </Text>
         <View style={styles.form}>
           <Field label="Email" value={email} onChangeText={setEmail} placeholder="you@example.com" colors={colors} autoCapitalize="none" keyboardType="email-address" />
-          <Field label="Password" value={password} onChangeText={setPassword} placeholder="At least 6 characters" colors={colors} secureTextEntry />
-          <Field label="Confirm password" value={confirmPassword} onChangeText={setConfirmPassword} placeholder="Enter it again" colors={colors} secureTextEntry />
+          <PasswordField
+            label="Password"
+            value={password}
+            onChangeText={setPassword}
+            placeholder="At least 6 characters"
+            colors={colors}
+            testID="sign-up-password"
+          />
+          <PasswordField
+            label="Confirm password"
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            placeholder="Enter it again"
+            colors={colors}
+            testID="sign-up-confirm-password"
+          />
           {error ? <ErrorBox message={error} colors={colors} /> : null}
           <Pressable
             accessibilityRole="button"
