@@ -66,7 +66,12 @@ async function saveCachedProduct(key: string, product: OpenFoodFactsProduct | nu
   }
 }
 
-function parseNutrition(product: Record<string, unknown>): OpenFoodFactsNutrition | undefined {
+function parseNutriScoreGrade(value: unknown) {
+  const grade = asString(value)?.toLowerCase();
+  return grade && /^[a-e]$/.test(grade) ? grade : undefined;
+}
+
+export function parseNutrition(product: Record<string, unknown>): OpenFoodFactsNutrition | undefined {
   const nutriments = isRecord(product.nutriments) ? product.nutriments : {};
   const sodiumGrams = firstNumber(nutriments, 'sodium_100g', 'sodium_100');
   const potassiumGrams = firstNumber(nutriments, 'potassium_100g', 'potassium_100');
@@ -80,7 +85,7 @@ function parseNutrition(product: Record<string, unknown>): OpenFoodFactsNutritio
     fat100g: firstNumber(nutriments, 'fat_100g'),
     energyKcal100g: firstNumber(nutriments, 'energy-kcal_100g', 'energy_kcal_100g'),
     potassium100g: potassiumGrams === undefined ? undefined : potassiumGrams * 1000,
-    nutriScoreGrade: asString(product.nutriscore_grade) ?? asString(nutriments.nutriscore_grade),
+    nutriScoreGrade: parseNutriScoreGrade(product.nutriscore_grade) ?? parseNutriScoreGrade(nutriments.nutriscore_grade),
     novaGroup: firstNumber(product, 'nova_group'),
   };
 
