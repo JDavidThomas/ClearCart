@@ -98,8 +98,15 @@ function SupabaseDebugBanner() {
     };
 
     void runDiagnostics();
+    const { data: authSubscription } = supabase.auth.onAuthStateChange(() => {
+      setTimeout(() => {
+        void runDiagnostics();
+      }, 0);
+    });
+
     return () => {
       mounted = false;
+      authSubscription.subscription.unsubscribe();
     };
   }, []);
 
