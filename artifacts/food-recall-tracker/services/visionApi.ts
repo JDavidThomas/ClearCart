@@ -76,19 +76,35 @@ const SUSPICIOUS_END_WORDS = new Set([
   'value',
 ]);
 const RECOVERY_IDENTIFICATION_PROMPT =
-  "Look carefully at the entire image a second time. Read any visible package text, shelf labels, handwritten signs, price tags, or other scene context. Identify the most likely food item or complete product name that is visibly present. Pay special attention to unbranded produce and simple foods: if the image shows a tomato, return 'tomato'; if it shows another single food, return that specific food. For a packaged product, combine the visible brand and product type when readable. Return the same structured JSON fields. Use sourceOfIdentification 'sign' when a sign or shelf label supplies the product name. Return productName 'unknown' and an empty contextText only if the image does not contain an identifiable food or useful text.";
+  'Scan the image again at maximum readable detail. Prioritize package text, the brand name, product type, flavor, and the nutrition panel. Also read any shelf sign or price tag that could identify the product. Return only the scanner JSON object requested above. Copy what is visible; never guess. Use "unknown" for unreadable fields.';
 const IDENTIFICATION_RESPONSE_SCHEMA = {
   type: 'OBJECT',
   properties: {
-    productName: { type: 'STRING' },
+    brand: { type: 'STRING' },
+    productType: { type: 'STRING' },
+    flavor: { type: 'STRING' },
+    nutrition: {
+      type: 'OBJECT',
+      additionalProperties: { type: 'STRING' },
+    },
+    fullName: { type: 'STRING' },
     contextText: { type: 'STRING' },
     confidence: { type: 'STRING', enum: ['high', 'medium', 'low'] },
     sourceOfIdentification: { type: 'STRING', enum: ['product', 'sign', 'unknown'] },
   },
-  required: ['productName', 'contextText', 'confidence', 'sourceOfIdentification'],
+  required: [
+    'brand',
+    'productType',
+    'flavor',
+    'nutrition',
+    'fullName',
+    'contextText',
+    'confidence',
+    'sourceOfIdentification',
+  ],
 } as const;
 const STRICT_IDENTIFICATION_PROMPT =
-  "Read the ENTIRE image, not only the package. Identify the complete food product name using the product itself and any surrounding scene text such as shelf signs, handwritten signs, shelf labels, price tags, or other visible context. Include every readable brand and product word; combine words across line breaks. For unbranded produce, return the specific produce type. If a sign identifies the food, use that sign context even when the product itself is not packaged. Return only the requested JSON object. Use productName 'unknown' when the product cannot be identified confidently. Copy any useful visible sign, shelf-label, or price-tag text into contextText, otherwise use an empty string. Set sourceOfIdentification to 'product' when the item/package supplies the name, 'sign' when surrounding text supplies it, and 'unknown' when neither does.";
+  'Act like a barcode scanner and package label reader. Read the ENTIRE image at maximum detail, especially the brand name, product type, flavor or variety, and the nutrition panel on the package. Return only valid JSON with exactly these fields: brand, productType, flavor, nutrition, fullName, contextText, confidence, and sourceOfIdentification. brand is the visible brand name, such as "Oreo". productType is the product type, such as "Sandwich Cookies". flavor is any visible flavor or variety, such as "Deep Fried". nutrition is a dictionary of exact per-serving nutrition facts visible on the package front or nutrition panel, preserving values and units (for example calories, saturated fat, and added sugar). fullName must combine the readable brand, product type, and flavor into one searchable string. contextText must copy useful visible shelf signs, price tags, or other surrounding product text. For every field you cannot read, return the string "unknown"; use {"unknown":"unknown"} when no nutrition facts are readable. Never guess, fill gaps from product knowledge, or silently omit a field. Set sourceOfIdentification to "product" when the package supplies the name, "sign" when surrounding text supplies it, and "unknown" when neither does. Set confidence to high, medium, or low.';
 
 interface GeminiResponse {
   candidates?: Array<{
@@ -102,10 +118,40 @@ export type IdentificationConfidence = 'high' | 'medium' | 'low';
 export type IdentificationSource = 'product' | 'sign' | 'unknown';
 
 export interface FoodIdentification {
+  brand: string;
+  productType: string;
+  flavor: string;
+  nutrition: Record<string, string>;
+  fullName: string;
   productName: string | null;
   contextText: string;
   confidence: IdentificationConfidence;
   sourceOfIdentification: IdentificationSource;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function cleanScannerField(value: unknown): string {
+  if (typeof value !== 'string') return 'unknown';
+  const normalized = value
+    .replace(/^```(?:json)?/i, '')
+    .replace(/```$/i, '')
+    .trim()
+    .replace(/^["']|["']$/g, '')
+    .replace(/\s+/g, ' ');
+  return normalized || 'unknown';
+}
+
+function cleanNutrition(value: unknown): Record<string, string> {
+  if (!isRecord(value)) return { unknown: 'unknown' };
+
+  const entries = Object.entries(value)
+    .map(([key, item]) => [key.trim(), cleanScannerField(item)] as const)
+    .filter(([key, item]) => key && item !== 'unknown');
+
+  return entries.length > 0 ? Object.fromEntries(entries) : { unknown: 'unknown' };
 }
 
 function cleanProductName(value: unknown): string | null {
@@ -175,13 +221,23 @@ function parseIdentification(text: string): FoodIdentification {
   for (const candidate of candidates) {
     try {
       const parsed = JSON.parse(candidate) as {
-        productName?: unknown;
+        brand?: unknown;
+        productType?: unknown;
+        flavor?: unknown;
+        nutrition?: unknown;
+        fullName?: unknown;
         contextText?: unknown;
         confidence?: unknown;
         sourceOfIdentification?: unknown;
       };
+      const fullName = cleanScannerField(parsed.fullName);
       return {
-        productName: cleanProductName(parsed.productName),
+        brand: cleanScannerField(parsed.brand),
+        productType: cleanScannerField(parsed.productType),
+        flavor: cleanScannerField(parsed.flavor),
+        nutrition: cleanNutrition(parsed.nutrition),
+        fullName,
+        productName: cleanProductName(fullName),
         contextText: cleanContextText(parsed.contextText),
         confidence: cleanConfidence(parsed.confidence),
         sourceOfIdentification: cleanIdentificationSource(parsed.sourceOfIdentification),
@@ -192,6 +248,11 @@ function parseIdentification(text: string): FoodIdentification {
   }
 
   return {
+    brand: 'unknown',
+    productType: 'unknown',
+    flavor: 'unknown',
+    nutrition: { unknown: 'unknown' },
+    fullName: cleanScannerField(trimmed),
     productName: cleanProductName(trimmed),
     contextText: '',
     confidence: 'medium',
@@ -288,21 +349,22 @@ async function identifyWithPrompt(
         continue;
       }
 
-       const parsedIdentification = parseIdentification(text);
-       identification = parsedIdentification;
-       if (parsedIdentification.productName) {
-         if (isPossiblyTruncatedProductName(parsedIdentification.productName)) {
-           suspiciousCandidate = parsedIdentification.productName;
-           suspiciousIdentification = parsedIdentification;
+      console.info('[Gemini] photo scanner JSON response', text);
+      const parsedIdentification = parseIdentification(text);
+      identification = parsedIdentification;
+      if (parsedIdentification.productName) {
+        if (isPossiblyTruncatedProductName(parsedIdentification.productName)) {
+          suspiciousCandidate = parsedIdentification.productName;
+          suspiciousIdentification = parsedIdentification;
           receivedIdentificationResponse = true;
           continue;
         }
-         return { identification: parsedIdentification, suspiciousCandidate, suspiciousIdentification, receivedIdentificationResponse: true, lastError };
+        return { identification: parsedIdentification, suspiciousCandidate, suspiciousIdentification, receivedIdentificationResponse: true, lastError };
       }
       receivedIdentificationResponse = true;
-       if (parsedIdentification.contextText) {
-         return { identification: parsedIdentification, suspiciousCandidate, suspiciousIdentification, receivedIdentificationResponse: true, lastError };
-       }
+      if (parsedIdentification.contextText) {
+        return { identification: parsedIdentification, suspiciousCandidate, suspiciousIdentification, receivedIdentificationResponse: true, lastError };
+      }
     } catch (error) {
       lastError = error;
     }
@@ -334,6 +396,11 @@ export async function identifyFoodFromImage(imageBase64: string, mimeType = 'ima
       return { ...primaryAttempt.suspiciousIdentification, productName: primaryAttempt.suspiciousCandidate };
     }
     return {
+      brand: 'unknown',
+      productType: 'unknown',
+      flavor: 'unknown',
+      nutrition: { unknown: 'unknown' },
+      fullName: 'unknown',
       productName: null,
       contextText: '',
       confidence: 'low',

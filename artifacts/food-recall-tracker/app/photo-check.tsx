@@ -33,14 +33,10 @@ import { searchFoodRecalls } from '@/services/recallApi';
 import type { RecallSearchResult } from '@/types/recall';
 
 type PhotoState = 'ready' | 'identifying' | 'checking' | 'confirming' | 'verdict' | 'error';
-const MAX_PHOTO_WIDTH = 1024;
+const GEMINI_IMAGE_LONGEST_SIDE = 1568;
 
-interface PhotoVerdict {
-  productName: string | null;
+interface PhotoVerdict extends FoodIdentification {
   recallResult: RecallSearchResult | null;
-  contextText: string;
-  confidence: FoodIdentification['confidence'];
-  sourceOfIdentification: FoodIdentification['sourceOfIdentification'];
 }
 
 export default function PhotoCheckScreen() {
@@ -71,24 +67,26 @@ export default function PhotoCheckScreen() {
   };
 
   const processAsset = async (asset: ImagePicker.ImagePickerAsset) => {
-    const targetWidth = Math.min(asset.width || MAX_PHOTO_WIDTH, MAX_PHOTO_WIDTH);
-    // Keep the original camera result as a URI. Resize and compress it before
-    // asking the native image module to create a base64 string.
-    const compressedImage = await ImageManipulator.manipulateAsync(
-      asset.uri,
-      asset.width > MAX_PHOTO_WIDTH ? [{ resize: { width: targetWidth } }] : [],
-      {
-        compress: 0.5,
-        format: ImageManipulator.SaveFormat.JPEG,
-        base64: false,
-      },
-    );
-
+    const sourceWidth = asset.width || GEMINI_IMAGE_LONGEST_SIDE;
+    const sourceHeight = asset.height || GEMINI_IMAGE_LONGEST_SIDE;
+    const resizeAction =
+      Math.max(sourceWidth, sourceHeight) === GEMINI_IMAGE_LONGEST_SIDE
+        ? []
+        : [
+            {
+              resize:
+                sourceWidth >= sourceHeight
+                  ? { width: GEMINI_IMAGE_LONGEST_SIDE }
+                  : { height: GEMINI_IMAGE_LONGEST_SIDE },
+            },
+          ];
+    // Keep enough pixels for small package text. The target is applied in both
+    // directions so smaller gallery images are upscaled rather than sent blurry.
     const encodedImage = await ImageManipulator.manipulateAsync(
-      compressedImage.uri,
-      [],
+      asset.uri,
+      resizeAction,
       {
-        compress: 1,
+        compress: 0.9,
         format: ImageManipulator.SaveFormat.JPEG,
         base64: true,
       },
@@ -100,12 +98,12 @@ export default function PhotoCheckScreen() {
     setPhotoState('identifying');
 
     const identification = await identifyFoodFromImage(encodedImage.base64, 'image/jpeg');
-    console.info('[Gemini] photo identification result', identification);
-    const identifiedProductName = identification.productName;
+    console.info('[Gemini] normalized photo scanner JSON', JSON.stringify(identification, null, 2));
+    const identifiedProductName = isUsableProductName(identification.fullName)
+      ? identification.fullName
+      : null;
     const contextSearchTerm = identification.contextText.trim();
-    const searchTerm = isUsableProductName(identifiedProductName)
-      ? identifiedProductName
-      : contextSearchTerm || null;
+    const searchTerm = identifiedProductName || contextSearchTerm || null;
 
     if (!searchTerm) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -154,7 +152,7 @@ export default function PhotoCheckScreen() {
       const result = await ImagePicker.launchCameraAsync({
         base64: false,
         mediaTypes: ['images'],
-        quality: 0.65,
+        quality: 1,
       });
       if (result.canceled) return;
       const asset = result.assets[0];
@@ -183,7 +181,7 @@ export default function PhotoCheckScreen() {
       const result = await ImagePicker.launchImageLibraryAsync({
         base64: false,
         mediaTypes: ['images'],
-        quality: 0.65,
+        quality: 1,
       });
       if (result.canceled) return;
       const asset = result.assets[0];
@@ -299,7 +297,7 @@ export default function PhotoCheckScreen() {
             </Text>
             <Text style={[styles.feedbackBody, { color: colors.mutedForeground }]}>
               {photoState === 'identifying'
-                ? 'Sending the compressed photo securely for identification.'
+                ? 'Sending a high-resolution photo securely for identification.'
                 : 'Searching current FDA food and drug recall records.'}
             </Text>
           </View>
@@ -592,7 +590,7 @@ function PhotoSuggestionView({
         <View style={[styles.verdictIcon, { backgroundColor: colors.warning }]}>
           <Feather name="help-circle" size={25} color={colors.primaryForeground} />
         </View>
-        <Text style={[styles.verdictTitle, { color: colors.foreground }]}>We couldn't quite make that out</Text>
+        <Text style={[styles.verdictTitle, { color: colors.foreground }]}>Let&apos;s try that again</Text>
         <Text style={[styles.verdictBody, { color: colors.mutedForeground }]}>
           Some photos are hard for the AI to read. Here are a few tips that usually help:
         </Text>

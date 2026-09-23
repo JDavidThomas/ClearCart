@@ -7,3 +7,4 @@
 - [Supabase storage bucket casing](supabase-storage-bucket-casing.md) — storage bucket IDs must match byte-for-byte in client paths and storage.objects policies.
 - [Supabase publishable keys](supabase-publishable-key.md) — current supabase-js accepts sb_publishable keys; profile failures should be diagnosed separately from key format.
 - [Native TypeScript tests](native-ts-tests.md) — pure Expo service tests can use Node’s native TypeScript runner without adding a test framework or runtime dependency.
+- [Expo static build port conflict](expo-static-build-port.md) — the static build script can collide with the mockup server on port 8081; use the managed workflow for runtime verification.
