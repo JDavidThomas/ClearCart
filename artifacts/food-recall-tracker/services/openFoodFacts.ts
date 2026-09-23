@@ -4,6 +4,11 @@ import type { OpenFoodFactsNutrition, OpenFoodFactsProduct } from '@/types/recal
 const OPEN_FOOD_FACTS_PRODUCT_URL = 'https://world.openfoodfacts.org/api/v2/product/';
 const OPEN_FOOD_FACTS_SEARCH_URL = 'https://world.openfoodfacts.org/cgi/search.pl';
 const CACHE_PREFIX = '@food-recall-tracker/open-food-facts/';
+const OPEN_FOOD_FACTS_USER_AGENT = 'Grocer Guard/1.0 (contact@grocerguard.app)';
+const OPEN_FOOD_FACTS_HEADERS = {
+  'User-Agent': OPEN_FOOD_FACTS_USER_AGENT,
+  'X-User-Agent': OPEN_FOOD_FACTS_USER_AGENT,
+};
 
 interface OpenFoodFactsPayload {
   status?: number;
@@ -100,7 +105,7 @@ function parseAllergens(product: Record<string, unknown>) {
     : undefined;
 }
 
-function parseProduct(product: Record<string, unknown>, fallbackBarcode: string) {
+function parseProduct(product: Record<string, unknown>, fallbackBarcode: string): OpenFoodFactsProduct | null {
   const name = asString(product.product_name) ?? asString(product.product_name_en);
   if (!name) return null;
 
@@ -116,26 +121,57 @@ function parseProduct(product: Record<string, unknown>, fallbackBarcode: string)
 }
 
 async function fetchProductByBarcode(barcode: string) {
-  const response = await fetch(`${OPEN_FOOD_FACTS_PRODUCT_URL}${encodeURIComponent(barcode)}.json`);
+  const response = await fetch(`${OPEN_FOOD_FACTS_PRODUCT_URL}${encodeURIComponent(barcode)}.json`, {
+    headers: OPEN_FOOD_FACTS_HEADERS,
+  });
   if (!response.ok) throw new Error('The product database is unavailable right now.');
   const payload = (await response.json()) as OpenFoodFactsPayload;
   return payload.status === 1 && payload.product ? parseProduct(payload.product, barcode) : null;
 }
 
-async function fetchProductByName(name: string) {
+async function fetchProductsBySearchTerm(name: string) {
   const params = new URLSearchParams({
     search_terms: name,
     search_simple: '1',
     action: 'process',
     json: '1',
-    page_size: '1',
+    page_size: '5',
     fields: 'code,product_name,product_name_en,brands,ingredients_text,ingredients_text_en,allergens,allergens_tags,nutriments,nutriscore_grade,nova_group',
   });
-  const response = await fetch(`${OPEN_FOOD_FACTS_SEARCH_URL}?${params.toString()}`);
+  const response = await fetch(`${OPEN_FOOD_FACTS_SEARCH_URL}?${params.toString()}`, {
+    headers: OPEN_FOOD_FACTS_HEADERS,
+  });
   if (!response.ok) throw new Error('The product database is unavailable right now.');
   const payload = (await response.json()) as OpenFoodFactsSearchPayload;
-  const product = payload.products?.find(isRecord);
-  return product ? parseProduct(product, '') : null;
+  return (payload.products ?? [])
+    .filter(isRecord)
+    .map((product) => parseProduct(product, ''))
+    .filter((product): product is OpenFoodFactsProduct => Boolean(product));
+}
+
+function normalizedWords(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .split(' ')
+    .filter(Boolean);
+}
+
+function scoreProduct(product: OpenFoodFactsProduct, targetName: string, brand: string) {
+  const targetWords = new Set(normalizedWords(targetName));
+  const productWords = new Set(normalizedWords(product.name));
+  const brandWords = normalizedWords(brand);
+  const productBrandWords = new Set(normalizedWords(product.brand));
+  const nameOverlap = [...targetWords].filter((word) => productWords.has(word)).length;
+  const brandOverlap = brandWords.filter((word) => productBrandWords.has(word)).length;
+  const exactName = product.name.toLowerCase() === targetName.toLowerCase() ? 100 : 0;
+  return exactName + nameOverlap * 4 + brandOverlap * 8;
+}
+
+function selectClosestProduct(products: OpenFoodFactsProduct[], targetName: string, brand: string) {
+  return [...products].sort(
+    (left, right) => scoreProduct(right, targetName, brand) - scoreProduct(left, targetName, brand),
+  )[0] ?? null;
 }
 
 export async function lookupOpenFoodFactsProduct(barcode: string): Promise<OpenFoodFactsProduct | null> {
@@ -149,13 +185,34 @@ export async function lookupOpenFoodFactsProduct(barcode: string): Promise<OpenF
   return product;
 }
 
-export async function searchOpenFoodFactsProduct(name: string): Promise<OpenFoodFactsProduct | null> {
+export async function searchOpenFoodFactsProduct(
+  name: string,
+  brand = '',
+  barcode = '',
+): Promise<OpenFoodFactsProduct | null> {
   const normalizedName = name.trim();
   if (!normalizedName) return null;
-  const key = cacheKey('name', normalizedName);
+  const normalizedBrand = /^(unknown|unclear|none|null)$/i.test(brand.trim()) ? '' : brand.trim();
+  const normalizedBarcode = barcode.trim();
+  if (normalizedBarcode) {
+    try {
+      const barcodeProduct = await lookupOpenFoodFactsProduct(normalizedBarcode);
+      if (barcodeProduct) return barcodeProduct;
+    } catch {
+      // A barcode miss or temporary barcode failure should not block brand search.
+    }
+  }
+
+  const searchTerm = normalizedBrand || normalizedName;
+  const key = cacheKey('name', `${searchTerm}|${normalizedName}`);
   const cached = await readCachedProduct(key);
   if (cached.hit) return cached.product;
-  const product = await fetchProductByName(normalizedName);
+
+  let products = await fetchProductsBySearchTerm(searchTerm);
+  if (products.length === 0 && searchTerm.toLowerCase() !== normalizedName.toLowerCase()) {
+    products = await fetchProductsBySearchTerm(normalizedName);
+  }
+  const product = selectClosestProduct(products, normalizedName, normalizedBrand);
   await saveCachedProduct(key, product);
   return product;
 }

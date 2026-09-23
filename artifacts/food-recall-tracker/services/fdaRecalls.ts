@@ -33,6 +33,11 @@ interface OpenFdaResponse {
   results?: OpenFdaRecord[];
 }
 
+export interface FdaRecallSearchOptions {
+  brand?: string;
+  productType?: string;
+}
+
 function valueOrFallback(value: unknown, fallback: string) {
   return typeof value === 'string' && value.trim() ? value.trim() : fallback;
 }
@@ -75,7 +80,7 @@ async function searchEndpoint(endpoint: string, search: string) {
   const timeoutId = setTimeout(() => controller.abort(), OPENFDA_REQUEST_TIMEOUT_MS);
 
   try {
-    const encodedParams = params.toString().replace(/\*/g, '%2A');
+    const encodedParams = params.toString().replace(/\+/g, '%20').replace(/\*/g, '%2A');
     const response = await fetch(`${endpoint}?${encodedParams}`, {
       signal: controller.signal,
     });
@@ -115,7 +120,7 @@ async function searchOpenFda(search: string) {
     )
     .flatMap((result) => result.value);
 
-  if (successfulResults.length > 0) {
+  if (responses.some((result) => result.status === 'fulfilled')) {
     return successfulResults;
   }
 
@@ -140,30 +145,68 @@ function deduplicateRecalls(records: OpenFdaRecord[]) {
     });
 }
 
-export async function searchFdaRecalls(term: string): Promise<FoodRecall[]> {
+function buildSearchTerms(term: string, options: FdaRecallSearchOptions) {
   const normalizedTerm = cleanRecallSearchTerm(term);
   if (!normalizedTerm) return [];
+  const optionalTerm = (value: string | undefined) => {
+    const normalized = value ? cleanRecallSearchTerm(value) : '';
+    return /^(unknown|unclear|none|null)$/i.test(normalized) ? '' : normalized;
+  };
 
-  const primaryQuery = buildOpenFdaSearchQuery(normalizedTerm);
-  let results = await searchOpenFda(primaryQuery);
-  const produceItem = getProduceItem(normalizedTerm);
+  const terms = [
+    normalizedTerm,
+    optionalTerm(options.brand),
+    optionalTerm(options.productType),
+  ];
+  const knownProductType = normalizedTerm
+    .split(' ')
+    .find((word) =>
+      /^(?:cookie|cookies|cereal|soda|cola|cracker|crackers|chips|candy|chocolate|yogurt|milk|juice|bread|soup|cheese|drink|beverage)$/i.test(
+        word,
+      ),
+    );
+  if (knownProductType) terms.push(knownProductType);
+  return [...new Set(terms.filter(Boolean))];
+}
 
-  if (produceItem) {
+export async function searchFdaRecalls(
+  term: string,
+  options: FdaRecallSearchOptions = {},
+): Promise<FoodRecall[]> {
+  const searchTerms = buildSearchTerms(term, options);
+  if (searchTerms.length === 0) return [];
+
+  let successfulSearch = false;
+  let lastError: unknown = null;
+  for (const searchTerm of searchTerms) {
     try {
-      const strictResults = await searchOpenFda(`product_description:${produceItem}*`);
-      results = [...strictResults, ...results];
-    } catch {
-      // The broad query remains sufficient if openFDA rejects the prefix query.
+      const query = buildOpenFdaSearchQuery(searchTerm);
+      const results = await searchOpenFda(query);
+      successfulSearch = true;
+      const produceItem = getProduceItem(searchTerm);
+      let rankedResults = results;
+
+      if (produceItem) {
+        try {
+          const strictResults = await searchOpenFda(`product_description:${produceItem}*`);
+          rankedResults = [...strictResults, ...rankedResults];
+        } catch {
+          // The broad query remains sufficient if openFDA rejects the prefix query.
+        }
+      }
+
+      const relevantResults = rankAndFilterRecalls(
+        deduplicateRecalls(rankedResults),
+        searchTerm,
+      );
+      if (relevantResults.length > 0) return relevantResults;
+    } catch (error) {
+      lastError = error;
     }
   }
 
-  if (results.length === 0) {
-    const firstWord = normalizedTerm.split(' ')[0];
-    const fallbackQuery = buildOpenFdaSearchQuery(firstWord);
-    if (fallbackQuery && fallbackQuery !== primaryQuery) {
-      results = await searchOpenFda(fallbackQuery);
-    }
+  if (!successfulSearch && lastError) {
+    throw lastError;
   }
-
-  return rankAndFilterRecalls(deduplicateRecalls(results), normalizedTerm);
+  return [];
 }

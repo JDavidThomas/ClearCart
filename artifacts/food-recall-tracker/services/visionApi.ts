@@ -78,7 +78,7 @@ const SUSPICIOUS_END_WORDS = new Set([
 const RECOVERY_IDENTIFICATION_PROMPT =
   'Scan the image again at maximum readable detail. Prioritize package text, the brand name, product type, flavor, and the nutrition panel. Also read any shelf sign or price tag that could identify the product. Return only the scanner JSON object requested above. Copy what is visible; never guess. Use "unknown" for unreadable fields.';
 const STRICT_IDENTIFICATION_PROMPT =
-  'Act like a barcode scanner and package label reader. Read the ENTIRE image at maximum detail, especially the brand name, product type, flavor or variety, and the nutrition panel on the package. Return only valid JSON with exactly these fields: brand, productType, flavor, nutrition, fullName, contextText, confidence, and sourceOfIdentification. brand is the visible brand name, such as "Oreo". productType is the product type, such as "Sandwich Cookies". flavor is any visible flavor or variety, such as "Deep Fried". nutrition is a dictionary of exact per-serving nutrition facts visible on the package front or nutrition panel, preserving values and units (for example calories, saturated fat, and added sugar). fullName must combine the readable brand, product type, and flavor into one searchable string. contextText must copy useful visible shelf signs, price tags, or other surrounding product text. For every field you cannot read, return the string "unknown"; use {"unknown":"unknown"} when no nutrition facts are readable. Never guess, fill gaps from product knowledge, or silently omit a field. Set sourceOfIdentification to "product" when the package supplies the name, "sign" when surrounding text supplies it, and "unknown" when neither does. Set confidence to high, medium, or low.';
+  'Act like a barcode scanner and package label reader. Read the ENTIRE image at maximum detail, especially the brand name, product type, flavor or variety, the UPC/EAN barcode, and the nutrition panel on the package. Return only valid JSON with exactly these fields: brand, productType, flavor, barcode, nutrition, fullName, contextText, confidence, and sourceOfIdentification. brand is the visible brand name, such as "Oreo". productType is the product type, such as "Sandwich Cookies". flavor is any visible flavor or variety, such as "Deep Fried". barcode is the complete visible UPC or EAN digits with no spaces or punctuation, or "unknown" when unreadable. nutrition is a dictionary of exact per-serving nutrition facts visible on the package front or nutrition panel, preserving values and units (for example calories, saturated fat, and added sugar). fullName must combine the readable brand, product type, and flavor into one searchable string. contextText must copy useful visible shelf signs, price tags, or other surrounding product text. For every field you cannot read, return the string "unknown"; use {"unknown":"unknown"} when no nutrition facts are readable. Never guess, fill gaps from product knowledge, or silently omit a field. Set sourceOfIdentification to "product" when the package supplies the name, "sign" when surrounding text supplies it, and "unknown" when neither does. Set confidence to high, medium, or low.';
 
 interface GeminiResponse {
   candidates?: Array<{
@@ -97,6 +97,7 @@ export interface FoodIdentification {
   brand: string;
   productType: string;
   flavor: string;
+  barcode: string | null;
   nutrition: Record<string, string>;
   fullName: string;
   productName: string | null;
@@ -141,6 +142,12 @@ function cleanProductName(value: unknown): string | null {
     .replace(/\s+/g, ' ');
 
   return isUsableProductName(normalized) ? normalized : null;
+}
+
+function cleanBarcode(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const digits = value.replace(/\D/g, '');
+  return /^\d{8,14}$/.test(digits) ? digits : null;
 }
 
 function cleanContextText(value: unknown): string {
@@ -200,6 +207,7 @@ function parseIdentification(text: string): FoodIdentification {
         brand?: unknown;
         productType?: unknown;
         flavor?: unknown;
+        barcode?: unknown;
         nutrition?: unknown;
         fullName?: unknown;
         contextText?: unknown;
@@ -211,6 +219,7 @@ function parseIdentification(text: string): FoodIdentification {
         brand: cleanScannerField(parsed.brand),
         productType: cleanScannerField(parsed.productType),
         flavor: cleanScannerField(parsed.flavor),
+        barcode: cleanBarcode(parsed.barcode),
         nutrition: cleanNutrition(parsed.nutrition),
         fullName,
         productName: cleanProductName(fullName),
@@ -227,6 +236,7 @@ function parseIdentification(text: string): FoodIdentification {
     brand: 'unknown',
     productType: 'unknown',
     flavor: 'unknown',
+    barcode: null,
     nutrition: { unknown: 'unknown' },
     fullName: cleanScannerField(trimmed),
     productName: cleanProductName(trimmed),
@@ -285,7 +295,7 @@ async function fetchGemini(
   const timeout = new Promise<never>((_, reject) => {
     timeoutId = setTimeout(() => {
       controller.abort();
-      console.error('[Gemini] photo request timed out', {
+      console.info('[Gemini] photo request timed out', {
         model,
         timeoutMs: GEMINI_REQUEST_TIMEOUT_MS,
         base64Characters: imageBase64.length,
@@ -328,7 +338,7 @@ async function identifyWithPrompt(
       if (!response.ok) {
         const responseBody = await response.text().catch(() => '');
         const detailedMessage = `Gemini ${model} returned HTTP ${response.status}: ${responseBody || 'empty error body'}`;
-        console.error('[Gemini] photo request failed', {
+        console.info('[Gemini] photo request failed', {
           model,
           status: response.status,
           statusText: response.statusText,
@@ -345,7 +355,7 @@ async function identifyWithPrompt(
       if (!text.trim()) {
         receivedIdentificationResponse = true;
         const finishReason = payload.candidates?.[0]?.finishReason ?? 'unknown';
-        console.error('[Gemini] photo response contained no text', {
+        console.info('[Gemini] photo response contained no text', {
           model,
           finishReason,
           usageMetadata: payload.usageMetadata,
@@ -373,7 +383,7 @@ async function identifyWithPrompt(
         return { identification: parsedIdentification, suspiciousCandidate, suspiciousIdentification, receivedIdentificationResponse: true, lastError };
       }
     } catch (error) {
-      console.error('[Gemini] photo request exception', {
+      console.info('[Gemini] photo request exception', {
         model,
         error: error instanceof Error ? error.message : String(error),
       });
@@ -410,6 +420,7 @@ export async function identifyFoodFromImage(imageBase64: string, mimeType = 'ima
       brand: 'unknown',
       productType: 'unknown',
       flavor: 'unknown',
+      barcode: null,
       nutrition: { unknown: 'unknown' },
       fullName: 'unknown',
       productName: null,

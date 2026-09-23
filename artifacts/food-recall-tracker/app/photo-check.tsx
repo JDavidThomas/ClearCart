@@ -84,7 +84,7 @@ export default function PhotoCheckScreen() {
     setPhotoState('verdict');
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-    void searchOpenFoodFactsProduct(productName)
+    void searchOpenFoodFactsProduct(productName, identification.brand, identification.barcode ?? '')
       .then((nutritionProduct) => {
         const resolvedProduct = nutritionProduct ?? fallbackNutritionProduct;
         const hasOpenFoodFactsNutrition = Boolean(nutritionProduct && hasNutritionData(nutritionProduct));
@@ -104,7 +104,7 @@ export default function PhotoCheckScreen() {
         });
       })
       .catch((error) => {
-        console.error('[Photo] Open Food Facts nutrition lookup failed', {
+        console.info('[Photo] Open Food Facts nutrition lookup failed', {
           productName,
           apiCallSucceeded: false,
           returnedNutritionData: false,
@@ -116,7 +116,10 @@ export default function PhotoCheckScreen() {
         });
       });
 
-    void searchFoodRecalls(productName)
+    void searchFoodRecalls(productName, {
+      brand: identification.brand,
+      productType: identification.productType,
+    })
       .then((recallResult) => {
         console.info('[Photo] FDA recall check', {
           productName,
@@ -127,7 +130,7 @@ export default function PhotoCheckScreen() {
         updateVerdict({ recallResult, recallCheckStatus: 'available' });
       })
       .catch((error) => {
-        console.error('[Photo] FDA recall check failed', {
+        console.info('[Photo] FDA recall check failed', {
           productName,
           apiCallSucceeded: false,
           returnedResults: false,

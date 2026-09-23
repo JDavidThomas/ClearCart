@@ -3,7 +3,7 @@ import type {
   FoodRecall,
   RecallSearchResult,
 } from '@/types/recall';
-import { searchFdaRecalls } from './fdaRecalls';
+import { searchFdaRecalls, type FdaRecallSearchOptions } from './fdaRecalls';
 import { buildOpenFdaSearchQuery, cleanRecallSearchTerm } from './recallSearch';
 import {
   getRecallRelevanceNotice,
@@ -141,7 +141,10 @@ async function saveSearch(term: string, value: CachedSearch) {
  * the most recent local result if the device is offline or the public API is
  * temporarily unavailable.
  */
-export async function searchFoodRecalls(term: string): Promise<RecallSearchResult> {
+export async function searchFoodRecalls(
+  term: string,
+  options: FdaRecallSearchOptions = {},
+): Promise<RecallSearchResult> {
   const normalizedTerm = cleanRecallSearchTerm(term);
   if (!normalizedTerm) {
     return { recalls: [], lastUpdated: new Date().toISOString(), fromCache: false };
@@ -152,7 +155,7 @@ export async function searchFoodRecalls(term: string): Promise<RecallSearchResul
     // FDA searches are intentionally direct so an unavailable Replit API server
     // cannot block the primary recall experience. USDA/FSIS can be added later
     // as an optional source without becoming a prerequisite for FDA results.
-    const recalls = await searchFdaRecalls(normalizedTerm);
+    const recalls = await searchFdaRecalls(normalizedTerm, options);
     const freshResult: CachedSearch = {
       recalls,
       lastUpdated: new Date().toISOString(),
