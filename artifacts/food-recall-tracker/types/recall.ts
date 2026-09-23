@@ -37,4 +37,20 @@ export interface OpenFoodFactsProduct {
   name: string;
   brand: string;
   ingredients?: string;
+  allergens?: string;
+  nutrition?: OpenFoodFactsNutrition;
+}
+
+export interface OpenFoodFactsNutrition {
+  sugars100g?: number;
+  sodium100g?: number;
+  saturatedFat100g?: number;
+  carbohydrates100g?: number;
+  fiber100g?: number;
+  proteins100g?: number;
+  fat100g?: number;
+  energyKcal100g?: number;
+  potassium100g?: number;
+  nutriScoreGrade?: string;
+  novaGroup?: number;
 }

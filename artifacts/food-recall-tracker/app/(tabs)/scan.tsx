@@ -352,7 +352,11 @@ function VerdictView({
           dataAvailable={Boolean(verdict.product?.ingredients)}
           colors={colors}
         />
-        <HealthDietInsights productText={`${productLabel} ${verdict.product?.ingredients ?? ''}`} colors={colors} />
+        <HealthDietInsights
+          productText={`${productLabel} ${verdict.product?.ingredients ?? ''}`}
+          product={verdict.product}
+          colors={colors}
+        />
         <ScanAgainButton colors={colors} onPress={onScanAgain} />
       </View>
     );
@@ -405,7 +409,11 @@ function VerdictView({
         dataAvailable={Boolean(verdict.product?.ingredients)}
         colors={colors}
       />
-      <HealthDietInsights productText={`${productLabel} ${verdict.product?.ingredients ?? ''}`} colors={colors} />
+      <HealthDietInsights
+        productText={`${productLabel} ${verdict.product?.ingredients ?? ''}`}
+        product={verdict.product}
+        colors={colors}
+      />
       <ScanAgainButton colors={colors} onPress={onScanAgain} />
     </View>
   );
