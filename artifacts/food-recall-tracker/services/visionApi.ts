@@ -1,4 +1,4 @@
-const GEMINI_REQUEST_TIMEOUT_MS = 30_000;
+const GEMINI_REQUEST_TIMEOUT_MS = 45_000;
 const GEMINI_MODELS = ['gemini-3.5-flash', 'gemini-3.7-flash', 'gemini-3.8-flash'] as const;
 const PHOTO_SERVICE_ERROR =
   'Photo identification service is temporarily unavailable. Please type the product name instead.';
@@ -77,32 +77,6 @@ const SUSPICIOUS_END_WORDS = new Set([
 ]);
 const RECOVERY_IDENTIFICATION_PROMPT =
   'Scan the image again at maximum readable detail. Prioritize package text, the brand name, product type, flavor, and the nutrition panel. Also read any shelf sign or price tag that could identify the product. Return only the scanner JSON object requested above. Copy what is visible; never guess. Use "unknown" for unreadable fields.';
-const IDENTIFICATION_RESPONSE_SCHEMA = {
-  type: 'OBJECT',
-  properties: {
-    brand: { type: 'STRING' },
-    productType: { type: 'STRING' },
-    flavor: { type: 'STRING' },
-    nutrition: {
-      type: 'OBJECT',
-      additionalProperties: { type: 'STRING' },
-    },
-    fullName: { type: 'STRING' },
-    contextText: { type: 'STRING' },
-    confidence: { type: 'STRING', enum: ['high', 'medium', 'low'] },
-    sourceOfIdentification: { type: 'STRING', enum: ['product', 'sign', 'unknown'] },
-  },
-  required: [
-    'brand',
-    'productType',
-    'flavor',
-    'nutrition',
-    'fullName',
-    'contextText',
-    'confidence',
-    'sourceOfIdentification',
-  ],
-} as const;
 const STRICT_IDENTIFICATION_PROMPT =
   'Act like a barcode scanner and package label reader. Read the ENTIRE image at maximum detail, especially the brand name, product type, flavor or variety, and the nutrition panel on the package. Return only valid JSON with exactly these fields: brand, productType, flavor, nutrition, fullName, contextText, confidence, and sourceOfIdentification. brand is the visible brand name, such as "Oreo". productType is the product type, such as "Sandwich Cookies". flavor is any visible flavor or variety, such as "Deep Fried". nutrition is a dictionary of exact per-serving nutrition facts visible on the package front or nutrition panel, preserving values and units (for example calories, saturated fat, and added sugar). fullName must combine the readable brand, product type, and flavor into one searchable string. contextText must copy useful visible shelf signs, price tags, or other surrounding product text. For every field you cannot read, return the string "unknown"; use {"unknown":"unknown"} when no nutrition facts are readable. Never guess, fill gaps from product knowledge, or silently omit a field. Set sourceOfIdentification to "product" when the package supplies the name, "sign" when surrounding text supplies it, and "unknown" when neither does. Set confidence to high, medium, or low.';
 
@@ -111,7 +85,9 @@ interface GeminiResponse {
     content?: {
       parts?: Array<{ text?: string }>;
     };
+    finishReason?: string;
   }>;
+  usageMetadata?: Record<string, unknown>;
 }
 
 export type IdentificationConfidence = 'high' | 'medium' | 'low';
@@ -269,6 +245,17 @@ async function fetchGemini(
 ) {
   const controller = new AbortController();
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const estimatedImageBytes = Math.floor((imageBase64.length * 3) / 4);
+  console.info('[Gemini] photo request', {
+    model,
+    mimeType,
+    base64Characters: imageBase64.length,
+    estimatedImageBytes,
+    estimatedImageMegabytes: Number((estimatedImageBytes / 1024 / 1024).toFixed(2)),
+    responseMode: 'application/json',
+    responseSchema: false,
+    timeoutMs: GEMINI_REQUEST_TIMEOUT_MS,
+  });
   const request = fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
     {
@@ -288,9 +275,8 @@ async function fetchGemini(
         ],
         generationConfig: {
           temperature: 0,
-          maxOutputTokens: 256,
+          maxOutputTokens: 8192,
           responseMimeType: 'application/json',
-          responseSchema: IDENTIFICATION_RESPONSE_SCHEMA,
         },
       }),
     },
@@ -299,6 +285,12 @@ async function fetchGemini(
   const timeout = new Promise<never>((_, reject) => {
     timeoutId = setTimeout(() => {
       controller.abort();
+      console.error('[Gemini] photo request timed out', {
+        model,
+        timeoutMs: GEMINI_REQUEST_TIMEOUT_MS,
+        base64Characters: imageBase64.length,
+        estimatedImageBytes,
+      });
       reject(new Error('GEMINI_TIMEOUT'));
     }, GEMINI_REQUEST_TIMEOUT_MS);
   });
@@ -335,7 +327,14 @@ async function identifyWithPrompt(
       const response = await fetchGemini(model, apiKey, imageBase64, mimeType, prompt);
       if (!response.ok) {
         const responseBody = await response.text().catch(() => '');
-        lastError = new Error(`Gemini ${model} returned HTTP ${response.status}: ${responseBody.slice(0, 160)}`);
+        const detailedMessage = `Gemini ${model} returned HTTP ${response.status}: ${responseBody || 'empty error body'}`;
+        console.error('[Gemini] photo request failed', {
+          model,
+          status: response.status,
+          statusText: response.statusText,
+          body: responseBody || 'empty error body',
+        });
+        lastError = new Error(detailedMessage);
 
         if (response.status === 400 || response.status === 401 || response.status === 403) break;
         continue;
@@ -345,7 +344,15 @@ async function identifyWithPrompt(
       const text = payload.candidates?.[0]?.content?.parts?.map((part) => part.text ?? '').join('') ?? '';
       if (!text.trim()) {
         receivedIdentificationResponse = true;
-        lastError = new Error(`Gemini ${model} returned an empty response.`);
+        const finishReason = payload.candidates?.[0]?.finishReason ?? 'unknown';
+        console.error('[Gemini] photo response contained no text', {
+          model,
+          finishReason,
+          usageMetadata: payload.usageMetadata,
+        });
+        lastError = new Error(
+          `Gemini ${model} returned an empty response (finishReason=${finishReason}).`,
+        );
         continue;
       }
 
@@ -366,6 +373,10 @@ async function identifyWithPrompt(
         return { identification: parsedIdentification, suspiciousCandidate, suspiciousIdentification, receivedIdentificationResponse: true, lastError };
       }
     } catch (error) {
+      console.error('[Gemini] photo request exception', {
+        model,
+        error: error instanceof Error ? error.message : String(error),
+      });
       lastError = error;
     }
   }
@@ -410,6 +421,9 @@ export async function identifyFoodFromImage(imageBase64: string, mimeType = 'ima
 
   if (primaryAttempt.lastError instanceof Error && primaryAttempt.lastError.message === 'GEMINI_TIMEOUT') {
     throw new Error('Food photo identification timed out. Please try again.');
+  }
+  if (primaryAttempt.lastError instanceof Error && primaryAttempt.lastError.message.startsWith('Gemini ')) {
+    throw new Error(`Photo identification failed: ${primaryAttempt.lastError.message}`);
   }
   throw new Error(PHOTO_SERVICE_ERROR);
 }
