@@ -45,6 +45,7 @@ export const DIETARY_PREFERENCE_OPTIONS = [
 interface HealthDietInsightsProps {
   productText: string;
   product?: OpenFoodFactsProduct;
+  requireNutritionData?: boolean;
   colors?: ReturnType<typeof useColors>;
 }
 
@@ -77,6 +78,7 @@ function NutritionMeta({
 export function HealthDietInsights({
   productText,
   product,
+  requireNutritionData = false,
   colors: providedColors,
 }: HealthDietInsightsProps) {
   const fallbackColors = useColors();
@@ -158,6 +160,14 @@ export function HealthDietInsights({
   }
 
   const summary = profileSummary(profile);
+  const hasNutritionData = Boolean(
+    lookupProduct &&
+      (Object.values(lookupProduct.nutrition ?? {}).some((value) => value !== undefined) ||
+        lookupProduct.ingredients ||
+        lookupProduct.allergens),
+  );
+  if (requireNutritionData && !hasNutritionData) return null;
+
   const showGeneric = shouldUseGenericLabelCheck(lookupProduct, lookupFailed, evaluation);
   const nutrition = lookupProduct?.nutrition;
 
