@@ -174,6 +174,8 @@ export default function HomeScreen() {
             <View style={styles.scanActionRow}>
               <Pressable
                 accessibilityRole="button"
+                accessibilityHint="Open the camera to scan a UPC or EAN barcode and check the product."
+                accessibilityState={{ disabled: false }}
                 onPress={() => router.push('/scan')}
                 style={({ pressed }) => [
                   styles.scanButton,
