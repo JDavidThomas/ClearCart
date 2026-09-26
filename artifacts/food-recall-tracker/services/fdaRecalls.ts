@@ -47,7 +47,27 @@ interface OpenFdaRecord {
 }
 
 interface OpenFdaResponse {
-  results?: OpenFdaRecord[];
+  results?: unknown;
+  error?: unknown;
+}
+
+interface ProxyFdaRecord {
+  recallNumber?: string;
+  productDescription: string;
+  reasonForRecall: string;
+  recallingFirm: string;
+  recallDate: string;
+  classification: string;
+  status?: string;
+  officialUrl: string;
+}
+
+function isOpenFdaRecord(value: unknown): value is OpenFdaRecord {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isProxyFdaRecord(value: unknown): value is ProxyFdaRecord {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
 export interface FdaRecallSearchOptions {
@@ -156,13 +176,52 @@ async function searchEndpoint(endpoint: string, search: string) {
 
     try {
       const payload = JSON.parse(responseBody) as OpenFdaResponse;
+      if (Object.prototype.hasOwnProperty.call(payload, 'error')) {
+        console.error('[OpenFDA] error payload', {
+          url: safeRequestUrl,
+          status: response.status,
+          body: safeResponseBody,
+        });
+        throw new Error(`FDA API returned an error payload (HTTP ${response.status}).`);
+      }
+      if (!Array.isArray(payload.results)) {
+        console.warn('[OpenFDA] response results were not an array; treating as no results', {
+          url: safeRequestUrl,
+          status: response.status,
+          body: safeResponseBody,
+        });
+        return [];
+      }
+      const results = payload.results.filter(isOpenFdaRecord);
       console.info('[OpenFDA] response', {
         url: safeRequestUrl,
         status: response.status,
-        resultCount: payload.results?.length ?? 0,
+        resultCount: results.length,
       });
-      return payload.results ?? [];
+      return results;
     } catch {
+      if (
+        responseBody &&
+        response.ok &&
+        !responseBody.trim().startsWith('{') &&
+        !responseBody.trim().startsWith('[')
+      ) {
+        console.error('[OpenFDA] response was not valid JSON', {
+          url: safeRequestUrl,
+          status: response.status,
+          body: safeResponseBody,
+        });
+      }
+      if (responseBody && responseBody.trim().startsWith('{')) {
+        try {
+          const payload = JSON.parse(responseBody) as OpenFdaResponse;
+          if (Object.prototype.hasOwnProperty.call(payload, 'error')) {
+            throw new Error(`FDA API returned an error payload (HTTP ${response.status}).`);
+          }
+        } catch (error) {
+          if (error instanceof Error && error.message.startsWith('FDA API ')) throw error;
+        }
+      }
       console.error('[OpenFDA] response was not valid JSON', {
         url: safeRequestUrl,
         status: response.status,
@@ -223,16 +282,7 @@ function optionalSearchTerm(value: string | undefined) {
   return /^(unknown|unclear|none|null)$/i.test(normalized) ? '' : normalized;
 }
 
-function normalizeProxyRecord(record: {
-  recallNumber?: string;
-  productDescription: string;
-  reasonForRecall: string;
-  recallingFirm: string;
-  recallDate: string;
-  classification: string;
-  status?: string;
-  officialUrl: string;
-}): FoodRecall {
+function normalizeProxyRecord(record: ProxyFdaRecord): FoodRecall {
   return {
     ...record,
     source: 'FDA',
@@ -294,7 +344,25 @@ export async function searchFdaRecalls(
       search: proxySearch,
       limit: OPENFDA_RESULT_LIMIT,
     });
-    records.push(...proxyResponse.results.map(normalizeProxyRecord));
+    if (!proxyResponse || typeof proxyResponse !== 'object') {
+      throw new Error('FDA proxy returned an invalid response.');
+    }
+    const proxyPayload = proxyResponse as unknown as {
+      error?: unknown;
+      results?: unknown;
+    };
+    if (Object.prototype.hasOwnProperty.call(proxyPayload, 'error')) {
+      throw new Error('FDA proxy returned an error payload.');
+    }
+    const proxyResults = Array.isArray(proxyPayload.results)
+      ? proxyPayload.results.filter(isProxyFdaRecord)
+      : [];
+    if (!Array.isArray(proxyPayload.results)) {
+      console.warn('[OpenFDA] proxy results were not an array; treating as no results', {
+        search: proxySearch,
+      });
+    }
+    records.push(...proxyResults.map(normalizeProxyRecord));
     successfulSearch = true;
   } catch (error) {
     console.warn('[OpenFDA] server proxy fallback failed', {

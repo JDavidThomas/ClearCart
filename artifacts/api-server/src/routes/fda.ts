@@ -27,7 +27,8 @@ interface OpenFdaRecord {
 }
 
 interface OpenFdaResponse {
-  results?: OpenFdaRecord[];
+  results?: unknown;
+  error?: unknown;
 }
 
 class FdaConfigurationError extends Error {
@@ -93,7 +94,10 @@ async function searchEndpoint(endpoint: string, search: string, limit: number) {
   }
   params.set("api_key", apiKey);
 
-  const encodedParams = params.toString().replace(/\*/g, "%2A");
+  const encodedParams = params
+    .toString()
+    .replace(/\+/g, "%20")
+    .replace(/\*/g, "%2A");
   const requestUrl = `${endpoint}?${encodedParams}`;
   const safeRequestUrl = requestUrl.replace(
     /([?&]api_key=)[^&]*/,
@@ -151,15 +155,29 @@ async function searchEndpoint(endpoint: string, search: string, limit: number) {
     );
     throw new FdaResponseError(response.status);
   }
+  if (Object.prototype.hasOwnProperty.call(payload, "error")) {
+    logger.error(
+      { url: safeRequestUrl, status: response.status, body: safeResponseBody },
+      "OpenFDA response contained an error payload",
+    );
+    throw new FdaResponseError(response.status);
+  }
+  if (!Array.isArray(payload.results)) {
+    logger.warn(
+      { url: safeRequestUrl, status: response.status, body: safeResponseBody },
+      "OpenFDA results were not an array; treating as no results",
+    );
+    return [];
+  }
   logger.info(
     {
       url: safeRequestUrl,
       status: response.status,
-      resultCount: payload.results?.length ?? 0,
+      resultCount: payload.results.length,
     },
     "OpenFDA response received",
   );
-  return payload.results ?? [];
+  return payload.results as OpenFdaRecord[];
 }
 
 async function searchOpenFdaSources(search: string, limit: number) {

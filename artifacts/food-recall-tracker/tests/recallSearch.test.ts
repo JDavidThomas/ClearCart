@@ -4,6 +4,7 @@ import type { FoodRecall } from '../types/recall.ts';
 import { rankAndFilterRecalls } from '../services/recallRelevance.ts';
 import {
   buildOpenFdaFieldSearchQueries,
+  buildOpenFdaSearchQuery,
   buildRecallSearchStrategies,
 } from '../services/recallSearch.ts';
 
@@ -11,13 +12,13 @@ test('recall searches try the recalling firm before product descriptions', () =>
   const strategies = buildRecallSearchStrategies('Martina', { productType: 'Mangoes' });
 
   assert.equal(strategies[0].field, 'recalling_firm');
-  assert.equal(strategies[0].query, 'recalling_firm:Martina');
+  assert.equal(strategies[0].query, 'recalling_firm:"Martina"');
   assert.equal(
     strategies.some(
       (strategy) =>
         strategy.field === 'product_description' &&
         strategy.term === 'Mangoes' &&
-        strategy.query === 'product_description:Mangoes',
+        strategy.query === 'product_description:"Mangoes"',
     ),
     true,
   );
@@ -26,8 +27,23 @@ test('recall searches try the recalling firm before product descriptions', () =>
 test('multiword firm searches keep an exact phrase and a flexible token fallback', () => {
   assert.deepEqual(buildOpenFdaFieldSearchQueries('recalling_firm', 'Midwest Poultry'), [
     'recalling_firm:"Midwest Poultry"',
-    'recalling_firm:Midwest OR recalling_firm:Poultry',
+    'recalling_firm:"Midwest"+OR+recalling_firm:"Poultry"',
   ]);
+});
+
+test('OpenFDA alternatives are quoted, URL-safe, and deduplicated', () => {
+  assert.deepEqual(
+    buildOpenFdaFieldSearchQueries('product_description', 'guacamole'),
+    [
+      'product_description:"guacamole"',
+      'product_description:"guacamole"+OR+product_description:"guacamoles"',
+    ],
+  );
+  assert.equal(
+    buildOpenFdaSearchQuery('guacamole'),
+    'product_description:"guacamole"+OR+product_description:"guacamoles"',
+  );
+  assert.equal(buildOpenFdaSearchQuery('xyzabc'), 'product_description:"xyzabc"+OR+product_description:"xyzabcs"');
 });
 
 test('recall relevance can match a firm name even when the product text differs', () => {

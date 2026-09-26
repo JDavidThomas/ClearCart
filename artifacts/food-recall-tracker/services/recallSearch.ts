@@ -49,16 +49,27 @@ function wordVariants(word: string) {
 
 export type OpenFdaSearchField = 'recalling_firm' | 'product_description';
 
+function quoteSearchTerm(field: OpenFdaSearchField, term: string) {
+  const escapedTerm = term.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  return `${field}:"${escapedTerm}"`;
+}
+
+function buildQuotedAlternatives(field: OpenFdaSearchField, terms: string[]) {
+  return [...new Set(terms.filter(Boolean).map((term) => quoteSearchTerm(field, term)))].join(
+    '+OR+',
+  );
+}
+
 export function buildOpenFdaFieldSearchQueries(field: OpenFdaSearchField, term: string) {
   const words = cleanRecallSearchTerm(term).split(' ').filter(Boolean);
   if (words.length === 0) return [];
 
-  const phrase = words.length > 1 ? `${field}:"${words.join(' ')}"` : `${field}:${words[0]}`;
+  const phrase = buildQuotedAlternatives(field, [words.join(' ')]);
   const flexibleWords =
     field === 'product_description'
       ? [...new Set(words.flatMap(wordVariants))]
       : words;
-  const flexible = flexibleWords.map((word) => `${field}:${word}`).join(' OR ');
+  const flexible = buildQuotedAlternatives(field, flexibleWords);
 
   return [...new Set([phrase, flexible])];
 }
@@ -99,5 +110,11 @@ export function buildRecallSearchStrategies(
 }
 
 export function buildOpenFdaSearchQuery(term: string) {
-  return buildOpenFdaFieldSearchQueries('product_description', term).join(' OR ');
+  const words = cleanRecallSearchTerm(term).split(' ').filter(Boolean);
+  if (words.length === 0) return '';
+
+  return buildQuotedAlternatives('product_description', [
+    words.join(' '),
+    ...words.flatMap(wordVariants),
+  ]);
 }
