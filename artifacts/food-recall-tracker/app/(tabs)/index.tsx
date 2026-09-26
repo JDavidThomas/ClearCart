@@ -259,8 +259,19 @@ export default function HomeScreen() {
                 item={data.produceItem ?? submittedTerm}
                 recalls={relatedRecalls}
               />
-              <AllergenInsights productText={submittedTerm} dataAvailable={submittedTerm.length > 0} colors={colors} />
-              <HealthDietInsights productText={submittedTerm} colors={colors} />
+              <AllergenInsights
+                productName={submittedTerm}
+                productText=""
+                dataAvailable={false}
+                source="search"
+                colors={colors}
+              />
+              <HealthDietInsights
+                productName={submittedTerm}
+                productText={submittedTerm}
+                source="search"
+                colors={colors}
+              />
             </View>
           ) : null
         }

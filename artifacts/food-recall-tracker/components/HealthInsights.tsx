@@ -44,8 +44,9 @@ export const DIETARY_PREFERENCE_OPTIONS = [
 
 interface HealthDietInsightsProps {
   productText: string;
+  productName?: string;
   product?: OpenFoodFactsProduct;
-  requireNutritionData?: boolean;
+  source?: 'photo' | 'barcode' | 'search';
   colors?: ReturnType<typeof useColors>;
 }
 
@@ -77,8 +78,9 @@ function NutritionMeta({
 
 export function HealthDietInsights({
   productText,
+  productName = '',
   product,
-  requireNutritionData = false,
+  source = 'search',
   colors: providedColors,
 }: HealthDietInsightsProps) {
   const fallbackColors = useColors();
@@ -99,7 +101,7 @@ export function HealthDietInsights({
       };
     }
 
-    const searchTerm = productText.trim();
+    const searchTerm = (productName || productText).trim();
     if (!searchTerm) {
       setLookupProduct(null);
       setLookupFailed(false);
@@ -128,16 +130,50 @@ export function HealthDietInsights({
     return () => {
       mounted = false;
     };
-  }, [product, productText]);
+  }, [product, productName, productText]);
 
   const evaluation = useMemo(() => {
-    if (!profile || !lookupProduct) return { conflicts: [] as Conflict[], hasComparableData: false, hasMissingData: true };
+    if (!profile) return { conflicts: [] as Conflict[], hasComparableData: false, hasMissingData: true };
     const signals = nutritionSignals(lookupProduct, profile.healthConditions, profile.dietaryPreferences);
     return {
-      conflicts: buildConflicts(lookupProduct, profile.healthConditions, profile.dietaryPreferences),
+      conflicts: buildConflicts(
+        lookupProduct,
+        profile.healthConditions,
+        profile.dietaryPreferences,
+        productName,
+      ),
       ...signals,
     };
-  }, [lookupProduct, profile]);
+  }, [lookupProduct, productName, profile]);
+
+  const nameBasedConflictCount = evaluation.conflicts.filter((conflict) => conflict.source === 'product-name').length;
+  useEffect(() => {
+    if (status !== 'authenticated' || !profile?.healthConsentGiven) return;
+    if (nameBasedConflictCount > 0) {
+      console.info('[Health] Name-based fallback triggered', {
+        source,
+        productName,
+        fallbackConflictCount: nameBasedConflictCount,
+      });
+    }
+    console.info('[Health] Final product verdict', {
+      source,
+      productName,
+      result: evaluation.conflicts.length > 0 ? 'health-conflict' : 'no-health-conflict-detected',
+      conflictCount: evaluation.conflicts.length,
+      nameBasedFallbackTriggered: nameBasedConflictCount > 0,
+      comparableNutritionDataAvailable: evaluation.hasComparableData,
+      lookupFailed,
+    });
+  }, [
+    evaluation,
+    lookupFailed,
+    nameBasedConflictCount,
+    productName,
+    profile?.healthConsentGiven,
+    source,
+    status,
+  ]);
 
   if (
     status !== 'authenticated' ||
@@ -160,34 +196,9 @@ export function HealthDietInsights({
   }
 
   const summary = profileSummary(profile);
-  const hasNutritionData = Boolean(
-    lookupProduct &&
-      (Object.values(lookupProduct.nutrition ?? {}).some((value) => value !== undefined) ||
-        lookupProduct.ingredients ||
-        lookupProduct.allergens),
-  );
-  if (requireNutritionData && !hasNutritionData) return null;
-
   const showGeneric = shouldUseGenericLabelCheck(lookupProduct, lookupFailed, evaluation);
   const nutrition = lookupProduct?.nutrition;
-
-  if (showGeneric) {
-    return (
-      <View style={[styles.card, { backgroundColor: colors.warningSoft, borderColor: colors.warning }]}>
-        <Feather name="info" size={22} color={colors.warning} />
-        <View style={styles.copy}>
-          <Text style={[styles.title, { color: colors.foreground }]}>Health &amp; Diet Notes</Text>
-          <Text style={[styles.body, { color: colors.mutedForeground }]}>
-            We don&apos;t have full nutrition data for this product. Check the label for {summary}.
-          </Text>
-          <NutritionMeta colors={colors} nutrition={nutrition} />
-          <Text style={[styles.disclaimerText, { color: colors.mutedForeground }]}>
-            This is based on available nutrition data and your profile. Not medical advice.
-          </Text>
-        </View>
-      </View>
-    );
-  }
+  const hasNameBasedConflict = evaluation.conflicts.some((conflict) => conflict.source === 'product-name');
 
   if (evaluation.conflicts.length > 0) {
     return (
@@ -202,6 +213,26 @@ export function HealthDietInsights({
               </Text>
             ))}
           </View>
+          <NutritionMeta colors={colors} nutrition={nutrition} />
+          <Text style={[styles.disclaimerText, { color: colors.mutedForeground }]}>
+            {hasNameBasedConflict
+              ? 'Based on the product name; confirm against the package label. Not medical advice.'
+              : 'This is based on available nutrition data and your profile. Not medical advice.'}
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (showGeneric) {
+    return (
+      <View style={[styles.card, { backgroundColor: colors.warningSoft, borderColor: colors.warning }]}>
+        <Feather name="info" size={22} color={colors.warning} />
+        <View style={styles.copy}>
+          <Text style={[styles.title, { color: colors.foreground }]}>Health &amp; Diet Notes</Text>
+          <Text style={[styles.body, { color: colors.mutedForeground }]}>
+            We don&apos;t have full nutrition data for this product. Check the label for {summary}.
+          </Text>
           <NutritionMeta colors={colors} nutrition={nutrition} />
           <Text style={[styles.disclaimerText, { color: colors.mutedForeground }]}>
             This is based on available nutrition data and your profile. Not medical advice.

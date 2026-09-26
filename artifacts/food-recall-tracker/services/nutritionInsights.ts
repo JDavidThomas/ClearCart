@@ -1,8 +1,10 @@
 import type { OpenFoodFactsNutrition, OpenFoodFactsProduct } from '@/types/recall';
+import { productTextContainsAnyKeyword } from './productNameKeywords.ts';
 
 export interface Conflict {
   label: string;
   detail: string;
+  source?: 'nutrition-data' | 'ingredient-data' | 'product-name';
 }
 
 const DAIRY_TERMS = ['milk', 'cheese', 'butter', 'cream', 'whey', 'casein', 'lactose', 'yogurt'];
@@ -65,15 +67,33 @@ export function shouldUseGenericLabelCheck(
 }
 
 export function buildConflicts(
-  product: OpenFoodFactsProduct,
+  product: OpenFoodFactsProduct | null,
   healthConditions: string[],
   dietaryPreferences: string[],
+  productName = '',
 ) {
-  const nutrition: OpenFoodFactsNutrition = product.nutrition ?? {};
+  const nutrition: OpenFoodFactsNutrition = product?.nutrition ?? {};
   const ingredients = ingredientText(product);
   const conflicts: Conflict[] = [];
+  const diabetesNameMatch =
+    healthConditions.some((condition) => condition.startsWith('diabetes-')) &&
+    productTextContainsAnyKeyword(productName, [
+      'candy',
+      'cookie',
+      'cake',
+      'soda',
+      'sugar',
+      'syrup',
+      'chocolate',
+    ]);
 
-  if (
+  if (diabetesNameMatch) {
+    conflicts.push({
+      label: 'Diabetes',
+      detail: 'Product name suggests a likely high-sugar item. Check the nutrition label.',
+      source: 'product-name',
+    });
+  } else if (
     healthConditions.some((condition) => condition.startsWith('diabetes-')) &&
     nutrition.sugars100g !== undefined &&
     nutrition.sugars100g > 10
@@ -84,7 +104,16 @@ export function buildConflicts(
     });
   }
 
-  if (
+  const hypertensionNameMatch =
+    healthConditions.includes('hypertension') &&
+    productTextContainsAnyKeyword(productName, ['salted', 'salty', 'chips', 'pretzels', 'bacon']);
+  if (hypertensionNameMatch) {
+    conflicts.push({
+      label: 'Hypertension',
+      detail: 'Product name suggests a likely high-sodium item. Check the nutrition label.',
+      source: 'product-name',
+    });
+  } else if (
     (healthConditions.includes('hypertension') || dietaryPreferences.includes('low-sodium')) &&
     nutrition.sodium100g !== undefined &&
     nutrition.sodium100g > 300
@@ -106,7 +135,16 @@ export function buildConflicts(
     });
   }
 
-  if (
+  const celiacNameMatch =
+    healthConditions.includes('celiac-disease') &&
+    productTextContainsAnyKeyword(productName, ['wheat', 'bread', 'pasta', 'flour']);
+  if (celiacNameMatch) {
+    conflicts.push({
+      label: 'Celiac Disease',
+      detail: 'Product name suggests a likely gluten-containing item. Check the ingredient label.',
+      source: 'product-name',
+    });
+  } else if (
     (healthConditions.includes('celiac-disease') || dietaryPreferences.includes('gluten-free')) &&
     containsAny(ingredients, ['wheat', 'barley', 'rye', 'oat'])
   ) {
@@ -190,7 +228,7 @@ export function buildConflicts(
 
   if (
     dietaryPreferences.includes('nut-free') &&
-    (containsAny((product.allergens ?? '').toLowerCase(), NUT_TERMS) || containsAny(ingredients, NUT_TERMS))
+    (containsAny((product?.allergens ?? '').toLowerCase(), NUT_TERMS) || containsAny(ingredients, NUT_TERMS))
   ) {
     conflicts.push({
       label: 'Nut-Free',
@@ -200,7 +238,7 @@ export function buildConflicts(
 
   if (
     dietaryPreferences.includes('dairy-free') &&
-    (containsAny((product.allergens ?? '').toLowerCase(), ['milk', 'dairy']) || containsAny(ingredients, DAIRY_TERMS))
+    (containsAny((product?.allergens ?? '').toLowerCase(), ['milk', 'dairy']) || containsAny(ingredients, DAIRY_TERMS))
   ) {
     conflicts.push({
       label: 'Dairy-Free',

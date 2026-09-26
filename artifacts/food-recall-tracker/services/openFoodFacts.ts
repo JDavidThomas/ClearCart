@@ -1,13 +1,18 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { OpenFoodFactsNutrition, OpenFoodFactsProduct } from '@/types/recall';
+import {
+  buildOpenFoodFactsSearchStrategies,
+  hasIngredientOrAllergenData,
+} from './openFoodFactsSearch.ts';
 
 const OPEN_FOOD_FACTS_PRODUCT_URL = 'https://world.openfoodfacts.org/api/v2/product/';
 const OPEN_FOOD_FACTS_SEARCH_URL = 'https://world.openfoodfacts.org/cgi/search.pl';
 const CACHE_PREFIX = '@food-recall-tracker/open-food-facts/';
-const OPEN_FOOD_FACTS_USER_AGENT = 'Grocer Guard/1.0 (contact@grocerguard.app)';
+const OPEN_FOOD_FACTS_USER_AGENT = 'Safe Cart/1.0 (contact@safecart.app)';
 const OPEN_FOOD_FACTS_HEADERS = {
   'User-Agent': OPEN_FOOD_FACTS_USER_AGENT,
   'X-User-Agent': OPEN_FOOD_FACTS_USER_AGENT,
+  Accept: 'application/json',
 };
 
 interface OpenFoodFactsPayload {
@@ -189,30 +194,105 @@ export async function searchOpenFoodFactsProduct(
   name: string,
   brand = '',
   barcode = '',
+  productType = '',
 ): Promise<OpenFoodFactsProduct | null> {
   const normalizedName = name.trim();
   if (!normalizedName) return null;
-  const normalizedBrand = /^(unknown|unclear|none|null)$/i.test(brand.trim()) ? '' : brand.trim();
+  const normalizedBrand = /^(unknown|unclear|none|null|not readable)$/i.test(brand.trim()) ? '' : brand.trim();
+  const normalizedProductType = /^(unknown|unclear|none|null|not readable)$/i.test(productType.trim())
+    ? ''
+    : productType.trim();
   const normalizedBarcode = barcode.trim();
+  let barcodeProduct: OpenFoodFactsProduct | null = null;
   if (normalizedBarcode) {
     try {
-      const barcodeProduct = await lookupOpenFoodFactsProduct(normalizedBarcode);
-      if (barcodeProduct) return barcodeProduct;
-    } catch {
-      // A barcode miss or temporary barcode failure should not block brand search.
+      barcodeProduct = await lookupOpenFoodFactsProduct(normalizedBarcode);
+      console.info('[OpenFoodFacts] Photo barcode lookup completed', {
+        barcode: normalizedBarcode,
+        found: Boolean(barcodeProduct),
+        hasIngredientOrAllergenData: hasIngredientOrAllergenData(barcodeProduct),
+      });
+      if (hasIngredientOrAllergenData(barcodeProduct)) return barcodeProduct;
+    } catch (error) {
+      console.info('[OpenFoodFacts] Photo barcode lookup failed; trying name searches', {
+        barcode: normalizedBarcode,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
-  const searchTerm = normalizedBrand || normalizedName;
-  const key = cacheKey('name', `${searchTerm}|${normalizedName}`);
+  const strategies = buildOpenFoodFactsSearchStrategies(
+    normalizedName,
+    normalizedBrand,
+    normalizedProductType,
+  );
+  const key = cacheKey(
+    'name',
+    `v2|${JSON.stringify([normalizedName, normalizedBrand, normalizedProductType])}`,
+  );
   const cached = await readCachedProduct(key);
-  if (cached.hit) return cached.product;
-
-  let products = await fetchProductsBySearchTerm(searchTerm);
-  if (products.length === 0 && searchTerm.toLowerCase() !== normalizedName.toLowerCase()) {
-    products = await fetchProductsBySearchTerm(normalizedName);
+  if (cached.hit && hasIngredientOrAllergenData(cached.product)) {
+    console.info('[OpenFoodFacts] Name search cache hit', {
+      productName: normalizedName,
+      hasIngredientOrAllergenData: true,
+    });
+    return cached.product;
   }
-  const product = selectClosestProduct(products, normalizedName, normalizedBrand);
-  await saveCachedProduct(key, product);
-  return product;
+
+  let firstCandidate: OpenFoodFactsProduct | null = null;
+  let successfulSearches = 0;
+  let lastError: unknown;
+  for (const { strategy, searchTerm } of strategies) {
+    console.info('[OpenFoodFacts] Name search attempt', {
+      productName: normalizedName,
+      strategy,
+      searchTerm,
+    });
+    try {
+      const products = await fetchProductsBySearchTerm(searchTerm);
+      successfulSearches += 1;
+      const productsWithAllergenData = products.filter(hasIngredientOrAllergenData);
+      const closestWithData = selectClosestProduct(
+        productsWithAllergenData,
+        normalizedName,
+        normalizedBrand,
+      );
+      console.info('[OpenFoodFacts] Name search result', {
+        productName: normalizedName,
+        strategy,
+        resultCount: products.length,
+        resultsWithIngredientOrAllergenData: productsWithAllergenData.length,
+        selectedProductName: closestWithData?.name ?? null,
+      });
+
+      if (!firstCandidate && products.length > 0) {
+        firstCandidate = selectClosestProduct(products, normalizedName, normalizedBrand);
+      }
+      if (closestWithData) {
+        await saveCachedProduct(key, closestWithData);
+        console.info('[OpenFoodFacts] Product data selected', {
+          productName: normalizedName,
+          strategy,
+          hasIngredientOrAllergenData: true,
+        });
+        return closestWithData;
+      }
+    } catch (error) {
+      lastError = error;
+      console.info('[OpenFoodFacts] Name search attempt failed', {
+        productName: normalizedName,
+        strategy,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  if (successfulSearches === 0 && !barcodeProduct && lastError) throw lastError;
+  const fallbackProduct = barcodeProduct ?? firstCandidate;
+  console.info('[OpenFoodFacts] Name search exhausted without ingredient or allergen data', {
+    productName: normalizedName,
+    returnedProduct: Boolean(fallbackProduct),
+    nameBasedFallbackRecommended: !hasIngredientOrAllergenData(fallbackProduct),
+  });
+  return fallbackProduct;
 }

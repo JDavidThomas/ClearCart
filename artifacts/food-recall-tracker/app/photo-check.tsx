@@ -84,15 +84,29 @@ export default function PhotoCheckScreen() {
     setPhotoState('verdict');
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-    void searchOpenFoodFactsProduct(productName, identification.brand, identification.barcode ?? '')
+    console.info('[Photo] Open Food Facts lookup attempt', {
+      productName,
+      brand: identification.brand,
+      productType: identification.productType,
+      barcodeAvailable: Boolean(identification.barcode),
+    });
+    void searchOpenFoodFactsProduct(
+      productName,
+      identification.brand,
+      identification.barcode ?? '',
+      identification.productType,
+    )
       .then((nutritionProduct) => {
         const resolvedProduct = nutritionProduct ?? fallbackNutritionProduct;
         const hasOpenFoodFactsNutrition = Boolean(nutritionProduct && hasNutritionData(nutritionProduct));
+        const hasOpenFoodFactsAllergenData = hasAllergenData(nutritionProduct);
         console.info('[Photo] Open Food Facts nutrition lookup', {
           productName,
           apiCallSucceeded: true,
           returnedProduct: Boolean(nutritionProduct),
           returnedNutritionData: hasOpenFoodFactsNutrition,
+          returnedAllergenData: hasOpenFoodFactsAllergenData,
+          nameBasedAllergenFallbackNeeded: !hasOpenFoodFactsAllergenData,
         });
         updateVerdict({
           nutritionProduct: resolvedProduct,
@@ -173,6 +187,14 @@ export default function PhotoCheckScreen() {
 
     const identification = await identifyFoodFromImage(encodedImage.base64, 'image/jpeg');
     console.info('[Gemini] normalized photo scanner JSON', JSON.stringify(identification, null, 2));
+    console.info('[Photo] Product identification result', {
+      productName: identification.fullName,
+      brand: identification.brand,
+      productType: identification.productType,
+      barcodeAvailable: Boolean(identification.barcode && identification.barcode !== 'unknown'),
+      confidence: identification.confidence,
+      sourceOfIdentification: identification.sourceOfIdentification,
+    });
     const identifiedProductName = isUsableProductName(identification.fullName)
       ? identification.fullName
       : null;
@@ -596,14 +618,17 @@ function PhotoVerdictView({
     <View style={styles.verdictStack}>
       <ProductIdentityCard verdict={verdict} colors={colors} />
       <AllergenInsights
-        productText={`${verdict.productName} ${verdict.nutritionProduct.ingredients ?? ''}`}
-        dataAvailable={Boolean(verdict.nutritionProduct.ingredients)}
+        productName={verdict.productName}
+        productText={`${verdict.nutritionProduct.ingredients ?? ''} ${verdict.nutritionProduct.allergens ?? ''}`}
+        dataAvailable={hasAllergenData(verdict.nutritionProduct)}
+        source="photo"
         colors={colors}
       />
       <HealthDietInsights
-        productText={verdict.productName}
+        productName={verdict.productName}
+        productText={`${verdict.nutritionProduct.ingredients ?? ''} ${verdict.nutritionProduct.allergens ?? ''}`}
         product={verdict.nutritionProduct}
-        requireNutritionData
+        source="photo"
         colors={colors}
       />
       <PhotoFdaRecallCard verdict={verdict} colors={colors} />
@@ -747,6 +772,10 @@ function hasNutritionData(product: OpenFoodFactsProduct | null | undefined) {
         product.ingredients ||
         product.allergens),
   );
+}
+
+function hasAllergenData(product: OpenFoodFactsProduct | null | undefined) {
+  return Boolean(product?.ingredients?.trim() || product?.allergens?.trim());
 }
 
 function isUsableContextText(value: string) {

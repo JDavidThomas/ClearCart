@@ -425,8 +425,8 @@ function VerdictView({
             <Feather name="external-link" size={15} color={colors.warning} />
           </Pressable>
         </View>
-        <AllergenInsights productText="" dataAvailable={false} colors={colors} />
-        <HealthDietInsights productText="" colors={colors} />
+        <AllergenInsights productName="" productText="" dataAvailable={false} source="barcode" colors={colors} />
+        <HealthDietInsights productName="" productText="" source="barcode" colors={colors} />
         <ScanAgainButton colors={colors} onPress={onScanAgain} />
       </View>
     );
@@ -448,13 +448,17 @@ function VerdictView({
         ))}
         <PossiblyRelatedRecalls item={produceItem} recalls={relatedRecalls} />
         <AllergenInsights
-          productText={buildProductAllergenText(productLabel, verdict.product)}
+          productName={productLabel}
+          productText={buildProductAllergenText(verdict.product)}
           dataAvailable={hasAllergenData(verdict.product)}
+          source="barcode"
           colors={colors}
         />
         <HealthDietInsights
-          productText={`${productLabel} ${verdict.product?.ingredients ?? ''}`}
+          productName={productLabel}
+          productText={`${verdict.product?.ingredients ?? ''} ${verdict.product?.allergens ?? ''}`}
           product={verdict.product}
+          source="barcode"
           colors={colors}
         />
         <ScanAgainButton colors={colors} onPress={onScanAgain} />
@@ -546,13 +550,17 @@ function VerdictView({
       ))}
 
       <AllergenInsights
-        productText={buildProductAllergenText(productLabel, verdict.product)}
+        productName={productLabel}
+        productText={buildProductAllergenText(verdict.product)}
         dataAvailable={hasAllergenData(verdict.product)}
+        source="barcode"
         colors={colors}
       />
       <HealthDietInsights
-        productText={`${productLabel} ${verdict.product?.ingredients ?? ''}`}
+        productName={productLabel}
+        productText={`${verdict.product?.ingredients ?? ''} ${verdict.product?.allergens ?? ''}`}
         product={verdict.product}
+        source="barcode"
         colors={colors}
       />
       <ScanAgainButton colors={colors} onPress={onScanAgain} />
@@ -560,8 +568,8 @@ function VerdictView({
   );
 }
 
-function buildProductAllergenText(productLabel: string, product?: OpenFoodFactsProduct) {
-  return `${productLabel} ${product?.ingredients ?? ''} ${product?.allergens ?? ''}`;
+function buildProductAllergenText(product?: OpenFoodFactsProduct) {
+  return `${product?.ingredients ?? ''} ${product?.allergens ?? ''}`;
 }
 
 function hasAllergenData(product?: OpenFoodFactsProduct) {

@@ -1,8 +1,10 @@
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
+import { classifyAllergenVerdict, evaluateAllergenMatches } from '@/services/allergenMatching';
 
 export const ALLERGEN_OPTIONS = [
   { id: 'milk', label: 'Milk' },
@@ -19,24 +21,11 @@ export const ALLERGEN_OPTIONS = [
   { id: 'other', label: 'Other' },
 ] as const;
 
-const ALLERGEN_TERMS: Record<string, string[]> = {
-  milk: ['milk', 'whey', 'casein', 'butter', 'cream', 'cheese', 'lactose'],
-  eggs: ['egg', 'albumen', 'mayonnaise', 'mayo'],
-  fish: ['fish', 'salmon', 'tuna', 'cod', 'anchovy'],
-  shellfish: ['shrimp', 'crab', 'lobster', 'shellfish', 'prawn'],
-  'tree-nuts': ['almond', 'cashew', 'walnut', 'pecan', 'pistachio', 'hazelnut', 'macadamia'],
-  peanuts: ['peanut', 'groundnut'],
-  wheat: ['wheat', 'flour', 'barley', 'rye'],
-  soy: ['soy', 'soybean', 'soya', 'lecithin'],
-  sesame: ['sesame', 'tahini'],
-  gluten: ['gluten', 'wheat', 'barley', 'rye', 'malt'],
-  corn: ['corn', 'maize'],
-  other: [],
-};
-
 interface AllergenInsightsProps {
   productText: string;
+  productName?: string;
   dataAvailable: boolean;
+  source?: 'photo' | 'barcode' | 'search';
   colors?: ReturnType<typeof useColors>;
 }
 
@@ -44,27 +33,60 @@ function getLabel(id: string) {
   return ALLERGEN_OPTIONS.find((option) => option.id === id)?.label ?? id;
 }
 
-function findMatches(allergies: string[], customAllergy: string, productText: string) {
-  const normalized = productText.toLowerCase();
-  const matches = allergies.filter((allergen) =>
-    (ALLERGEN_TERMS[allergen] ?? []).some((term) => normalized.includes(term)),
-  );
-
-  const customTerms = customAllergy
-    .toLowerCase()
-    .split(/[,;/]+/)
-    .map((term) => term.trim())
-    .filter((term) => term.length > 1);
-  if (customTerms.some((term) => normalized.includes(term))) matches.push('other');
-
-  return [...new Set(matches)];
-}
-
-export function AllergenInsights({ productText, dataAvailable, colors: providedColors }: AllergenInsightsProps) {
+export function AllergenInsights({
+  productText,
+  productName = '',
+  dataAvailable,
+  source = 'search',
+  colors: providedColors,
+}: AllergenInsightsProps) {
   const fallbackColors = useColors();
   const colors = providedColors ?? fallbackColors;
   const router = useRouter();
   const { status, profile, guestPromptDismissed, dismissGuestPrompt } = useAuth();
+  const evaluation = profile
+    ? evaluateAllergenMatches(profile.allergies, profile.customAllergy, productName, productText)
+    : null;
+  const matches = evaluation?.matches ?? [];
+  const hasAllergyProfile = status === 'authenticated' && Boolean(profile?.allergies.length);
+  const isSevere = profile?.severity === 'severe';
+  const nameFallbackCount = evaluation?.nameOnlyMatches.length ?? 0;
+  const allergenSignature = matches.join('|');
+  const finalVerdict = classifyAllergenVerdict({
+    matches,
+    dataAvailable,
+    hasProfile: hasAllergyProfile,
+    severe: isSevere,
+  });
+
+  useEffect(() => {
+    if (status === 'loading') return;
+    if (nameFallbackCount > 0) {
+      console.info('[Allergen] Name-based fallback triggered', {
+        source,
+        productName,
+        fallbackMatchCount: nameFallbackCount,
+        ingredientOrAllergenDataAvailable: dataAvailable,
+      });
+    }
+    console.info('[Allergen] Final product verdict', {
+      source,
+      productName,
+      result: finalVerdict,
+      matchedAllergenCount: matches.length,
+      nameBasedFallbackTriggered: nameFallbackCount > 0,
+      ingredientOrAllergenDataAvailable: dataAvailable,
+    });
+  }, [
+    allergenSignature,
+    dataAvailable,
+    finalVerdict,
+    matches.length,
+    nameFallbackCount,
+    productName,
+    source,
+    status,
+  ]);
 
   if (status === 'loading') return null;
 
@@ -129,23 +151,12 @@ export function AllergenInsights({ productText, dataAvailable, colors: providedC
     );
   }
 
-  if (!dataAvailable) {
-    return (
-      <View style={[styles.alertCard, { backgroundColor: colors.warningSoft, borderColor: colors.warning }]}>
-        <Feather name="help-circle" size={22} color={colors.warning} />
-        <View style={styles.alertCopy}>
-          <Text style={[styles.alertTitle, { color: colors.foreground }]}>Allergen data not available</Text>
-          <Text style={[styles.alertBody, { color: colors.mutedForeground }]}>
-            We need ingredient information for this product before we can compare it with your profile.
-          </Text>
-        </View>
-      </View>
-    );
-  }
-
-  const matches = findMatches(profile.allergies, profile.customAllergy, productText);
-  const isSevere = profile.severity === 'severe';
   if (matches.length > 0) {
+    const nameFallbackNote = evaluation?.nameOnlyMatches.length
+      ? dataAvailable
+        ? 'Based on the product name; confirm against the package label. '
+        : 'Based on the product name — ingredient data not available. '
+      : '';
     return (
       <View
         style={[
@@ -177,7 +188,22 @@ export function AllergenInsights({ productText, dataAvailable, colors: providedC
               isSevere ? styles.severeText : null,
             ]}
           >
+            {nameFallbackNote}
             This product matches {matches.map(getLabel).join(', ')} in your profile. Review the product label and official information carefully.
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (!dataAvailable) {
+    return (
+      <View style={[styles.alertCard, { backgroundColor: colors.warningSoft, borderColor: colors.warning }]}>
+        <Feather name="help-circle" size={22} color={colors.warning} />
+        <View style={styles.alertCopy}>
+          <Text style={[styles.alertTitle, { color: colors.foreground }]}>Allergen data not available</Text>
+          <Text style={[styles.alertBody, { color: colors.mutedForeground }]}>
+            We need ingredient information for this product before we can compare it with your profile.
           </Text>
         </View>
       </View>
