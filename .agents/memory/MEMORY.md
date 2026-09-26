@@ -9,3 +9,4 @@
 - [Supabase publishable keys](supabase-publishable-key.md) — current supabase-js accepts sb_publishable keys; profile failures should be diagnosed separately from key format.
 - [Native TypeScript tests](native-ts-tests.md) — pure Expo service tests can use Node’s native TypeScript runner without adding a test framework or runtime dependency.
 - [Expo static build port conflict](expo-static-build-port.md) — the static build script can collide with the mockup server on port 8081; use the managed workflow for runtime verification.
+- [Expo tunnel startup failures](expo-tunnel-startup.md) — Ngrok can fail before `Tunnel ready`; never reuse the prior `exp.direct` URL as if a fresh tunnel started.
