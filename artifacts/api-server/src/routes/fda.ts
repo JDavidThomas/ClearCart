@@ -155,6 +155,13 @@ async function searchEndpoint(endpoint: string, search: string, limit: number) {
     );
     throw new FdaResponseError(response.status);
   }
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    logger.warn(
+      { url: safeRequestUrl, status: response.status, body: safeResponseBody },
+      "OpenFDA response was not an object; treating as no results",
+    );
+    return [];
+  }
   if (Object.prototype.hasOwnProperty.call(payload, "error")) {
     logger.error(
       { url: safeRequestUrl, status: response.status, body: safeResponseBody },

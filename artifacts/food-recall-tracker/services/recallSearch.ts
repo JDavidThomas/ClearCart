@@ -56,7 +56,7 @@ function quoteSearchTerm(field: OpenFdaSearchField, term: string) {
 
 function buildQuotedAlternatives(field: OpenFdaSearchField, terms: string[]) {
   return [...new Set(terms.filter(Boolean).map((term) => quoteSearchTerm(field, term)))].join(
-    '+OR+',
+    ' OR ',
   );
 }
 

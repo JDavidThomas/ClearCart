@@ -204,7 +204,20 @@ export async function searchFoodRecalls(
     }
 
     const recalls = successfulResults.flatMap((result) => result.value);
-    if (failedResults.length > 0 && rankAndFilterRecalls(recalls, normalizedTerm).length === 0) {
+    const hasRelevantRecalls =
+      rankAndFilterRecalls(recalls, normalizedTerm).length > 0;
+    if (failedResults.length > 0) {
+      console.warn('[RecallSearch] continuing with available recall sources', {
+        fdaSucceeded: fdaResult.status === 'fulfilled',
+        fsisSucceeded: fsisResult.status === 'fulfilled',
+        hasRelevantRecalls,
+      });
+    }
+    if (
+      failedResults.length > 0 &&
+      fdaResult.status === 'rejected' &&
+      !hasRelevantRecalls
+    ) {
       throw failedResults[0].reason;
     }
     const freshResult: CachedSearch = {

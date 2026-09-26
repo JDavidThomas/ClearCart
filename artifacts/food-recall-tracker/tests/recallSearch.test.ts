@@ -27,7 +27,7 @@ test('recall searches try the recalling firm before product descriptions', () =>
 test('multiword firm searches keep an exact phrase and a flexible token fallback', () => {
   assert.deepEqual(buildOpenFdaFieldSearchQueries('recalling_firm', 'Midwest Poultry'), [
     'recalling_firm:"Midwest Poultry"',
-    'recalling_firm:"Midwest"+OR+recalling_firm:"Poultry"',
+    'recalling_firm:"Midwest" OR recalling_firm:"Poultry"',
   ]);
 });
 
@@ -36,14 +36,23 @@ test('OpenFDA alternatives are quoted, URL-safe, and deduplicated', () => {
     buildOpenFdaFieldSearchQueries('product_description', 'guacamole'),
     [
       'product_description:"guacamole"',
-      'product_description:"guacamole"+OR+product_description:"guacamoles"',
+      'product_description:"guacamole" OR product_description:"guacamoles"',
     ],
   );
   assert.equal(
     buildOpenFdaSearchQuery('guacamole'),
-    'product_description:"guacamole"+OR+product_description:"guacamoles"',
+    'product_description:"guacamole" OR product_description:"guacamoles"',
   );
-  assert.equal(buildOpenFdaSearchQuery('xyzabc'), 'product_description:"xyzabc"+OR+product_description:"xyzabcs"');
+  const encodedSearch = new URLSearchParams({
+    search: buildOpenFdaSearchQuery('guacamole'),
+  })
+    .toString()
+    .replace(/\+/g, '%20');
+  assert.equal(/%20OR%20/.test(encodedSearch), true);
+  assert.equal(
+    buildOpenFdaSearchQuery('xyzabc'),
+    'product_description:"xyzabc" OR product_description:"xyzabcs"',
+  );
 });
 
 test('recall relevance can match a firm name even when the product text differs', () => {

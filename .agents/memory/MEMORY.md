@@ -1,4 +1,5 @@
 - [openFDA mobile search](openfda-key.md) — direct Expo searches intentionally bundle the public openFDA key to avoid API-server URL failures.
+- [OpenFDA query encoding](openfda-query-encoding.md) — encode OR as spaces, not literal `%2B`; keep a quoted single-term search before alternations.
 - [Expo Camera SDK alignment](expo-camera-sdk.md) — use the workspace-compatible Expo SDK 57 camera package line for native scanning.
 - [Gemini model availability](gemini-model-availability.md) — verify the configured Gemini model against the live API; older model IDs can be retired without code changes.
 - [Gemini response schema compatibility](gemini-response-schema.md) — direct Gemini JSON mode rejects `additionalProperties`; use prompt-enforced JSON without that schema field.

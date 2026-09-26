@@ -174,54 +174,10 @@ async function searchEndpoint(endpoint: string, search: string) {
       throw new Error(`FDA API returned an error (HTTP ${response.status}). Please try again.`);
     }
 
+    let payload: OpenFdaResponse;
     try {
-      const payload = JSON.parse(responseBody) as OpenFdaResponse;
-      if (Object.prototype.hasOwnProperty.call(payload, 'error')) {
-        console.error('[OpenFDA] error payload', {
-          url: safeRequestUrl,
-          status: response.status,
-          body: safeResponseBody,
-        });
-        throw new Error(`FDA API returned an error payload (HTTP ${response.status}).`);
-      }
-      if (!Array.isArray(payload.results)) {
-        console.warn('[OpenFDA] response results were not an array; treating as no results', {
-          url: safeRequestUrl,
-          status: response.status,
-          body: safeResponseBody,
-        });
-        return [];
-      }
-      const results = payload.results.filter(isOpenFdaRecord);
-      console.info('[OpenFDA] response', {
-        url: safeRequestUrl,
-        status: response.status,
-        resultCount: results.length,
-      });
-      return results;
+      payload = JSON.parse(responseBody) as OpenFdaResponse;
     } catch {
-      if (
-        responseBody &&
-        response.ok &&
-        !responseBody.trim().startsWith('{') &&
-        !responseBody.trim().startsWith('[')
-      ) {
-        console.error('[OpenFDA] response was not valid JSON', {
-          url: safeRequestUrl,
-          status: response.status,
-          body: safeResponseBody,
-        });
-      }
-      if (responseBody && responseBody.trim().startsWith('{')) {
-        try {
-          const payload = JSON.parse(responseBody) as OpenFdaResponse;
-          if (Object.prototype.hasOwnProperty.call(payload, 'error')) {
-            throw new Error(`FDA API returned an error payload (HTTP ${response.status}).`);
-          }
-        } catch (error) {
-          if (error instanceof Error && error.message.startsWith('FDA API ')) throw error;
-        }
-      }
       console.error('[OpenFDA] response was not valid JSON', {
         url: safeRequestUrl,
         status: response.status,
@@ -229,6 +185,38 @@ async function searchEndpoint(endpoint: string, search: string) {
       });
       throw new Error('FDA API returned an unreadable response. Please try again.');
     }
+
+    if (!isOpenFdaRecord(payload)) {
+      console.warn('[OpenFDA] response was not an object; treating as no results', {
+        url: safeRequestUrl,
+        status: response.status,
+        body: safeResponseBody,
+      });
+      return [];
+    }
+    if (Object.prototype.hasOwnProperty.call(payload, 'error')) {
+      console.error('[OpenFDA] error payload', {
+        url: safeRequestUrl,
+        status: response.status,
+        body: safeResponseBody,
+      });
+      throw new Error(`FDA API returned an error payload (HTTP ${response.status}).`);
+    }
+    if (!Array.isArray(payload.results)) {
+      console.warn('[OpenFDA] response results were not an array; treating as no results', {
+        url: safeRequestUrl,
+        status: response.status,
+        body: safeResponseBody,
+      });
+      return [];
+    }
+    const results = payload.results.filter(isOpenFdaRecord);
+    console.info('[OpenFDA] response', {
+      url: safeRequestUrl,
+      status: response.status,
+      resultCount: results.length,
+    });
+    return results;
   } catch (error) {
     if (error instanceof Error && error.message.startsWith('FDA API ')) {
       throw error;
