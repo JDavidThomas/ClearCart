@@ -21,6 +21,20 @@ const OPENFDA_RESULT_LIMIT = 100;
  */
 const OPENFDA_API_KEY = process.env.EXPO_PUBLIC_OPENFDA_API_KEY?.trim();
 
+function redactOpenFdaValue(value: string) {
+  const key = OPENFDA_API_KEY;
+  if (!key) {
+    return value.replace(/([?&]api_key=)[^&\s]*/gi, '$1[REDACTED]');
+  }
+
+  return value
+    .split(key)
+    .join('[REDACTED]')
+    .split(encodeURIComponent(key))
+    .join('[REDACTED]')
+    .replace(/([?&]api_key=)[^&\s]*/gi, '$1[REDACTED]');
+}
+
 interface OpenFdaRecord {
   recall_number?: string;
   product_description?: string;
@@ -80,19 +94,80 @@ async function searchEndpoint(endpoint: string, search: string) {
 
   try {
     const encodedParams = params.toString().replace(/\+/g, '%20').replace(/\*/g, '%2A');
-    const response = await fetch(`${endpoint}?${encodedParams}`, {
-      signal: controller.signal,
+    const requestUrl = `${endpoint}?${encodedParams}`;
+    const safeRequestUrl = redactOpenFdaValue(requestUrl);
+    const apiKeyIncluded = params.has('api_key');
+    console.info('[OpenFDA] request', {
+      url: safeRequestUrl,
+      apiKeyConfigured: Boolean(OPENFDA_API_KEY),
+      apiKeyIncluded,
     });
 
-    if (response.status === 404) return [];
+    let response: Response;
+    try {
+      response = await fetch(requestUrl, { signal: controller.signal });
+    } catch (error) {
+      const message = redactOpenFdaValue(
+        error instanceof Error ? error.message : String(error),
+      );
+      console.error('[OpenFDA] fetch failed before receiving a response', {
+        url: safeRequestUrl,
+        apiKeyConfigured: Boolean(OPENFDA_API_KEY),
+        apiKeyIncluded,
+        error: message,
+      });
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error('FDA API is unreachable right now. Check your connection and try again.');
+      }
+      throw new Error('FDA API is unreachable right now. Check your connection and try again.');
+    }
+
+    let responseBody: string;
+    try {
+      responseBody = await response.text();
+    } catch (error) {
+      console.error('[OpenFDA] response body could not be read', {
+        url: safeRequestUrl,
+        status: response.status,
+        error: redactOpenFdaValue(
+          error instanceof Error ? error.message : String(error),
+        ),
+      });
+      throw new Error('FDA API returned an unreadable response. Please try again.');
+    }
+
+    const safeResponseBody = redactOpenFdaValue(responseBody);
+    if (response.status === 404) {
+      console.info('[OpenFDA] response', {
+        url: safeRequestUrl,
+        status: response.status,
+        body: safeResponseBody,
+      });
+      return [];
+    }
     if (!response.ok) {
+      console.error('[OpenFDA] error response', {
+        url: safeRequestUrl,
+        status: response.status,
+        body: safeResponseBody,
+      });
       throw new Error(`FDA API returned an error (HTTP ${response.status}). Please try again.`);
     }
 
     try {
-      const payload = (await response.json()) as OpenFdaResponse;
+      const payload = JSON.parse(responseBody) as OpenFdaResponse;
+      console.info('[OpenFDA] response', {
+        url: safeRequestUrl,
+        status: response.status,
+        resultCount: payload.results?.length ?? 0,
+      });
       return payload.results ?? [];
     } catch {
+      console.error('[OpenFDA] response was not valid JSON', {
+        url: safeRequestUrl,
+        status: response.status,
+        body: safeResponseBody,
+      });
       throw new Error('FDA API returned an unreadable response. Please try again.');
     }
   } catch (error) {
@@ -195,17 +270,26 @@ export async function searchFdaRecalls(
       const relevantResults = rankAndFilterRecalls(deduplicateRecalls(records), normalizedTerm);
       if (relevantResults.length > 0 && strategy.field === 'recalling_firm') break;
     } catch (error) {
+      console.warn('[OpenFDA] search strategy failed', {
+        field: strategy.field,
+        term: strategy.term,
+        search: strategy.query,
+        error: redactOpenFdaValue(
+          error instanceof Error ? error.message : String(error),
+        ),
+      });
       lastError = error;
     }
   }
 
+  const proxyTerms = [
+    normalizedTerm,
+    optionalSearchTerm(options.brand),
+    optionalSearchTerm(options.productType),
+  ].filter(Boolean);
+  const proxySearch = buildOpenFdaSearchQuery(proxyTerms.join(' '));
+
   try {
-    const proxyTerms = [
-      normalizedTerm,
-      optionalSearchTerm(options.brand),
-      optionalSearchTerm(options.productType),
-    ].filter(Boolean);
-    const proxySearch = buildOpenFdaSearchQuery(proxyTerms.join(' '));
     const proxyResponse = await getFdaRecalls({
       search: proxySearch,
       limit: OPENFDA_RESULT_LIMIT,
@@ -213,6 +297,12 @@ export async function searchFdaRecalls(
     records.push(...proxyResponse.results.map(normalizeProxyRecord));
     successfulSearch = true;
   } catch (error) {
+    console.warn('[OpenFDA] server proxy fallback failed', {
+      search: proxySearch,
+      error: redactOpenFdaValue(
+        error instanceof Error ? error.message : String(error),
+      ),
+    });
     if (!lastError) lastError = error;
   }
 

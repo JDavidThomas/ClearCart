@@ -56,6 +56,15 @@ function valueOrFallback(value: unknown, fallback: string) {
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
 }
 
+function redactOpenFdaValue(value: string, apiKey: string) {
+  return value
+    .split(apiKey)
+    .join("[REDACTED]")
+    .split(encodeURIComponent(apiKey))
+    .join("[REDACTED]")
+    .replace(/([?&]api_key=)[^&\s]*/gi, "$1[REDACTED]");
+}
+
 function normalizeRecord(record: OpenFdaRecord) {
   return {
     recallNumber: record.recall_number?.trim() || undefined,
@@ -90,10 +99,11 @@ async function searchEndpoint(endpoint: string, search: string, limit: number) {
     /([?&]api_key=)[^&]*/,
     "$1%5BREDACTED%5D",
   );
-  logger.info(
-    { url: safeRequestUrl },
-    "Requesting OpenFDA URL",
-  );
+  logger.info({
+    url: safeRequestUrl,
+    apiKeyConfigured: Boolean(apiKey),
+    apiKeyIncluded: params.has("api_key"),
+  }, "Requesting OpenFDA URL");
 
   let response: Response;
   try {
@@ -104,15 +114,51 @@ async function searchEndpoint(endpoint: string, search: string, limit: number) {
     throw new FdaUnreachableError(error);
   }
 
-  if (response.status === 404) return [];
-  if (!response.ok) throw new FdaResponseError(response.status);
+  let responseBody: string;
+  try {
+    responseBody = await response.text();
+  } catch {
+    logger.error(
+      { url: safeRequestUrl, status: response.status },
+      "OpenFDA response body could not be read",
+    );
+    throw new FdaResponseError(response.status);
+  }
+  const safeResponseBody = redactOpenFdaValue(responseBody, apiKey);
+
+  if (response.status === 404) {
+    logger.info(
+      { url: safeRequestUrl, status: response.status, body: safeResponseBody },
+      "OpenFDA returned no matches",
+    );
+    return [];
+  }
+  if (!response.ok) {
+    logger.error(
+      { url: safeRequestUrl, status: response.status, body: safeResponseBody },
+      "OpenFDA returned an error response",
+    );
+    throw new FdaResponseError(response.status);
+  }
 
   let payload: OpenFdaResponse;
   try {
-    payload = (await response.json()) as OpenFdaResponse;
+    payload = JSON.parse(responseBody) as OpenFdaResponse;
   } catch {
+    logger.error(
+      { url: safeRequestUrl, status: response.status, body: safeResponseBody },
+      "OpenFDA returned an unreadable response body",
+    );
     throw new FdaResponseError(response.status);
   }
+  logger.info(
+    {
+      url: safeRequestUrl,
+      status: response.status,
+      resultCount: payload.results?.length ?? 0,
+    },
+    "OpenFDA response received",
+  );
   return payload.results ?? [];
 }
 

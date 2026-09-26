@@ -113,6 +113,37 @@ function formatRecallSearchError(error: unknown) {
   return 'FDA API returned an unexpected error. Please try again.';
 }
 
+function getRecallSearchErrorDiagnostics(error: unknown) {
+  const details = error && typeof error === 'object'
+    ? (error as {
+        name?: unknown;
+        message?: unknown;
+        status?: unknown;
+        statusCode?: unknown;
+        response?: { status?: unknown };
+      })
+    : null;
+  const rawMessage =
+    typeof details?.message === 'string'
+      ? details.message
+      : error instanceof Error
+        ? error.message
+        : String(error);
+  const message = rawMessage
+    .replace(/([?&]api_key=)[^&\s]*/gi, '$1[REDACTED]')
+    .replace(/("api_key"\s*:\s*")[^"]+(")/gi, '$1[REDACTED]$2');
+
+  return {
+    name: typeof details?.name === 'string' ? details.name : 'UnknownError',
+    message,
+    status:
+      details?.status ??
+      details?.statusCode ??
+      details?.response?.status ??
+      null,
+  };
+}
+
 async function readCachedSearch(term: string): Promise<CachedSearch | null> {
   try {
     const cached = await AsyncStorage.getItem(cacheKey(term));
@@ -183,10 +214,17 @@ export async function searchFoodRecalls(
     await saveSearch(normalizedTerm, freshResult);
     return buildSearchResult(normalizedTerm, freshResult, false);
   } catch (error) {
+    const diagnostics = {
+      term: normalizedTerm,
+      hasCachedResult: Boolean(cached),
+      ...getRecallSearchErrorDiagnostics(error),
+    };
     if (cached) {
+      console.warn('[RecallSearch] live lookup failed; returning cached data', diagnostics);
       return buildSearchResult(normalizedTerm, cached, true);
     }
 
+    console.error('[RecallSearch] live lookup failed', diagnostics);
     throw new Error(formatRecallSearchError(error));
   }
 }
