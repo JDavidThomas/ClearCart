@@ -4,6 +4,7 @@ import type {
   RecallSearchResult,
 } from '@/types/recall';
 import { searchFdaRecalls, type FdaRecallSearchOptions } from './fdaRecalls';
+import { searchFsisRecalls } from './fsisRecalls';
 import { buildOpenFdaSearchQuery, cleanRecallSearchTerm } from './recallSearch';
 import {
   getRecallRelevanceNotice,
@@ -89,6 +90,9 @@ function messageFromApiError(error: unknown) {
 
 function formatRecallSearchError(error: unknown) {
   const apiMessage = messageFromApiError(error);
+  if (apiMessage?.includes('USDA FSIS')) {
+    return 'USDA FSIS recall data is unavailable right now. Please try again.';
+  }
   if (apiMessage?.includes('FDA API is unreachable')) {
     return 'FDA API is unreachable right now. Check your connection and try again.';
   }
@@ -137,9 +141,8 @@ async function saveSearch(term: string, value: CachedSearch) {
 }
 
 /**
- * Searches both openFDA food and drug enforcement records, then falls back to
- * the most recent local result if the device is offline or the public API is
- * temporarily unavailable.
+ * Searches FDA enforcement data and official recall notices alongside recent
+ * USDA FSIS recalls, then uses the most recent local result if sources fail.
  */
 export async function searchFoodRecalls(
   term: string,
@@ -152,10 +155,27 @@ export async function searchFoodRecalls(
   const cached = await readCachedSearch(normalizedTerm);
 
   try {
-    // FDA searches are intentionally direct so an unavailable Replit API server
-    // cannot block the primary recall experience. USDA/FSIS can be added later
-    // as an optional source without becoming a prerequisite for FDA results.
-    const recalls = await searchFdaRecalls(normalizedTerm, options);
+    const [fdaResult, fsisResult] = await Promise.allSettled([
+      searchFdaRecalls(normalizedTerm, options),
+      searchFsisRecalls(),
+    ]);
+    const successfulResults = [fdaResult, fsisResult].filter(
+      (result): result is PromiseFulfilledResult<FoodRecall[]> => result.status === 'fulfilled',
+    );
+    const failedResults = [fdaResult, fsisResult].filter(
+      (result): result is PromiseRejectedResult => result.status === 'rejected',
+    );
+    if (successfulResults.length === 0) {
+      throw (
+        failedResults[0]?.reason ??
+        new Error('Recall data sources are unavailable.')
+      );
+    }
+
+    const recalls = successfulResults.flatMap((result) => result.value);
+    if (failedResults.length > 0 && rankAndFilterRecalls(recalls, normalizedTerm).length === 0) {
+      throw failedResults[0].reason;
+    }
     const freshResult: CachedSearch = {
       recalls,
       lastUpdated: new Date().toISOString(),

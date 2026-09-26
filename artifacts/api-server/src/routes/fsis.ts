@@ -4,8 +4,8 @@ import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 const FSIS_RECALLS_URL =
-  "https://www.fsis.usda.gov/fsis/api/recall/v/1?field_recall_type_id=23&field_year_id=685";
-const FSIS_RECALLS_PAGE = "https://www.fsis.usda.gov/food-safety/recalls-public-health-alerts";
+  "https://www.fsis.usda.gov/fsis/api/recall/v/1?field_recall_type_id=23";
+const FSIS_RECALLS_PAGE = "https://www.fsis.usda.gov/recalls";
 const CACHE_TTL_MS = 60 * 60 * 1000;
 const TWELVE_MONTHS_MS = 365 * 24 * 60 * 60 * 1000;
 const FSIS_REQUEST_TIMEOUT_MS = 15_000;
@@ -36,7 +36,20 @@ let fsisCache: FsisCache | null = null;
 function textValue(value: unknown, fallback: string) {
   if (typeof value === "string" && value.trim()) return value.trim();
   if (typeof value === "number") return String(value);
+  if (Array.isArray(value)) {
+    const values = value
+      .map((item) => (typeof item === "string" || typeof item === "number" ? String(item).trim() : ""))
+      .filter(Boolean);
+    if (values.length > 0) return values.join(", ");
+  }
   return fallback;
+}
+
+function inferCompanyName(title: string) {
+  const match = title.match(/^(.+?)\s+recalls?\b/i);
+  return match && !/^(?:FSIS|USDA|FDA)\b/i.test(match[1])
+    ? match[1].trim()
+    : "Company not provided";
 }
 
 function stripHtml(value: string) {
@@ -75,11 +88,14 @@ function isRecentRecall(date: string) {
 
 function normalizeRecall(record: RawFsisRecall, index: number) {
   const productName = textValue(record.field_title, "Product name unavailable");
-  const companyName = textValue(record.field_establishment, "Company not provided");
+  const companyName = textValue(record.field_establishment, inferCompanyName(productName));
   const reason = textValue(record.field_recall_reason, "Reason not provided");
   const date = textValue(record.field_recall_date, "Date not provided");
   const summary = stripHtml(textValue(record.field_summary, "Summary not provided"));
-  const officialUrl = textValue(record.field_recall_url, FSIS_RECALLS_PAGE);
+  const officialUrl = textValue(record.field_recall_url, FSIS_RECALLS_PAGE).replace(
+    /^http:\/\//i,
+    "https://",
+  );
   const recallType = textValue(record.field_recall_type, "Active Recall");
   const id = textValue(
     record.nid ?? record.field_recall_number,

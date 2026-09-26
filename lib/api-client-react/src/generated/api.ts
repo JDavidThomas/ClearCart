@@ -320,8 +320,8 @@ export const getGetFdaRecallsUrl = (params: GetFdaRecallsParams,) => {
 }
 
 /**
- * Searches FDA food and drug enforcement records through the server-side OpenFDA proxy.
- * @summary Search FDA enforcement recalls
+ * Searches OpenFDA enforcement records and the FDA's official recall announcement index through the server-side proxy.
+ * @summary Search FDA recall records and notices
  */
 export const getFdaRecalls = async (params: GetFdaRecallsParams, options?: Parameters<typeof customFetch>[1]): Promise<OpenFdaRecallResponse> => {
 
@@ -368,7 +368,7 @@ export type GetFdaRecallsQueryError = ErrorType<void>
 
 
 /**
- * @summary Search FDA enforcement recalls
+ * @summary Search FDA recall records and notices
  */
 
 export function useGetFdaRecalls<TData = Awaited<ReturnType<typeof getFdaRecalls>>, TError = ErrorType<void>>(

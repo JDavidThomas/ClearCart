@@ -1,5 +1,5 @@
-import type { FoodRecall, ProduceRecallGroup, RecallRelevance } from '@/types/recall';
-import { cleanRecallSearchTerm } from './recallSearch';
+import type { FoodRecall, ProduceRecallGroup, RecallRelevance } from '../types/recall.ts';
+import { cleanRecallSearchTerm } from './recallSearch.ts';
 
 const COMMON_PRODUCE_TERMS = [
   'apple',
@@ -199,12 +199,46 @@ export function getRecallRelevance(description: string, term: string): RecallRel
   return 'low';
 }
 
+function getRecallFieldRelevance(recall: FoodRecall, term: string): RecallRelevance | null {
+  const fields = [
+    recall.productDescription,
+    recall.recallingFirm,
+    recall.reasonForRecall,
+    recall.summary ?? '',
+  ];
+  const relevanceRank = { high: 3, medium: 2, low: 1 } as const;
+  const directMatches = fields
+    .map((field) => getRecallRelevance(field, term))
+    .filter((value): value is RecallRelevance => value !== null)
+    .sort((left, right) => relevanceRank[right] - relevanceRank[left]);
+
+  if (directMatches[0]) return directMatches[0];
+
+  const termWords = wordsFrom(term);
+  if (termWords.length === 0) return null;
+  const recordWords = fields.flatMap(wordsFrom);
+  const matchedWords = termWords.filter((termWord) =>
+    recordWords.some((recordWord) => wordsMatch(recordWord, termWord)),
+  ).length;
+  if (matchedWords === 0) return null;
+  if (matchedWords === termWords.length) return 'medium';
+  return matchedWords / termWords.length >= 0.5 ? 'low' : null;
+}
+
+function recallDateValue(value: string) {
+  const normalized = /^\d{8}$/.test(value)
+    ? `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`
+    : value;
+  const parsed = Date.parse(normalized);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
 export function rankAndFilterRecalls(recalls: FoodRecall[], term: string) {
   return recalls
     .map((recall, originalIndex) => ({
       recall: {
         ...recall,
-        relevance: getRecallRelevance(recall.productDescription, term) ?? undefined,
+        relevance: getRecallFieldRelevance(recall, term) ?? undefined,
         produceGroup: getProduceGroup(recall.productDescription, term),
       },
       originalIndex,
@@ -222,6 +256,10 @@ export function rankAndFilterRecalls(recalls: FoodRecall[], term: string) {
         relevanceRank[right.recall.relevance as RecallRelevance] -
         relevanceRank[left.recall.relevance as RecallRelevance];
       if (scoreDifference) return scoreDifference;
+
+      const dateDifference =
+        recallDateValue(right.recall.recallDate) - recallDateValue(left.recall.recallDate);
+      if (dateDifference) return dateDifference;
 
       return left.originalIndex - right.originalIndex;
     })

@@ -4,6 +4,7 @@ import {
 } from "@workspace/api-zod";
 import { Router, type IRouter } from "express";
 import { logger } from "../lib/logger";
+import { searchFdaRecallNoticeIndex } from "../lib/fdaRecallNotices";
 
 const router: IRouter = Router();
 const OPENFDA_ENDPOINTS = [
@@ -75,6 +76,7 @@ async function searchEndpoint(endpoint: string, search: string, limit: number) {
   const params = new URLSearchParams({
     search,
     limit: String(limit),
+    sort: "report_date:desc",
   });
   const apiKey = process.env.OPENFDA_API_KEY?.trim();
   if (!apiKey) {
@@ -114,6 +116,25 @@ async function searchEndpoint(endpoint: string, search: string, limit: number) {
   return payload.results ?? [];
 }
 
+async function searchOpenFdaSources(search: string, limit: number) {
+  const responses = await Promise.allSettled(
+    OPENFDA_ENDPOINTS.map((endpoint) => searchEndpoint(endpoint, search, limit)),
+  );
+  const successfulResults = responses.filter(
+    (result): result is PromiseFulfilledResult<OpenFdaRecord[]> =>
+      result.status === "fulfilled",
+  );
+  if (successfulResults.length > 0) {
+    return successfulResults.flatMap((result) => result.value);
+  }
+
+  throw (
+    responses.find(
+      (result): result is PromiseRejectedResult => result.status === "rejected",
+    )?.reason ?? new Error("OpenFDA returned no results.")
+  );
+}
+
 router.get("/recalls/fda", async (req, res) => {
   const parsed = GetFdaRecallsQueryParams.safeParse(req.query);
   if (!parsed.success) {
@@ -123,26 +144,45 @@ router.get("/recalls/fda", async (req, res) => {
 
   const { search, limit } = parsed.data;
   const apiKeyConfigured = Boolean(process.env.OPENFDA_API_KEY?.trim());
-  logger.info({ apiKeyConfigured, limit, search }, "Searching OpenFDA through server proxy");
+  logger.info(
+    { apiKeyConfigured, limit, search },
+    "Searching OpenFDA and FDA recall notices through server proxy",
+  );
 
   try {
-    const results = await Promise.all(
-      OPENFDA_ENDPOINTS.map((endpoint) => searchEndpoint(endpoint, search, limit)),
-    );
+    const [openFdaResult, noticeResult] = await Promise.allSettled([
+      searchOpenFdaSources(search, limit),
+      searchFdaRecallNoticeIndex(search),
+    ]);
+    if (openFdaResult.status === "rejected" && noticeResult.status === "rejected") {
+      throw openFdaResult.reason;
+    }
+    if (openFdaResult.status === "rejected") {
+      logger.warn({ err: openFdaResult.reason, search }, "OpenFDA search failed; using FDA notices");
+    }
+    if (noticeResult.status === "rejected") {
+      logger.warn({ err: noticeResult.reason, search }, "FDA notice search failed; using OpenFDA");
+    }
+
+    const results = [
+      ...(openFdaResult.status === "fulfilled" ? openFdaResult.value.map(normalizeRecord) : []),
+      ...(noticeResult.status === "fulfilled" ? noticeResult.value : []),
+    ];
     const seen = new Set<string>();
-    const normalizedResults = results
-      .flat()
-      .map(normalizeRecord)
-      .filter((record) => {
-        const key = record.recallNumber ?? [
+    const normalizedResults = results.filter((record) => {
+      const key =
+        record.recallNumber ??
+        [
           record.productDescription,
           record.recallingFirm,
           record.recallDate,
-        ].join("|");
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
+        ]
+          .join("|")
+          .toLocaleLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
 
     const response = GetFdaRecallsResponse.parse({ results: normalizedResults });
     res.json(response);
@@ -151,7 +191,7 @@ router.get("/recalls/fda", async (req, res) => {
       logger.error({ err: error, search }, "OpenFDA API configuration is missing");
       res.status(500).json({
         code: error.code,
-        message: "FDA API configuration is missing on the server.",
+        message: "FDA API configuration is missing and the official FDA notice search is unavailable.",
       });
       return;
     }

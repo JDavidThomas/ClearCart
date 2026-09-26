@@ -1,15 +1,18 @@
 import type { FoodRecall } from '../types/recall';
-import { buildOpenFdaSearchQuery, cleanRecallSearchTerm } from './recallSearch.ts';
+import { getFdaRecalls } from '@workspace/api-client-react';
+import {
+  buildOpenFdaFieldSearchQueries,
+  buildOpenFdaSearchQuery,
+  buildRecallSearchStrategies,
+  cleanRecallSearchTerm,
+} from './recallSearch.ts';
 import { getProduceItem, rankAndFilterRecalls } from './recallRelevance';
 
-const OPENFDA_ENDPOINTS = [
-  'https://api.fda.gov/food/enforcement.json',
-  'https://api.fda.gov/drug/enforcement.json',
-] as const;
+const OPENFDA_ENDPOINTS = ['https://api.fda.gov/food/enforcement.json'] as const;
 const DEFAULT_FDA_NOTICES_URL =
   'https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts';
 const OPENFDA_REQUEST_TIMEOUT_MS = 15_000;
-const OPENFDA_RESULT_LIMIT = 20;
+const OPENFDA_RESULT_LIMIT = 100;
 
 /**
  * This key is intentionally exposed in the Expo app bundle. openFDA is a free
@@ -59,11 +62,6 @@ function normalizeRecord(record: OpenFdaRecord): FoodRecall {
   };
 }
 
-function isActiveRecall(record: FoodRecall) {
-  const status = record.status?.toLowerCase() ?? '';
-  return !status.includes('terminated') && !status.includes('completed');
-}
-
 async function searchEndpoint(endpoint: string, search: string) {
   if (!OPENFDA_API_KEY) {
     throw new Error(
@@ -74,6 +72,7 @@ async function searchEndpoint(endpoint: string, search: string) {
   const params = new URLSearchParams({
     search,
     limit: String(OPENFDA_RESULT_LIMIT),
+    sort: 'report_date:desc',
     api_key: OPENFDA_API_KEY,
   });
   const controller = new AbortController();
@@ -134,7 +133,6 @@ function deduplicateRecalls(records: OpenFdaRecord[]) {
   const seenRecallKeys = new Set<string>();
   return records
     .map(normalizeRecord)
-    .filter(isActiveRecall)
     .filter((recall) => {
       const key =
         recall.recallNumber ??
@@ -145,68 +143,82 @@ function deduplicateRecalls(records: OpenFdaRecord[]) {
     });
 }
 
-function buildSearchTerms(term: string, options: FdaRecallSearchOptions) {
-  const normalizedTerm = cleanRecallSearchTerm(term);
-  if (!normalizedTerm) return [];
-  const optionalTerm = (value: string | undefined) => {
-    const normalized = value ? cleanRecallSearchTerm(value) : '';
-    return /^(unknown|unclear|none|null)$/i.test(normalized) ? '' : normalized;
-  };
+function optionalSearchTerm(value: string | undefined) {
+  const normalized = value ? cleanRecallSearchTerm(value) : '';
+  return /^(unknown|unclear|none|null)$/i.test(normalized) ? '' : normalized;
+}
 
-  const terms = [
-    normalizedTerm,
-    optionalTerm(options.brand),
-    optionalTerm(options.productType),
-  ];
-  const knownProductType = normalizedTerm
-    .split(' ')
-    .find((word) =>
-      /^(?:cookie|cookies|cereal|soda|cola|cracker|crackers|chips|candy|chocolate|yogurt|milk|juice|bread|soup|cheese|drink|beverage)$/i.test(
-        word,
-      ),
-    );
-  if (knownProductType) terms.push(knownProductType);
-  return [...new Set(terms.filter(Boolean))];
+function normalizeProxyRecord(record: {
+  recallNumber?: string;
+  productDescription: string;
+  reasonForRecall: string;
+  recallingFirm: string;
+  recallDate: string;
+  classification: string;
+  status?: string;
+  officialUrl: string;
+}): FoodRecall {
+  return {
+    ...record,
+    source: 'FDA',
+  };
 }
 
 export async function searchFdaRecalls(
   term: string,
   options: FdaRecallSearchOptions = {},
 ): Promise<FoodRecall[]> {
-  const searchTerms = buildSearchTerms(term, options);
-  if (searchTerms.length === 0) return [];
+  const normalizedTerm = cleanRecallSearchTerm(term);
+  if (!normalizedTerm) return [];
 
   let successfulSearch = false;
   let lastError: unknown = null;
-  for (const searchTerm of searchTerms) {
-    try {
-      const query = buildOpenFdaSearchQuery(searchTerm);
-      const results = await searchOpenFda(query);
-      successfulSearch = true;
-      const produceItem = getProduceItem(searchTerm);
-      let rankedResults = results;
+  const records: FoodRecall[] = [];
 
+  for (const strategy of buildRecallSearchStrategies(normalizedTerm, options)) {
+    try {
+      const results = await searchOpenFda(strategy.query);
+      successfulSearch = true;
+      records.push(...results.map(normalizeRecord));
+
+      const produceItem =
+        strategy.field === 'product_description' ? getProduceItem(strategy.term) : null;
       if (produceItem) {
         try {
           const strictResults = await searchOpenFda(`product_description:${produceItem}*`);
-          rankedResults = [...strictResults, ...rankedResults];
+          records.push(...strictResults.map(normalizeRecord));
         } catch {
           // The broad query remains sufficient if openFDA rejects the prefix query.
         }
       }
 
-      const relevantResults = rankAndFilterRecalls(
-        deduplicateRecalls(rankedResults),
-        searchTerm,
-      );
-      if (relevantResults.length > 0) return relevantResults;
+      const relevantResults = rankAndFilterRecalls(deduplicateRecalls(records), normalizedTerm);
+      if (relevantResults.length > 0 && strategy.field === 'recalling_firm') break;
     } catch (error) {
       lastError = error;
     }
   }
 
+  try {
+    const proxyTerms = [
+      normalizedTerm,
+      optionalSearchTerm(options.brand),
+      optionalSearchTerm(options.productType),
+    ].filter(Boolean);
+    const proxySearch = buildOpenFdaSearchQuery(proxyTerms.join(' '));
+    const proxyResponse = await getFdaRecalls({
+      search: proxySearch,
+      limit: OPENFDA_RESULT_LIMIT,
+    });
+    records.push(...proxyResponse.results.map(normalizeProxyRecord));
+    successfulSearch = true;
+  } catch (error) {
+    if (!lastError) lastError = error;
+  }
+
   if (!successfulSearch && lastError) {
     throw lastError;
   }
-  return [];
+
+  return rankAndFilterRecalls(deduplicateRecalls(records), normalizedTerm);
 }

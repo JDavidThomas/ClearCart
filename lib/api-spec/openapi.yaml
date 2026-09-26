@@ -72,8 +72,8 @@ paths:
     get:
       operationId: getFdaRecalls
       tags: [recalls]
-      summary: Search FDA enforcement recalls
-      description: Searches FDA food and drug enforcement records through the server-side OpenFDA proxy.
+      summary: Search FDA recall records and notices
+      description: Searches OpenFDA enforcement records and the FDA's official recall announcement index through the server-side proxy.
       parameters:
         - name: search
           in: query

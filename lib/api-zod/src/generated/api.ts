@@ -57,8 +57,8 @@ export const GetFsisRecallsResponse = zod.object({
 
 
 /**
- * Searches FDA food and drug enforcement records through the server-side OpenFDA proxy.
- * @summary Search FDA enforcement recalls
+ * Searches OpenFDA enforcement records and the FDA's official recall announcement index through the server-side proxy.
+ * @summary Search FDA recall records and notices
  */
 
 export const getFdaRecallsQueryLimitDefault = 20;
