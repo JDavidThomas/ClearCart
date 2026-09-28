@@ -2,10 +2,22 @@ import { Platform } from 'react-native';
 import type { FoodRecall } from '../types/recall.ts';
 import { getFsisRecalls } from '@workspace/api-client-react';
 import { normalizeFsisRecallRecords } from './fsisRecallData.ts';
+import type { FsisRecallSearchResult } from './recallSourceResults.ts';
 
 const FSIS_RECALLS_URL =
   'https://www.fsis.usda.gov/fsis/api/recall/v/1?field_recall_type_id=23';
 const FSIS_REQUEST_TIMEOUT_MS = 15_000;
+const FSIS_PUBLIC_PROXIES = [
+  {
+    name: 'corsproxy.io',
+    buildUrl: (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+  },
+  {
+    name: 'AllOrigins',
+    buildUrl: (url: string) =>
+      `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  },
+] as const;
 
 function toFoodRecall(recall: {
   id: string;
@@ -35,41 +47,68 @@ function toFoodRecall(recall: {
   };
 }
 
-async function fetchFsisRecallsDirectly() {
+async function fetchFsisFeed(url: string, source: string) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), FSIS_REQUEST_TIMEOUT_MS);
 
   try {
-    console.info('[FSIS] requesting official recall feed from the native device');
-    const response = await fetch(FSIS_RECALLS_URL, {
+    console.info('[FSIS] requesting recall feed', { source });
+    const response = await fetch(url, {
       headers: { accept: 'application/json' },
       signal: controller.signal,
     });
     if (!response.ok) {
-      throw new Error(`USDA FSIS returned HTTP ${response.status}`);
+      throw new Error(`${source} returned HTTP ${response.status}`);
     }
-    const records = normalizeFsisRecallRecords((await response.json()) as unknown);
-    console.info('[FSIS] native request succeeded', { resultCount: records.length });
-    return records;
+    const payload = (await response.json()) as unknown;
+    if (!Array.isArray(payload)) {
+      throw new Error(`${source} returned an invalid recall feed.`);
+    }
+    const records = normalizeFsisRecallRecords(payload);
+    console.info('[FSIS] recall feed request succeeded', {
+      source,
+      resultCount: records.length,
+    });
+    return records.map(toFoodRecall);
   } finally {
     clearTimeout(timeoutId);
   }
 }
 
-export async function searchFsisRecalls(): Promise<FoodRecall[]> {
+async function fetchPublicProxyRecalls(): Promise<FoodRecall[] | null> {
+  for (const proxy of FSIS_PUBLIC_PROXIES) {
+    try {
+      return await fetchFsisFeed(proxy.buildUrl(FSIS_RECALLS_URL), proxy.name);
+    } catch (error) {
+      console.warn('[FSIS] public proxy failed', {
+        source: proxy.name,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  return null;
+}
+
+export async function searchFsisRecalls(): Promise<FsisRecallSearchResult> {
   if (Platform.OS !== 'web') {
     try {
-      const recalls = await fetchFsisRecallsDirectly();
-      return recalls.map(toFoodRecall);
+      return {
+        recalls: await fetchFsisFeed(FSIS_RECALLS_URL, 'official native request'),
+      };
     } catch (error) {
-      console.warn('[FSIS] native request failed; trying the API server proxy', {
+      console.warn('[FSIS] direct native request failed; trying public proxies', {
         error: error instanceof Error ? error.message : String(error),
       });
     }
   }
 
+  const proxyRecalls = await fetchPublicProxyRecalls();
+  if (proxyRecalls) {
+    return { recalls: proxyRecalls };
+  }
+
   try {
-    console.info('[FSIS] requesting official recall feed through the API server');
+    console.info('[FSIS] trying the API server fallback');
     const response = await getFsisRecalls();
     if (!response || !Array.isArray(response.recalls)) {
       throw new Error('USDA FSIS API server returned an invalid response.');
@@ -77,11 +116,11 @@ export async function searchFsisRecalls(): Promise<FoodRecall[]> {
     console.info('[FSIS] API server request succeeded', {
       resultCount: response.recalls.length,
     });
-    return response.recalls.map(toFoodRecall);
+    return { recalls: response.recalls.map(toFoodRecall) };
   } catch (error) {
     console.error('[FSIS] API server request failed', {
       error: error instanceof Error ? error.message : String(error),
     });
-    throw new Error('USDA FSIS recall data is unavailable right now. Please try again.');
+    return { recalls: [], sourceUnavailable: 'fsis' };
   }
 }

@@ -30,6 +30,8 @@ export interface RecallSearchResult {
   relevanceNotice?: string;
   isProduceSearch?: boolean;
   produceItem?: string;
+  sourceUnavailable?: 'fsis';
+  fdaUnavailable?: boolean;
 }
 
 export interface OpenFoodFactsProduct {
