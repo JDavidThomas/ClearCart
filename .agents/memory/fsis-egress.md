@@ -7,4 +7,4 @@ Requests from the Replit server container to the official FSIS recall API, RSS f
 
 **Why:** The server-side proxy could not provide FSIS data despite the public API being healthy through an external fetch path.
 
-**How to apply:** Keep the generated API client as the normal path, but allow native Expo clients to fall back to a direct request to the official FSIS API. Do not assume direct browser access works; CORS behavior was not verified.
+**How to apply:** On native Expo, try the official FSIS API directly before the API-server proxy to avoid a known failing server request; fall back to the proxy if device access fails. Web uses the proxy because direct browser access and CORS behavior are unverified. Do not make the web-fetch service an app runtime dependency.

@@ -5,12 +5,20 @@ import type {
 } from '@/types/recall';
 import { searchFdaRecalls, type FdaRecallSearchOptions } from './fdaRecalls';
 import { searchFsisRecalls } from './fsisRecalls';
-import { buildOpenFdaSearchQuery, cleanRecallSearchTerm } from './recallSearch';
+import {
+  buildOpenFdaSearchQuery,
+  cleanRecallSearchTerm,
+  isFsisRecallSearch,
+} from './recallSearch';
 import {
   getRecallRelevanceNotice,
   rankAndFilterRecalls,
   splitRecallGroups,
 } from './recallRelevance';
+import {
+  isRecallSearchCacheFresh,
+  RECALL_SEARCH_CACHE_TTL_MS,
+} from './recallCache';
 export {
   lookupOpenFoodFactsProduct,
   searchOpenFoodFactsProduct,
@@ -76,8 +84,27 @@ function buildSearchResult(term: string, cached: CachedSearch, fromCache: boolea
   };
 }
 
-function cacheKey(term: string) {
-  return `${CACHE_PREFIX}${encodeURIComponent(term.toLowerCase())}`;
+function normalizeCacheOption(value?: string) {
+  const normalized = value ? cleanRecallSearchTerm(value) : '';
+  return /^(unknown|unclear|none|null)$/i.test(normalized) ? '' : normalized;
+}
+
+function cacheKey(
+  term: string,
+  options: FdaRecallSearchOptions,
+  source: 'fda' | 'fsis',
+) {
+  const brand = normalizeCacheOption(options.brand).toLowerCase();
+  const productType = normalizeCacheOption(options.productType).toLowerCase();
+  const optionIdentity = [brand, productType].filter(Boolean).join('|');
+  const identity = [
+    term.toLowerCase(),
+    optionIdentity,
+    source === 'fsis' ? 'source:fsis' : '',
+  ]
+    .filter(Boolean)
+    .join('|');
+  return `${CACHE_PREFIX}${encodeURIComponent(identity)}`;
 }
 
 function messageFromApiError(error: unknown) {
@@ -107,10 +134,13 @@ function formatRecallSearchError(error: unknown) {
   if (message.startsWith('FDA API ')) {
     return message;
   }
+  if (message.startsWith('USDA FSIS ')) {
+    return message;
+  }
   if (/network request failed|failed to fetch|fetch failed|timeout/i.test(message)) {
     return 'FDA API is unreachable right now. Check your connection and try again.';
   }
-  return 'FDA API returned an unexpected error. Please try again.';
+  return 'Recall data is unavailable right now. Please try again.';
 }
 
 function getRecallSearchErrorDiagnostics(error: unknown) {
@@ -144,26 +174,32 @@ function getRecallSearchErrorDiagnostics(error: unknown) {
   };
 }
 
-async function readCachedSearch(term: string): Promise<CachedSearch | null> {
+async function readCachedSearch(key: string): Promise<CachedSearch | null> {
   try {
-    const cached = await AsyncStorage.getItem(cacheKey(term));
-    return cached ? normalizeCachedSearch(JSON.parse(cached)) : null;
+    const cached = await AsyncStorage.getItem(key);
+    const normalized = cached ? normalizeCachedSearch(JSON.parse(cached)) : null;
+    return normalized && isRecallSearchCacheFresh(normalized.lastUpdated)
+      ? normalized
+      : null;
   } catch {
     return null;
   }
 }
 
-async function saveSearch(term: string, value: CachedSearch) {
+async function saveSearch(key: string, term: string, value: CachedSearch) {
   try {
     const indexValue = await AsyncStorage.getItem(CACHE_INDEX_KEY);
-    const previousTerms = indexValue ? (JSON.parse(indexValue) as string[]) : [];
+    const parsedIndex = indexValue ? JSON.parse(indexValue) : [];
+    const previousTerms = Array.isArray(parsedIndex)
+      ? parsedIndex.filter((item): item is string => typeof item === 'string')
+      : [];
     const nextTerms = [
       term.toLowerCase(),
       ...previousTerms.filter((item) => item !== term.toLowerCase()),
     ].slice(0, MAX_CACHED_SEARCHES);
 
     await Promise.all([
-      AsyncStorage.setItem(cacheKey(term), JSON.stringify(value)),
+      AsyncStorage.setItem(key, JSON.stringify(value)),
       AsyncStorage.setItem(CACHE_INDEX_KEY, JSON.stringify(nextTerms)),
     ]);
   } catch {
@@ -172,8 +208,8 @@ async function saveSearch(term: string, value: CachedSearch) {
 }
 
 /**
- * Searches FDA enforcement data and official recall notices alongside recent
- * USDA FSIS recalls, then uses the most recent local result if sources fail.
+ * Routes meat, poultry, and egg-product searches to USDA FSIS; other searches
+ * use FDA enforcement data. Fresh successful results are cached for 24 hours.
  */
 export async function searchFoodRecalls(
   term: string,
@@ -183,59 +219,37 @@ export async function searchFoodRecalls(
   if (!normalizedTerm) {
     return { recalls: [], lastUpdated: new Date().toISOString(), fromCache: false };
   }
-  const cached = await readCachedSearch(normalizedTerm);
+  const source = isFsisRecallSearch(normalizedTerm, options.productType) ? 'fsis' : 'fda';
+  const key = cacheKey(normalizedTerm, options, source);
+  const cached = await readCachedSearch(key);
+  if (cached) {
+    console.info('[RecallSearch] fresh cache hit', {
+      term: normalizedTerm,
+      source,
+      ageMs: Math.max(0, Date.now() - Date.parse(cached.lastUpdated)),
+      ttlMs: RECALL_SEARCH_CACHE_TTL_MS,
+    });
+    return buildSearchResult(normalizedTerm, cached, true);
+  }
 
   try {
-    const [fdaResult, fsisResult] = await Promise.allSettled([
-      searchFdaRecalls(normalizedTerm, options),
-      searchFsisRecalls(),
-    ]);
-    const successfulResults = [fdaResult, fsisResult].filter(
-      (result): result is PromiseFulfilledResult<FoodRecall[]> => result.status === 'fulfilled',
-    );
-    const failedResults = [fdaResult, fsisResult].filter(
-      (result): result is PromiseRejectedResult => result.status === 'rejected',
-    );
-    if (successfulResults.length === 0) {
-      throw (
-        failedResults[0]?.reason ??
-        new Error('Recall data sources are unavailable.')
-      );
-    }
-
-    const recalls = successfulResults.flatMap((result) => result.value);
-    const hasRelevantRecalls =
-      rankAndFilterRecalls(recalls, normalizedTerm).length > 0;
-    if (failedResults.length > 0) {
-      console.warn('[RecallSearch] continuing with available recall sources', {
-        fdaSucceeded: fdaResult.status === 'fulfilled',
-        fsisSucceeded: fsisResult.status === 'fulfilled',
-        hasRelevantRecalls,
-      });
-    }
-    if (
-      failedResults.length > 0 &&
-      fdaResult.status === 'rejected' &&
-      !hasRelevantRecalls
-    ) {
-      throw failedResults[0].reason;
-    }
+    const recalls =
+      source === 'fsis'
+        ? await searchFsisRecalls()
+        : await searchFdaRecalls(normalizedTerm, options);
     const freshResult: CachedSearch = {
       recalls,
       lastUpdated: new Date().toISOString(),
     };
-    await saveSearch(normalizedTerm, freshResult);
+    await saveSearch(key, normalizedTerm, freshResult);
     return buildSearchResult(normalizedTerm, freshResult, false);
   } catch (error) {
     const diagnostics = {
       term: normalizedTerm,
-      hasCachedResult: Boolean(cached),
+      source,
+      hasCachedResult: false,
       ...getRecallSearchErrorDiagnostics(error),
     };
-    if (cached) {
-      console.warn('[RecallSearch] live lookup failed; returning cached data', diagnostics);
-      return buildSearchResult(normalizedTerm, cached, true);
-    }
 
     console.error('[RecallSearch] live lookup failed', diagnostics);
     throw new Error(formatRecallSearchError(error));

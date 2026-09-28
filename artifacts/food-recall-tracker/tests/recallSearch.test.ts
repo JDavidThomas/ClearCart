@@ -6,53 +6,50 @@ import {
   buildOpenFdaFieldSearchQueries,
   buildOpenFdaSearchQuery,
   buildRecallSearchStrategies,
+  isFsisRecallSearch,
 } from '../services/recallSearch.ts';
 
-test('recall searches try the recalling firm before product descriptions', () => {
-  const strategies = buildRecallSearchStrategies('Martina', { productType: 'Mangoes' });
+test('recall search uses the full product, one relevant word, then one brand word', () => {
+  const strategies = buildRecallSearchStrategies('Great Value Frozen Berries');
 
-  assert.equal(strategies[0].field, 'recalling_firm');
-  assert.equal(strategies[0].query, 'recalling_firm:"Martina"');
-  assert.equal(
-    strategies.some(
-      (strategy) =>
-        strategy.field === 'product_description' &&
-        strategy.term === 'Mangoes' &&
-        strategy.query === 'product_description:"Mangoes"',
-    ),
-    true,
+  assert.deepEqual(
+    strategies.map((strategy) => strategy.query),
+    [
+      'product_description:"Great Value Frozen Berries"',
+      'product_description:Berries',
+      'recalling_firm:Great',
+    ],
   );
+  assert.equal(strategies.length <= 3, true);
 });
 
-test('multiword firm searches keep an exact phrase and a flexible token fallback', () => {
+test('a firm phrase produces only one query instead of duplicate fallbacks', () => {
   assert.deepEqual(buildOpenFdaFieldSearchQueries('recalling_firm', 'Midwest Poultry'), [
     'recalling_firm:"Midwest Poultry"',
-    'recalling_firm:"Midwest" OR recalling_firm:"Poultry"',
   ]);
 });
 
-test('OpenFDA alternatives are quoted, URL-safe, and deduplicated', () => {
+test('OpenFDA query builder avoids duplicate OR strategies', () => {
   assert.deepEqual(
     buildOpenFdaFieldSearchQueries('product_description', 'guacamole'),
-    [
-      'product_description:"guacamole"',
-      'product_description:"guacamole" OR product_description:"guacamoles"',
-    ],
+    ['product_description:"guacamole"'],
   );
-  assert.equal(
-    buildOpenFdaSearchQuery('guacamole'),
-    'product_description:"guacamole" OR product_description:"guacamoles"',
-  );
+  assert.equal(buildOpenFdaSearchQuery('guacamole'), 'product_description:"guacamole"');
+  assert.equal(buildRecallSearchStrategies('avocado').length, 2);
+  assert.equal(buildOpenFdaSearchQuery('xyzabc'), 'product_description:"xyzabc"');
   const encodedSearch = new URLSearchParams({
     search: buildOpenFdaSearchQuery('guacamole'),
   })
     .toString()
     .replace(/\+/g, '%20');
-  assert.equal(/%20OR%20/.test(encodedSearch), true);
-  assert.equal(
-    buildOpenFdaSearchQuery('xyzabc'),
-    'product_description:"xyzabc" OR product_description:"xyzabcs"',
-  );
+  assert.equal(/%2BOR%2B/.test(encodedSearch), false);
+});
+
+test('meat, poultry, and egg searches route to USDA FSIS', () => {
+  assert.equal(isFsisRecallSearch('eggs'), true);
+  assert.equal(isFsisRecallSearch('chicken breast'), true);
+  assert.equal(isFsisRecallSearch('beef jerky'), true);
+  assert.equal(isFsisRecallSearch('banana'), false);
 });
 
 test('recall relevance can match a firm name even when the product text differs', () => {

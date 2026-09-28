@@ -40,6 +40,7 @@ async function fetchFsisRecallsDirectly() {
   const timeoutId = setTimeout(() => controller.abort(), FSIS_REQUEST_TIMEOUT_MS);
 
   try {
+    console.info('[FSIS] requesting official recall feed from the native device');
     const response = await fetch(FSIS_RECALLS_URL, {
       headers: { accept: 'application/json' },
       signal: controller.signal,
@@ -47,24 +48,40 @@ async function fetchFsisRecallsDirectly() {
     if (!response.ok) {
       throw new Error(`USDA FSIS returned HTTP ${response.status}`);
     }
-    return normalizeFsisRecallRecords((await response.json()) as unknown);
+    const records = normalizeFsisRecallRecords((await response.json()) as unknown);
+    console.info('[FSIS] native request succeeded', { resultCount: records.length });
+    return records;
   } finally {
     clearTimeout(timeoutId);
   }
 }
 
 export async function searchFsisRecalls(): Promise<FoodRecall[]> {
-  try {
-    const response = await getFsisRecalls();
-    return response.recalls.map(toFoodRecall);
-  } catch (proxyError) {
-    if (Platform.OS === 'web') throw proxyError;
-
+  if (Platform.OS !== 'web') {
     try {
       const recalls = await fetchFsisRecallsDirectly();
       return recalls.map(toFoodRecall);
-    } catch {
-      throw proxyError;
+    } catch (error) {
+      console.warn('[FSIS] native request failed; trying the API server proxy', {
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
+  }
+
+  try {
+    console.info('[FSIS] requesting official recall feed through the API server');
+    const response = await getFsisRecalls();
+    if (!response || !Array.isArray(response.recalls)) {
+      throw new Error('USDA FSIS API server returned an invalid response.');
+    }
+    console.info('[FSIS] API server request succeeded', {
+      resultCount: response.recalls.length,
+    });
+    return response.recalls.map(toFoodRecall);
+  } catch (error) {
+    console.error('[FSIS] API server request failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw new Error('USDA FSIS recall data is unavailable right now. Please try again.');
   }
 }
