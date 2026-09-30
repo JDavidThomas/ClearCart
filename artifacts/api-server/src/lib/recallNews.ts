@@ -1,6 +1,17 @@
 export const NEWS_API_RESULT_LIMIT = 10;
 const RECENT_NEWS_WINDOW_MS = 14 * 24 * 60 * 60 * 1_000;
 
+export function isNewsApiAllowed(
+  nodeEnvironment: string | undefined,
+  allowNonDevelopment: string | undefined,
+) {
+  return (
+    nodeEnvironment === "development" ||
+    nodeEnvironment === "test" ||
+    allowNonDevelopment === "true"
+  );
+}
+
 export interface RecallNewsDateRange {
   from: string;
   to: string;
@@ -32,7 +43,7 @@ export function normalizeNewsSearchTerm(term: string) {
 
 export function buildNewsQuery(term: string) {
   const phrase = term.includes(" ") ? `"${term}"` : term;
-  return `${phrase} recall`;
+  return `+${phrase} +recall`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

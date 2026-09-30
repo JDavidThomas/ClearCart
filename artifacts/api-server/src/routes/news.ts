@@ -7,6 +7,7 @@ import { logger } from "../lib/logger";
 import {
   buildNewsQuery,
   getNewsDateRange,
+  isNewsApiAllowed,
   NEWS_API_RESULT_LIMIT,
   normalizeNewsArticles,
   normalizeNewsSearchTerm,
@@ -47,6 +48,20 @@ router.get("/recalls/news", async (req, res) => {
       dateRange,
     });
 
+  if (
+    !isNewsApiAllowed(
+      process.env.NODE_ENV,
+      process.env.NEWSAPI_ALLOW_NON_DEVELOPMENT,
+    )
+  ) {
+    logger.warn(
+      { term, dateRange, unavailable: true },
+      "NewsAPI disabled outside development until eligible access is configured",
+    );
+    res.json(emptyResponse(true));
+    return;
+  }
+
   if (!apiKey) {
     logger.warn(
       { term, dateRange, unavailable: true },
@@ -59,6 +74,7 @@ router.get("/recalls/news", async (req, res) => {
   const query = buildNewsQuery(term);
   const params = new URLSearchParams({
     q: query,
+    searchIn: "title,description",
     from: dateRange.from,
     to: dateRange.to,
     language: "en",

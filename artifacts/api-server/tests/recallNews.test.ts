@@ -3,14 +3,24 @@ import test from "node:test";
 import {
   buildNewsQuery,
   getNewsDateRange,
+  isNewsApiAllowed,
   normalizeNewsArticles,
   normalizeNewsSearchTerm,
 } from "../src/lib/recallNews.ts";
 
 test("NewsAPI search quotes multiword product names and asks for recall mentions", () => {
-  assert.equal(buildNewsQuery("banana"), "banana recall");
-  assert.equal(buildNewsQuery("baby spinach"), '"baby spinach" recall');
+  assert.equal(buildNewsQuery("banana"), "+banana +recall");
+  assert.equal(buildNewsQuery("baby spinach"), '+"baby spinach" +recall');
   assert.equal(normalizeNewsSearchTerm("  café—style  eggs! "), "cafe style eggs");
+});
+
+test("NewsAPI is limited to development and testing unless explicitly enabled elsewhere", () => {
+  assert.equal(isNewsApiAllowed("development", undefined), true);
+  assert.equal(isNewsApiAllowed("test", undefined), true);
+  assert.equal(isNewsApiAllowed("production", undefined), false);
+  assert.equal(isNewsApiAllowed("staging", undefined), false);
+  assert.equal(isNewsApiAllowed(undefined, undefined), false);
+  assert.equal(isNewsApiAllowed("production", "true"), true);
 });
 
 test("NewsAPI date window is exactly the rolling previous 14 days", () => {
