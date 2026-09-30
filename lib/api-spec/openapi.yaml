@@ -58,7 +58,7 @@ paths:
       operationId: getFdaRecalls
       tags: [recalls]
       summary: Search FDA recall records and notices
-      description: Searches OpenFDA enforcement records and the FDA's official recall announcement index through the server-side proxy.
+      description: Searches OpenFDA food enforcement records through the server-side proxy.
       parameters:
         - name: search
           in: query
@@ -90,7 +90,7 @@ paths:
       operationId: getRecallNews
       tags: [recalls]
       summary: Search recent recall news mentions
-      description: Searches GNews for matching articles published during the previous 14 days. An unavailable news source returns an empty list.
+      description: Searches NewsAPI for matching articles published during the previous 14 days. An unavailable news source returns an empty list.
       parameters:
         - name: term
           in: query

@@ -11,6 +11,6 @@
 - [Native TypeScript tests](native-ts-tests.md) — pure Expo service tests can use Node’s native TypeScript runner without adding a test framework or runtime dependency.
 - [Expo static build port conflict](expo-static-build-port.md) — the static build script can collide with the mockup server on port 8081; use the managed workflow for runtime verification.
 - [Expo tunnel startup failures](expo-tunnel-startup.md) — Ngrok can fail before `Tunnel ready`; never reuse the prior `exp.direct` URL as if a fresh tunnel started.
-- [FSIS egress boundary](fsis-egress.md) — Replit server fetches to official FSIS hosts return 403; native Expo can fall back to the official recall API.
+- [FSIS manual-source boundary](fsis-egress.md) — the app uses openFDA for official recall records and points meat, poultry, and egg searches to FSIS.gov.
 - [NewsAPI developer plan](newsapi-developer-plan.md) — free NewsAPI keys are development/testing only, with a 24-hour article delay and 100 requests/day.
-- [NewsAPI search relevance](newsapi-search-relevance.md) — require both product and recall terms, and restrict NewsAPI searches to titles and descriptions to reduce noise.
+- [NewsAPI recall mentions](newsapi-search-relevance.md) — keep recent news separate from official FDA results and require focused title/description recall searches.

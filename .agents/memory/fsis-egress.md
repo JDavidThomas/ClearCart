@@ -1,10 +1,10 @@
 ---
-name: USDA FSIS egress boundary
-description: Official FSIS API and website requests are blocked from the Replit server container.
+name: FSIS manual-source boundary
+description: The app does not fetch USDA FSIS recall data and links users to the official FSIS site instead.
 ---
 
-Requests from the Replit server container to the official FSIS recall API, RSS feed, and recalls page returned HTTP 403, including with a standard browser user agent. The same official API and RSS content were retrievable through the web-fetch service. Public CORS proxy probes from the workspace also failed: corsproxy.io returned HTTP 403 and AllOrigins returned HTTP 522. These tests describe this environment, not every user's network.
+The server's FSIS API requests and tested CORS proxy paths returned persistent errors, which produced confusing unavailable states. The product decision is to remove FSIS fetching entirely, use openFDA food-enforcement data for official recall results, and link meat, poultry, and egg searches directly to https://www.fsis.usda.gov/recalls.
 
-**Why:** Server-side FSIS access and the tested public proxy paths can fail independently of external availability, so the app cannot rely on any one transport.
+**Why:** Unavailable FSIS cards damaged trust, and the official FSIS website remains the reliable destination for those products.
 
-**How to apply:** Try native direct FSIS access, then public proxies, then the API-server proxy. Treat every path as best-effort; preserve other recall results and show an explicit unavailable state with the official FSIS link if all paths fail. Do not make the web-fetch service an app runtime dependency.
+**How to apply:** Do not reintroduce an FSIS API/proxy fetch path. Keep recall search results FDA-only and retain the direct FSIS.gov link in no-results guidance and About data sources.

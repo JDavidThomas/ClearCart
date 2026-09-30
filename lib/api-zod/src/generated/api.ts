@@ -36,7 +36,7 @@ export const IdentifyFoodResponse = zod.object({
 
 
 /**
- * Searches OpenFDA enforcement records and the FDA's official recall announcement index through the server-side proxy.
+ * Searches OpenFDA food enforcement records through the server-side proxy.
  * @summary Search FDA recall records and notices
  */
 
@@ -65,7 +65,7 @@ export const GetFdaRecallsResponse = zod.object({
 
 
 /**
- * Searches GNews for matching articles published during the previous 14 days. An unavailable news source returns an empty list.
+ * Searches NewsAPI for matching articles published during the previous 14 days. An unavailable news source returns an empty list.
  * @summary Search recent recall news mentions
  */
 export const getRecallNewsQueryTermMax = 100;

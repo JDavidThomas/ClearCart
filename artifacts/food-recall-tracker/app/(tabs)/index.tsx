@@ -335,7 +335,7 @@ function RecentNewsCard({ articles, colors }: RecentNewsCardProps) {
         </View>
       </View>
       <Text style={[styles.newsDisclaimer, { color: colors.mutedForeground }]}>
-        This is a news article, not an official FDA/FSIS announcement. Please verify with the agency.
+        This is a news article, not official FDA recall data. Verify findings with the agency.
       </Text>
       <View style={styles.newsArticleList}>
         {articles.slice(0, 5).map((article, index) => (
