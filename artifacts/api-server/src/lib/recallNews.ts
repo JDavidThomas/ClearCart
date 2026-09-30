@@ -42,8 +42,24 @@ export function normalizeNewsSearchTerm(term: string) {
 }
 
 export function buildNewsQuery(term: string) {
-  const phrase = term.includes(" ") ? `"${term}"` : term;
-  return `+${phrase} +recall`;
+  const terms = normalizeNewsSearchTerm(term)
+    .split(" ")
+    .map((word) => word.toLowerCase())
+    .filter((word) => word && !/^(recall|recalls)$/i.test(word));
+
+  if (terms.length === 0) return "recall";
+  if (terms.length <= 3) return `${terms.join(" ")} AND recall`;
+
+  const brand = terms.slice(0, 2).join(" ");
+  const product = terms.slice(-3).map((word) => {
+    if (word.length > 4 && word.endsWith("ies")) return `${word.slice(0, -3)}y`;
+    if (word.length > 4 && word.endsWith("s") && !word.endsWith("ss")) {
+      return word.slice(0, -1);
+    }
+    return word;
+  }).join(" ");
+
+  return `("${brand}" OR "${product}") AND recall`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

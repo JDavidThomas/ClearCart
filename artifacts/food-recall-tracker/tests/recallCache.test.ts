@@ -1,9 +1,17 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  isRecallNewsQueryCacheCurrent,
   isRecallSearchCacheFresh,
+  RECALL_NEWS_QUERY_CACHE_VERSION,
   RECALL_SEARCH_CACHE_TTL_MS,
 } from '../services/recallCache.ts';
+
+test('recall news cache versions invalidate older empty news searches once', () => {
+  assert.equal(isRecallNewsQueryCacheCurrent(undefined), false);
+  assert.equal(isRecallNewsQueryCacheCurrent(1), false);
+  assert.equal(isRecallNewsQueryCacheCurrent(RECALL_NEWS_QUERY_CACHE_VERSION), true);
+});
 
 test('recall cache remains fresh through the 24-hour TTL', () => {
   const now = Date.parse('2026-09-27T12:00:00.000Z');

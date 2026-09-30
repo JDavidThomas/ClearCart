@@ -13,7 +13,9 @@ import {
   splitRecallGroups,
 } from './recallRelevance';
 import {
+  isRecallNewsQueryCacheCurrent,
   isRecallSearchCacheFresh,
+  RECALL_NEWS_QUERY_CACHE_VERSION,
   RECALL_SEARCH_CACHE_TTL_MS,
 } from './recallCache';
 export {
@@ -32,6 +34,7 @@ interface CachedSearch {
   recalls: FoodRecall[];
   recentNews?: RecallNewsArticle[];
   newsUnavailable?: boolean;
+  newsQueryVersion: number;
   lastUpdated: string;
   relevanceNotice?: string;
   fdaUnavailable?: boolean;
@@ -87,11 +90,15 @@ function normalizeCachedSearch(value: unknown): CachedSearch | null {
             : null;
 
       if (!lastUpdated) return null;
+      const recentNews = normalizeNewsArticles(candidate.recentNews);
 
       return {
         recalls: candidate.recalls as FoodRecall[],
-        recentNews: normalizeNewsArticles(candidate.recentNews),
-        newsUnavailable: candidate.newsUnavailable === true,
+        recentNews,
+        newsUnavailable:
+          candidate.newsUnavailable === true ||
+          !isRecallNewsQueryCacheCurrent(candidate.newsQueryVersion),
+        newsQueryVersion: RECALL_NEWS_QUERY_CACHE_VERSION,
         lastUpdated,
         relevanceNotice:
           typeof candidate.relevanceNotice === 'string' ? candidate.relevanceNotice : undefined,
@@ -321,6 +328,7 @@ export async function searchFoodRecalls(
       recalls,
       recentNews,
       newsUnavailable,
+      newsQueryVersion: RECALL_NEWS_QUERY_CACHE_VERSION,
       lastUpdated: new Date().toISOString(),
       fdaUnavailable,
     };

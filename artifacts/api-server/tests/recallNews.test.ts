@@ -8,9 +8,18 @@ import {
   normalizeNewsSearchTerm,
 } from "../src/lib/recallNews.ts";
 
-test("NewsAPI search quotes multiword product names and asks for recall mentions", () => {
-  assert.equal(buildNewsQuery("banana"), "+banana +recall");
-  assert.equal(buildNewsQuery("baby spinach"), '+"baby spinach" +recall');
+test("NewsAPI search broadens long product names instead of requiring one exact phrase", () => {
+  assert.equal(buildNewsQuery("banana"), "banana AND recall");
+  assert.equal(buildNewsQuery("baby spinach"), "baby spinach AND recall");
+  assert.equal(
+    buildNewsQuery("Sierra Nevada Graziers Raw Milk Cheeses"),
+    '("sierra nevada" OR "raw milk cheese") AND recall',
+  );
+  assert.equal(
+    buildNewsQuery("Sierra Nevada Cheese recall"),
+    "sierra nevada cheese AND recall",
+  );
+  assert.equal(buildNewsQuery("raw milk cheese recall"), "raw milk cheese AND recall");
   assert.equal(normalizeNewsSearchTerm("  café—style  eggs! "), "cafe style eggs");
 });
 

@@ -19,6 +19,7 @@ const NEWS_API_REQUEST_TIMEOUT_MS = 8_000;
 
 interface NewsApiResponse {
   status?: unknown;
+  totalResults?: unknown;
   articles?: unknown;
 }
 
@@ -81,6 +82,7 @@ router.get("/recalls/news", async (req, res) => {
     sortBy: "publishedAt",
     pageSize: String(NEWS_API_RESULT_LIMIT),
   });
+  const requestUrl = `${NEWS_API_SEARCH_URL}?${params.toString()}`;
   const controller = new AbortController();
   const timeoutId = setTimeout(
     () => controller.abort(),
@@ -88,17 +90,24 @@ router.get("/recalls/news", async (req, res) => {
   );
 
   try {
-    const response = await fetch(`${NEWS_API_SEARCH_URL}?${params.toString()}`, {
+    logger.info(
+      { term, query, requestUrl, dateRange },
+      "NewsAPI request started",
+    );
+    const response = await fetch(requestUrl, {
       headers: { accept: "application/json", "X-Api-Key": apiKey },
       signal: controller.signal,
     });
+    const responseBody = await response.text();
     if (!response.ok) {
       logger.warn(
         {
           term,
           query,
+          requestUrl,
           dateRange,
           upstreamStatus: response.status,
+          rawResponsePreview: responseBody.slice(0, 2_000),
           unavailable: true,
         },
         "NewsAPI search was unavailable",
@@ -107,21 +116,48 @@ router.get("/recalls/news", async (req, res) => {
       return;
     }
 
-    const payload = (await response.json()) as NewsApiResponse;
+    let payload: NewsApiResponse;
+    try {
+      payload = JSON.parse(responseBody) as NewsApiResponse;
+    } catch {
+      logger.warn(
+        {
+          term,
+          query,
+          requestUrl,
+          dateRange,
+          upstreamStatus: response.status,
+          rawResponsePreview: responseBody.slice(0, 2_000),
+          unavailable: true,
+        },
+        "NewsAPI returned an unreadable response",
+      );
+      res.json(emptyResponse(true));
+      return;
+    }
     if (
       !isRecord(payload) ||
       payload.status !== "ok" ||
       !Array.isArray(payload.articles)
     ) {
       logger.warn(
-        { term, query, dateRange, unavailable: true },
+        {
+          term,
+          query,
+          requestUrl,
+          dateRange,
+          upstreamStatus: response.status,
+          rawResponsePreview: responseBody.slice(0, 2_000),
+          unavailable: true,
+        },
         "NewsAPI returned an invalid search payload",
       );
       res.json(emptyResponse(true));
       return;
     }
+    const rawArticles = payload.articles;
     const articles = normalizeNewsArticles(
-      payload.articles,
+      rawArticles,
       dateRange.from,
       dateRange.to,
     );
@@ -129,11 +165,32 @@ router.get("/recalls/news", async (req, res) => {
       {
         term,
         query,
+        requestUrl,
         dateRange,
-        articleCount: articles.length,
+        upstreamStatus: response.status,
+        totalResults:
+          typeof payload.totalResults === "number"
+            ? payload.totalResults
+            : undefined,
+        rawArticleCount: rawArticles.length,
+        normalizedArticleCount: articles.length,
+        rawArticleSample: rawArticles.slice(0, 5).flatMap((article) => {
+          if (!isRecord(article)) return [];
+          const source = isRecord(article.source) ? article.source.name : undefined;
+          return [{
+            title: typeof article.title === "string" ? article.title : undefined,
+            source: typeof source === "string" ? source : undefined,
+            publishedAt:
+              typeof article.publishedAt === "string"
+                ? article.publishedAt
+                : undefined,
+            url: typeof article.url === "string" ? article.url : undefined,
+          }];
+        }),
+        rawResponsePreview: responseBody.slice(0, 2_000),
         unavailable: false,
       },
-      "NewsAPI recent recall search completed",
+      "NewsAPI response received and normalized",
     );
     res.json(
       GetRecallNewsResponse.parse({
@@ -144,7 +201,7 @@ router.get("/recalls/news", async (req, res) => {
     );
   } catch {
     logger.warn(
-      { term, query, dateRange, unavailable: true },
+      { term, query, requestUrl, dateRange, unavailable: true },
       "NewsAPI request failed; continuing without news mentions",
     );
     res.json(emptyResponse(true));
