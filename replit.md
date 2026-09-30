@@ -38,7 +38,7 @@ A cross-platform Expo app for searching current food recall records before buyin
 
 - Home search queries the public openFDA food enforcement API and presents active recall details.
 - Scan is currently a clearly labeled placeholder for the next barcode/photo checkpoint.
-- About provides the official FDA/USDA links and the required informational disclaimer.
+- About identifies openFDA as the FDA recall data source and links directly to FSIS.gov for meat, poultry, and egg recalls.
 
 ## User preferences
 

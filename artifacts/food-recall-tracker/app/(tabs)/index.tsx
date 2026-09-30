@@ -24,10 +24,9 @@ import { RecallCard } from '@/components/RecallCard';
 import { RecallRelevanceNotice } from '@/components/RecallRelevanceNotice';
 import { useColors } from '@/hooks/useColors';
 import { searchFoodRecalls } from '@/services/recallApi';
-import { isFsisRecallSearch } from '@/services/recallSearch';
-import type { FoodRecall, RecallNewsArticle, RecallSearchResult } from '@/types/recall';
+import type { RecallNewsArticle, RecallSearchResult } from '@/types/recall';
 
-const FSIS_RECALLS_PAGE_URL = 'https://www.fsis.usda.gov/recalls';
+const FSIS_RECALLS_URL = 'https://www.fsis.usda.gov/recalls';
 
 function formatUpdatedAt(date: string) {
   const parsedDate = new Date(date);
@@ -55,14 +54,10 @@ export default function HomeScreen() {
     staleTime: 5 * 60 * 1000,
     retry: false,
   });
-  const allRecalls = Array.isArray(data?.recalls) ? data.recalls : [];
-  const fdaRecalls = allRecalls.filter((recall) => recall.source !== 'USDA FSIS');
-  const fsisRecalls = allRecalls.filter((recall) => recall.source === 'USDA FSIS');
-  const recalls = [...fdaRecalls, ...fsisRecalls];
+  const recalls = Array.isArray(data?.recalls) ? data.recalls : [];
   const relatedRecalls = Array.isArray(data?.relatedRecalls) ? data.relatedRecalls : [];
   const recallCount = recalls.length;
   const lastUpdated = data?.lastUpdated ?? new Date().toISOString();
-  const isFsisSearch = isFsisRecallSearch(submittedTerm);
 
   const handleSearch = async () => {
     const nextTerm = term.trim();
@@ -83,18 +78,14 @@ export default function HomeScreen() {
         data={recalls}
         keyExtractor={(item, index) => `${item.recallNumber ?? item.productDescription}-${index}`}
         renderItem={({ item, index }) => {
-          const itemSource = recallSourceGroup(item);
-          const previousSource = index > 0 ? recallSourceGroup(recalls[index - 1]) : null;
-          const sourceCount = itemSource === 'USDA FSIS' ? fsisRecalls.length : fdaRecalls.length;
           return (
             <View style={styles.recallListItem}>
-              {itemSource !== previousSource ? (
+              {index === 0 ? (
                 <OfficialRecallSectionHeading
                   colors={colors}
-                  count={sourceCount}
+                  count={recallCount}
                   fromCache={data?.fromCache ?? false}
                   lastUpdated={lastUpdated}
-                  source={itemSource}
                 />
               ) : null}
               <RecallCard recall={item} />
@@ -255,7 +246,6 @@ export default function HomeScreen() {
                   onRetry={() => refetch()}
                   colors={colors}
                 />
-                {isFsisSearch ? <FsisSourceCard colors={colors} unavailable={false} /> : null}
               </View>
             ) : isFetching ? (
               <LoadingState colors={colors} />
@@ -270,16 +260,9 @@ export default function HomeScreen() {
                   term={submittedTerm}
                   updatedAt={lastUpdated}
                   colors={colors}
-                  fsisUnavailable={data?.sourceUnavailable === 'fsis'}
                   fdaUnavailable={data?.fdaUnavailable}
                 />
                 {data?.fdaUnavailable ? <FdaUnavailableNotice colors={colors} /> : null}
-                {isFsisSearch ? (
-                  <FsisSourceCard
-                    colors={colors}
-                    unavailable={data?.sourceUnavailable === 'fsis'}
-                  />
-                ) : null}
               </View>
             ) : (
               <View style={styles.searchOutcomeStack}>
@@ -292,12 +275,6 @@ export default function HomeScreen() {
         ListFooterComponent={
           submittedTerm.length > 0 && data && !isFetching ? (
             <View style={styles.footerStack}>
-              {isFsisSearch ? (
-                <FsisSourceCard
-                  colors={colors}
-                  unavailable={data.sourceUnavailable === 'fsis'}
-                />
-              ) : null}
               <PossiblyRelatedRecalls
                 item={data.produceItem ?? submittedTerm}
                 recalls={relatedRecalls}
@@ -326,12 +303,6 @@ export default function HomeScreen() {
 
 interface StateProps {
   colors: ReturnType<typeof useColors>;
-}
-
-type RecallSourceGroup = 'FDA' | 'USDA FSIS';
-
-function recallSourceGroup(recall: FoodRecall): RecallSourceGroup {
-  return recall.source === 'USDA FSIS' ? 'USDA FSIS' : 'FDA';
 }
 
 function formatNewsPublishedAt(date: string) {
@@ -395,7 +366,6 @@ function RecentNewsCard({ articles, colors }: RecentNewsCardProps) {
 }
 
 interface OfficialRecallSectionHeadingProps extends StateProps {
-  source: RecallSourceGroup;
   count: number;
   lastUpdated: string;
   fromCache: boolean;
@@ -403,7 +373,6 @@ interface OfficialRecallSectionHeadingProps extends StateProps {
 
 function OfficialRecallSectionHeading({
   colors,
-  source,
   count,
   lastUpdated,
   fromCache,
@@ -412,7 +381,7 @@ function OfficialRecallSectionHeading({
     <View style={[styles.officialSectionHeader, { backgroundColor: colors.card, borderColor: colors.border }]}>
       <View style={styles.officialSectionCopy}>
         <Text style={[styles.officialSectionTitle, { color: colors.foreground }]}>
-          {source === 'USDA FSIS' ? 'Official USDA FSIS recalls' : 'Official FDA recalls'}
+          FDA recalls
         </Text>
         <Text style={[styles.updatedText, { color: colors.mutedForeground }]}>
           {count} {count === 1 ? 'recall' : 'recalls'} · Updated {formatUpdatedAt(lastUpdated)}
@@ -434,7 +403,7 @@ function EmptySearchState({ colors }: StateProps) {
       <Feather name="search" size={22} color={colors.primary} />
       <Text style={[styles.stateTitle, { color: colors.foreground }]}>Search a food to get started</Text>
       <Text style={[styles.stateBody, { color: colors.mutedForeground }]}>
-        We’ll check FDA records and, for meat, poultry, and egg products, USDA FSIS records too.
+        We’ll search FDA food recall records. For meat, poultry, and egg recalls, check FSIS.gov directly.
       </Text>
     </View>
   );
@@ -466,7 +435,6 @@ function ErrorState({ message, onRetry, colors }: ErrorStateProps) {
 interface NoResultsStateProps extends StateProps {
   term: string;
   updatedAt: string;
-  fsisUnavailable?: boolean;
   fdaUnavailable?: boolean;
 }
 
@@ -474,83 +442,43 @@ function NoResultsState({
   term,
   updatedAt,
   colors,
-  fsisUnavailable = false,
   fdaUnavailable = false,
 }: NoResultsStateProps) {
-  const checkIncomplete = fsisUnavailable || fdaUnavailable;
   return (
     <View
       style={[
         styles.stateCard,
-        { backgroundColor: checkIncomplete ? colors.warningSoft : colors.successSoft },
+        { backgroundColor: fdaUnavailable ? colors.warningSoft : colors.successSoft },
       ]}
     >
       <Feather
-        name={checkIncomplete ? 'alert-triangle' : 'check-circle'}
+        name={fdaUnavailable ? 'alert-triangle' : 'check-circle'}
         size={22}
-        color={checkIncomplete ? colors.warning : colors.success}
+        color={fdaUnavailable ? colors.warning : colors.success}
       />
       <Text style={[styles.stateTitle, { color: colors.foreground }]}>
-        {checkIncomplete ? `Recall check incomplete for ${term}` : `No active recalls found for ${term}`}
+        {fdaUnavailable ? 'FDA recall check unavailable' : 'No active FDA recalls found for this product.'}
       </Text>
       <Text style={[styles.stateBody, { color: colors.mutedForeground }]}>
         {fdaUnavailable
           ? 'FDA recall results could not be loaded during this search.'
-          : fsisUnavailable
-            ? `No FDA match was found for “${term}”, but USDA FSIS recalls could not be checked.`
-            : `We didn’t find an active FDA food recall matching “${term}”.`}
+          : `No FDA recall records matched “${term}”.`}
       </Text>
       <FdaFreshnessNotice colors={colors} />
+      <Text style={[styles.fsisGuidance, { color: colors.mutedForeground }]}>
+        This app checks FDA recalls. For meat, poultry, and egg recalls, check{' '}
+        <Text
+          accessibilityRole="link"
+          onPress={() => void Linking.openURL(FSIS_RECALLS_URL)}
+          style={[styles.fsisGuidanceLink, { color: colors.primary }]}
+        >
+          FSIS.gov directly
+        </Text>
+        .
+      </Text>
       <Text style={[styles.updatedText, { color: colors.mutedForeground }]}>
         Last updated {formatUpdatedAt(updatedAt)}
       </Text>
-    </View>
-  );
-}
-
-interface FsisSourceCardProps extends StateProps {
-  unavailable: boolean;
-}
-
-function FsisSourceCard({ colors, unavailable }: FsisSourceCardProps) {
-  return (
-    <View
-      style={[
-        styles.fsisNotice,
-        {
-          backgroundColor: unavailable ? colors.warningSoft : colors.card,
-          borderColor: unavailable ? colors.warning : colors.border,
-        },
-      ]}
-    >
-      <View style={styles.fsisNoticeHeading}>
-        <Feather
-          name={unavailable ? 'alert-triangle' : 'external-link'}
-          size={18}
-          color={unavailable ? colors.warning : colors.primary}
-        />
-        <Text style={[styles.fsisNoticeTitle, { color: colors.foreground }]}>
-          {unavailable ? 'USDA FSIS unavailable' : 'Official USDA source'}
-        </Text>
-      </View>
-      {unavailable ? (
-        <Text style={[styles.fsisNoticeBody, { color: colors.mutedForeground }]}>
-          USDA FSIS recalls couldn't be checked from this app. Tap to check the FSIS website directly.
-        </Text>
-      ) : null}
-      <Pressable
-        accessibilityRole="link"
-        accessibilityHint="Opens the official USDA FSIS recalls website."
-        onPress={() => void Linking.openURL(FSIS_RECALLS_PAGE_URL)}
-        style={({ pressed }) => [
-          styles.fsisLinkButton,
-          { borderColor: colors.primary, opacity: pressed ? 0.65 : 1 },
-        ]}
-        testID="check-usda-fsis-link"
-      >
-        <Text style={[styles.fsisLinkText, { color: colors.primary }]}>Check USDA FSIS</Text>
-        <Feather name="arrow-up-right" size={16} color={colors.primary} />
-      </Pressable>
     </View>
   );
 }
@@ -723,6 +651,16 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
     fontSize: 12,
   },
+  fsisGuidance: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: 'center',
+  },
+  fsisGuidanceLink: {
+    fontFamily: 'Inter_600SemiBold',
+    textDecorationLine: 'underline',
+  },
   resultsHeader: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -815,41 +753,6 @@ const styles = StyleSheet.create({
   },
   searchOutcomeStack: {
     gap: 12,
-  },
-  fsisNotice: {
-    borderRadius: 16,
-    borderWidth: 1,
-    gap: 10,
-    padding: 16,
-  },
-  fsisNoticeHeading: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 8,
-  },
-  fsisNoticeTitle: {
-    fontFamily: 'Inter_700Bold',
-    fontSize: 15,
-  },
-  fsisNoticeBody: {
-    fontFamily: 'Inter_400Regular',
-    fontSize: 14,
-    lineHeight: 21,
-  },
-  fsisLinkButton: {
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    borderRadius: 10,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: 8,
-    justifyContent: 'center',
-    minHeight: 42,
-    paddingHorizontal: 13,
-  },
-  fsisLinkText: {
-    fontFamily: 'Inter_600SemiBold',
-    fontSize: 14,
   },
   fdaUnavailableNotice: {
     alignItems: 'center',

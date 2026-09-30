@@ -33,39 +33,6 @@ const PRODUCT_DESCRIPTION_WORDS = new Set([
   'whole',
 ]);
 
-const FSIS_SEARCH_WORDS = new Set([
-  'bacon',
-  'bison',
-  'beef',
-  'chicken',
-  'duck',
-  'egg',
-  'eggs',
-  'elk',
-  'frankfurter',
-  'frankfurters',
-  'fowl',
-  'goat',
-  'goose',
-  'ham',
-  'hotdog',
-  'hotdogs',
-  'jerky',
-  'lamb',
-  'meat',
-  'pepperoni',
-  'pork',
-  'poultry',
-  'quail',
-  'salami',
-  'sausage',
-  'turkey',
-  'veal',
-  'venison',
-  'wiener',
-  'wieners',
-]);
-
 export function buildOpenFdaFieldSearchQueries(field: OpenFdaSearchField, term: string) {
   const normalizedTerm = cleanRecallSearchTerm(term);
   return normalizedTerm ? [quoteSearchTerm(field, normalizedTerm)] : [];
@@ -133,14 +100,6 @@ export function buildRecallSearchStrategies(
     seenQueries.add(normalizedQuery);
     return true;
   });
-}
-
-export function isFsisRecallSearch(term: string, productType = '') {
-  const words = cleanRecallSearchTerm(`${term} ${productType}`)
-    .toLowerCase()
-    .split(' ')
-    .filter(Boolean);
-  return words.some((word) => FSIS_SEARCH_WORDS.has(word));
 }
 
 export function buildOpenFdaSearchQuery(term: string) {

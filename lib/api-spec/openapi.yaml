@@ -53,21 +53,6 @@ paths:
           description: Invalid image payload
         "503":
           description: Vision service unavailable
-  /recalls/fsis:
-    get:
-      operationId: getFsisRecalls
-      tags: [recalls]
-      summary: Get recent active USDA FSIS recalls
-      description: Returns recent active FSIS recalls fetched through the server-side proxy.
-      responses:
-        "200":
-          description: Recent active USDA FSIS recalls
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/FsisRecallResponse"
-        "502":
-          description: USDA FSIS is unavailable
   /recalls/fda:
     get:
       operationId: getFdaRecalls
@@ -235,54 +220,6 @@ components:
             - "null"
       required:
         - productName
-    FsisRecall:
-      type: object
-      properties:
-        id:
-          type: string
-        productName:
-          type: string
-        companyName:
-          type: string
-        reason:
-          type: string
-        date:
-          type: string
-        classification:
-          type: string
-        summary:
-          type: string
-        officialUrl:
-          type: string
-          format: uri
-        recallType:
-          type: string
-        relatedToOutbreak:
-          type: boolean
-      required:
-        - id
-        - productName
-        - companyName
-        - reason
-        - date
-        - classification
-        - summary
-        - officialUrl
-        - recallType
-        - relatedToOutbreak
-    FsisRecallResponse:
-      type: object
-      properties:
-        recalls:
-          type: array
-          items:
-            $ref: "#/components/schemas/FsisRecall"
-        lastUpdated:
-          type: string
-          format: date-time
-      required:
-        - recalls
-        - lastUpdated
     OpenFdaRecall:
       type: object
       properties:

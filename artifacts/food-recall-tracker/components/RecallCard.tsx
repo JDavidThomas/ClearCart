@@ -53,8 +53,8 @@ export function RecallCard({ recall, deemphasized = false }: RecallCardProps) {
               {deemphasized ? 'Possible match' : 'Active recall'}
             </Text>
           </View>
-          <View style={[styles.sourceBadge, { backgroundColor: source === 'FDA' ? colors.blueSoft : colors.warningSoft }]}>
-            <Text style={[styles.sourceBadgeText, { color: source === 'FDA' ? colors.primary : colors.warning }]}>
+          <View style={[styles.sourceBadge, { backgroundColor: colors.blueSoft }]}>
+            <Text style={[styles.sourceBadgeText, { color: colors.primary }]}>
               {source}
             </Text>
           </View>
@@ -88,7 +88,6 @@ export function RecallCard({ recall, deemphasized = false }: RecallCardProps) {
         <DetailRow label="Recalling firm" value={recall.recallingFirm} colors={colors} />
         <DetailRow label="Recall date" value={formatRecallDate(recall.recallDate)} colors={colors} />
         {recall.summary ? <DetailRow label="Summary" value={recall.summary} colors={colors} /> : null}
-        {recall.relatedToOutbreak ? <DetailRow label="Related to outbreak" value="Yes" colors={colors} /> : null}
       </View>
 
       <Pressable

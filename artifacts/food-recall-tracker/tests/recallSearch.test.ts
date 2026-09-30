@@ -6,7 +6,6 @@ import {
   buildOpenFdaFieldSearchQueries,
   buildOpenFdaSearchQuery,
   buildRecallSearchStrategies,
-  isFsisRecallSearch,
 } from '../services/recallSearch.ts';
 
 test('recall search uses the full product, one relevant word, then one brand word', () => {
@@ -45,11 +44,10 @@ test('OpenFDA query builder avoids duplicate OR strategies', () => {
   assert.equal(/%2BOR%2B/.test(encodedSearch), false);
 });
 
-test('meat, poultry, and egg searches route to USDA FSIS', () => {
-  assert.equal(isFsisRecallSearch('eggs'), true);
-  assert.equal(isFsisRecallSearch('chicken breast'), true);
-  assert.equal(isFsisRecallSearch('beef jerky'), true);
-  assert.equal(isFsisRecallSearch('banana'), false);
+test('egg, produce, and meat-product terms all build FDA recall queries', () => {
+  for (const term of ['eggs', 'banana', 'Fontanini Pork Sausage Links']) {
+    assert.equal(buildOpenFdaSearchQuery(term).startsWith('product_description:'), true);
+  }
 });
 
 test('recall relevance can match a firm name even when the product text differs', () => {

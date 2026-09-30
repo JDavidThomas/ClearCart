@@ -36,27 +36,6 @@ export const IdentifyFoodResponse = zod.object({
 
 
 /**
- * Returns recent active FSIS recalls fetched through the server-side proxy.
- * @summary Get recent active USDA FSIS recalls
- */
-export const GetFsisRecallsResponse = zod.object({
-  "recalls": zod.array(zod.object({
-  "id": zod.string(),
-  "productName": zod.string(),
-  "companyName": zod.string(),
-  "reason": zod.string(),
-  "date": zod.string(),
-  "classification": zod.string(),
-  "summary": zod.string(),
-  "officialUrl": zod.string().url(),
-  "recallType": zod.string(),
-  "relatedToOutbreak": zod.boolean()
-})),
-  "lastUpdated": zod.coerce.date()
-})
-
-
-/**
  * Searches OpenFDA enforcement records and the FDA's official recall announcement index through the server-side proxy.
  * @summary Search FDA recall records and notices
  */

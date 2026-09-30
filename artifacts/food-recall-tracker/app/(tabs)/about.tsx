@@ -4,8 +4,7 @@ import { Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 
-const FDA_URL = 'https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts';
-const USDA_URL = 'https://www.fsis.usda.gov/food-safety/recalls-public-health-alerts';
+const FSIS_RECALLS_URL = 'https://www.fsis.usda.gov/recalls';
 
 export default function AboutScreen() {
   const colors = useColors();
@@ -78,15 +77,22 @@ export default function AboutScreen() {
       <View style={[styles.disclaimer, { backgroundColor: colors.warningSoft, borderColor: colors.warning }]}>
         <Feather name="info" size={20} color={colors.warning} />
         <Text style={[styles.disclaimerText, { color: colors.foreground }]}>
-          This app is for informational purposes only and is not a substitute for official government recall notices. Always check FDA.gov or USDA.gov for the most current information.
+          This app is for informational purposes only and is not a substitute for official government recall notices. Always check FDA.gov or FSIS.gov for the most current information.
         </Text>
       </View>
 
       <View style={styles.sourcesSection}>
-        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Official sources</Text>
+        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Where we get our data</Text>
+        <View style={[styles.dataSourceRow, { borderColor: colors.border }]}>
+          <Text style={[styles.dataSourceLabel, { color: colors.foreground }]}>FDA recalls</Text>
+          <Text style={[styles.dataSourceValue, { color: colors.mutedForeground }]}>openFDA API</Text>
+        </View>
+        <OfficialLink
+          label="Meat/poultry/egg recalls: FSIS.gov"
+          url={FSIS_RECALLS_URL}
+          colors={colors}
+        />
       </View>
-      <OfficialLink label="FDA recall notices" url={FDA_URL} colors={colors} />
-      <OfficialLink label="USDA FSIS recalls" url={USDA_URL} colors={colors} />
 
       <View style={[styles.versionRow, { borderTopColor: colors.border }]}>
         <Text style={[styles.versionLabel, { color: colors.mutedForeground }]}>App version</Text>
@@ -278,6 +284,24 @@ const styles = StyleSheet.create({
   officialLinkText: {
     fontFamily: 'Inter_600SemiBold',
     fontSize: 15,
+  },
+  dataSourceRow: {
+    alignItems: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    minHeight: 52,
+    paddingHorizontal: 16,
+    width: '100%',
+  },
+  dataSourceLabel: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 15,
+  },
+  dataSourceValue: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 14,
   },
   versionRow: {
     alignItems: 'center',
