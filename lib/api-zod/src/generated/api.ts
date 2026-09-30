@@ -86,6 +86,34 @@ export const GetFdaRecallsResponse = zod.object({
 
 
 /**
+ * Searches GNews for matching articles published during the previous 14 days. An unavailable news source returns an empty list.
+ * @summary Search recent recall news mentions
+ */
+export const getRecallNewsQueryTermMax = 100;
+
+
+
+export const GetRecallNewsQueryParams = zod.object({
+  "term": zod.coerce.string().min(1).max(getRecallNewsQueryTermMax)
+})
+
+export const GetRecallNewsResponse = zod.object({
+  "articles": zod.array(zod.object({
+  "title": zod.string(),
+  "description": zod.string().optional(),
+  "url": zod.string().url(),
+  "publishedAt": zod.coerce.date(),
+  "source": zod.string()
+})),
+  "unavailable": zod.boolean(),
+  "dateRange": zod.object({
+  "from": zod.coerce.date(),
+  "to": zod.coerce.date()
+})
+})
+
+
+/**
  * @summary Create a profile
  */
 export const authSignUpBodyPasswordMin = 6;

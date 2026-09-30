@@ -1,8 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type {
   FoodRecall,
+  RecallNewsArticle,
   RecallSearchResult,
 } from '@/types/recall';
+import { getRecallNews } from '@workspace/api-client-react';
 import { searchFdaRecalls, type FdaRecallSearchOptions } from './fdaRecalls';
 import { searchFsisRecalls } from './fsisRecalls';
 import {
@@ -30,9 +32,12 @@ export { buildOpenFdaSearchQuery, cleanRecallSearchTerm } from './recallSearch';
 const CACHE_PREFIX = '@food-recall-tracker/recalls/';
 const CACHE_INDEX_KEY = '@food-recall-tracker/recent-searches';
 const MAX_CACHED_SEARCHES = 8;
+const RECENT_NEWS_WINDOW_MS = 14 * 24 * 60 * 60 * 1_000;
 
 interface CachedSearch {
   recalls: FoodRecall[];
+  recentNews?: RecallNewsArticle[];
+  newsUnavailable?: boolean;
   lastUpdated: string;
   relevanceNotice?: string;
   sourceUnavailable?: 'fsis';
@@ -40,6 +45,38 @@ interface CachedSearch {
 }
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function normalizeNewsArticles(value: unknown): RecallNewsArticle[] {
+  if (!Array.isArray(value)) return [];
+
+  return value.flatMap((item) => {
+    if (
+      !isRecord(item) ||
+      typeof item.title !== 'string' ||
+      typeof item.url !== 'string' ||
+      typeof item.publishedAt !== 'string' ||
+      typeof item.source !== 'string'
+    ) {
+      return [];
+    }
+
+    return [{
+      title: item.title,
+      ...(typeof item.description === 'string' ? { description: item.description } : {}),
+      url: item.url,
+      publishedAt: item.publishedAt,
+      source: item.source,
+    }];
+  });
+}
+
+function filterRecentNews(articles: RecallNewsArticle[], now = Date.now()) {
+  const cutoff = now - RECENT_NEWS_WINDOW_MS;
+  return articles.filter((article) => {
+    const publishedAt = Date.parse(article.publishedAt);
+    return Number.isFinite(publishedAt) && publishedAt >= cutoff && publishedAt <= now;
+  });
 }
 
 function normalizeCachedSearch(value: unknown): CachedSearch | null {
@@ -60,6 +97,8 @@ function normalizeCachedSearch(value: unknown): CachedSearch | null {
 
       return {
         recalls: candidate.recalls as FoodRecall[],
+        recentNews: normalizeNewsArticles(candidate.recentNews),
+        newsUnavailable: candidate.newsUnavailable === true,
         lastUpdated,
         relevanceNotice:
           typeof candidate.relevanceNotice === 'string' ? candidate.relevanceNotice : undefined,
@@ -82,6 +121,8 @@ function buildSearchResult(term: string, cached: CachedSearch, fromCache: boolea
   return {
     recalls: groups.directRecalls,
     relatedRecalls: groups.relatedRecalls,
+    recentNews: filterRecentNews(cached.recentNews ?? []),
+    newsUnavailable: cached.newsUnavailable,
     lastUpdated: cached.lastUpdated,
     fromCache,
     relevanceNotice: getRecallRelevanceNotice(term, rankedRecalls),
@@ -90,6 +131,27 @@ function buildSearchResult(term: string, cached: CachedSearch, fromCache: boolea
     sourceUnavailable: cached.sourceUnavailable,
     fdaUnavailable: cached.fdaUnavailable,
   };
+}
+
+async function searchRecentRecallNews(term: string): Promise<{
+  articles: RecallNewsArticle[];
+  unavailable: boolean;
+}> {
+  try {
+    const response = await getRecallNews({ term });
+    const articles = filterRecentNews(response.articles ?? []);
+    console.info('[RecallNews] search completed', {
+      term,
+      from: response.dateRange?.from,
+      to: response.dateRange?.to,
+      articleCount: articles.length,
+      unavailable: response.unavailable,
+    });
+    return { articles, unavailable: response.unavailable };
+  } catch {
+    console.warn('[RecallNews] source unavailable; continuing without news', { term });
+    return { articles: [], unavailable: true };
+  }
 }
 
 function normalizeCacheOption(value?: string) {
@@ -238,23 +300,42 @@ export async function searchFoodRecalls(
       ageMs: Math.max(0, Date.now() - Date.parse(cached.lastUpdated)),
       ttlMs: RECALL_SEARCH_CACHE_TTL_MS,
     });
+    if (cached.newsUnavailable) {
+      const news = await searchRecentRecallNews(normalizedTerm);
+      const refreshedCache = {
+        ...cached,
+        recentNews: news.articles,
+        newsUnavailable: news.unavailable,
+      };
+      if (!news.unavailable) {
+        await saveSearch(key, normalizedTerm, refreshedCache);
+      }
+      return buildSearchResult(normalizedTerm, refreshedCache, true);
+    }
     return buildSearchResult(normalizedTerm, cached, true);
   }
 
   try {
     let recalls: FoodRecall[];
+    let recentNews: RecallNewsArticle[] = [];
+    let newsUnavailable = true;
     let sourceUnavailable: 'fsis' | undefined;
     let fdaUnavailable: boolean | undefined;
 
     if (needsFsis) {
-      const [fdaResult, fsisResult] = await Promise.allSettled([
+      const [fdaResult, fsisResult, newsResult] = await Promise.allSettled([
         searchFdaRecalls(normalizedTerm, options),
         searchFsisRecalls(),
+        searchRecentRecallNews(normalizedTerm),
       ]);
       const combined = combineRecallSourceResults(fdaResult, fsisResult);
       recalls = combined.recalls;
       sourceUnavailable = combined.sourceUnavailable;
       fdaUnavailable = combined.fdaUnavailable;
+      if (newsResult.status === 'fulfilled') {
+        recentNews = newsResult.value.articles;
+        newsUnavailable = newsResult.value.unavailable;
+      }
       if (fdaUnavailable) {
         console.warn('[RecallSearch] FDA results unavailable during FSIS search', {
           term: normalizedTerm,
@@ -262,11 +343,32 @@ export async function searchFoodRecalls(
         });
       }
     } else {
-      recalls = await searchFdaRecalls(normalizedTerm, options);
+      const [fdaResult, newsResult] = await Promise.allSettled([
+        searchFdaRecalls(normalizedTerm, options),
+        searchRecentRecallNews(normalizedTerm),
+      ]);
+      if (newsResult.status === 'fulfilled') {
+        recentNews = newsResult.value.articles;
+        newsUnavailable = newsResult.value.unavailable;
+      }
+
+      if (fdaResult.status === 'rejected') {
+        if (recentNews.length === 0) throw fdaResult.reason;
+        recalls = [];
+        fdaUnavailable = true;
+        console.warn('[RecallSearch] FDA unavailable; showing recent news mentions', {
+          term: normalizedTerm,
+          articleCount: recentNews.length,
+        });
+      } else {
+        recalls = fdaResult.value;
+      }
     }
 
     const freshResult: CachedSearch = {
       recalls,
+      recentNews,
+      newsUnavailable,
       lastUpdated: new Date().toISOString(),
       sourceUnavailable,
       fdaUnavailable,

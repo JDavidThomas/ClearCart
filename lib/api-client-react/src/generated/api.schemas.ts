@@ -54,6 +54,25 @@ export interface OpenFdaRecallResponse {
   results: OpenFdaRecall[];
 }
 
+export interface RecallNewsArticle {
+  title: string;
+  description?: string;
+  url: string;
+  publishedAt: string;
+  source: string;
+}
+
+export interface RecallNewsDateRange {
+  from: string;
+  to: string;
+}
+
+export interface RecallNewsResponse {
+  articles: RecallNewsArticle[];
+  unavailable: boolean;
+  dateRange: RecallNewsDateRange;
+}
+
 export interface AuthCredentialsPayload {
   email: string;
   /** @minLength 6 */
@@ -94,5 +113,13 @@ search: string;
  * @maximum 100
  */
 limit?: number;
+};
+
+export type GetRecallNewsParams = {
+/**
+ * @minLength 1
+ * @maxLength 100
+ */
+term: string;
 };
 

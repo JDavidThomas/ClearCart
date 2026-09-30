@@ -25,7 +25,7 @@ import { RecallRelevanceNotice } from '@/components/RecallRelevanceNotice';
 import { useColors } from '@/hooks/useColors';
 import { searchFoodRecalls } from '@/services/recallApi';
 import { isFsisRecallSearch } from '@/services/recallSearch';
-import type { RecallSearchResult } from '@/types/recall';
+import type { FoodRecall, RecallNewsArticle, RecallSearchResult } from '@/types/recall';
 
 const FSIS_RECALLS_PAGE_URL = 'https://www.fsis.usda.gov/recalls';
 
@@ -55,7 +55,10 @@ export default function HomeScreen() {
     staleTime: 5 * 60 * 1000,
     retry: false,
   });
-  const recalls = Array.isArray(data?.recalls) ? data.recalls : [];
+  const allRecalls = Array.isArray(data?.recalls) ? data.recalls : [];
+  const fdaRecalls = allRecalls.filter((recall) => recall.source !== 'USDA FSIS');
+  const fsisRecalls = allRecalls.filter((recall) => recall.source === 'USDA FSIS');
+  const recalls = [...fdaRecalls, ...fsisRecalls];
   const relatedRecalls = Array.isArray(data?.relatedRecalls) ? data.relatedRecalls : [];
   const recallCount = recalls.length;
   const lastUpdated = data?.lastUpdated ?? new Date().toISOString();
@@ -79,7 +82,25 @@ export default function HomeScreen() {
       <FlatList
         data={recalls}
         keyExtractor={(item, index) => `${item.recallNumber ?? item.productDescription}-${index}`}
-        renderItem={({ item }) => <RecallCard recall={item} />}
+        renderItem={({ item, index }) => {
+          const itemSource = recallSourceGroup(item);
+          const previousSource = index > 0 ? recallSourceGroup(recalls[index - 1]) : null;
+          const sourceCount = itemSource === 'USDA FSIS' ? fsisRecalls.length : fdaRecalls.length;
+          return (
+            <View style={styles.recallListItem}>
+              {itemSource !== previousSource ? (
+                <OfficialRecallSectionHeading
+                  colors={colors}
+                  count={sourceCount}
+                  fromCache={data?.fromCache ?? false}
+                  lastUpdated={lastUpdated}
+                  source={itemSource}
+                />
+              ) : null}
+              <RecallCard recall={item} />
+            </View>
+          );
+        }}
         contentContainerStyle={[
           styles.listContent,
           {
@@ -221,6 +242,10 @@ export default function HomeScreen() {
               </Pressable>
             </View>
 
+            {data?.recentNews?.length && !isFetching ? (
+              <RecentNewsCard articles={data.recentNews} colors={colors} />
+            ) : null}
+
             {submittedTerm.length === 0 ? (
               <EmptySearchState colors={colors} />
             ) : isError ? (
@@ -258,34 +283,8 @@ export default function HomeScreen() {
               </View>
             ) : (
               <View style={styles.searchOutcomeStack}>
-                <View style={styles.resultsBlock}>
-                  <View style={styles.resultsHeader}>
-                    <View>
-                      <Text style={[styles.resultsTitle, { color: colors.foreground }]}>
-                        {recallCount} active {recallCount === 1 ? 'recall' : 'recalls'} found
-                      </Text>
-                      <Text style={[styles.updatedText, { color: colors.mutedForeground }]}>
-                        Last updated {formatUpdatedAt(lastUpdated)}
-                      </Text>
-                    </View>
-                    {data?.fromCache ? (
-                      <View style={[styles.cachedBadge, { backgroundColor: colors.warningSoft }]}>
-                        <Feather name="wifi-off" size={13} color={colors.warning} />
-                        <Text style={[styles.cachedBadgeText, { color: colors.warning }]}>
-                          Saved result
-                        </Text>
-                      </View>
-                    ) : null}
-                  </View>
-                  <RecallRelevanceNotice message={data?.relevanceNotice} />
-                </View>
+                <RecallRelevanceNotice message={data?.relevanceNotice} />
                 {data?.fdaUnavailable ? <FdaUnavailableNotice colors={colors} /> : null}
-                {isFsisSearch ? (
-                  <FsisSourceCard
-                    colors={colors}
-                    unavailable={data?.sourceUnavailable === 'fsis'}
-                  />
-                ) : null}
               </View>
             )}
           </View>
@@ -293,6 +292,12 @@ export default function HomeScreen() {
         ListFooterComponent={
           submittedTerm.length > 0 && data && !isFetching ? (
             <View style={styles.footerStack}>
+              {isFsisSearch ? (
+                <FsisSourceCard
+                  colors={colors}
+                  unavailable={data.sourceUnavailable === 'fsis'}
+                />
+              ) : null}
               <PossiblyRelatedRecalls
                 item={data.produceItem ?? submittedTerm}
                 recalls={relatedRecalls}
@@ -321,6 +326,106 @@ export default function HomeScreen() {
 
 interface StateProps {
   colors: ReturnType<typeof useColors>;
+}
+
+type RecallSourceGroup = 'FDA' | 'USDA FSIS';
+
+function recallSourceGroup(recall: FoodRecall): RecallSourceGroup {
+  return recall.source === 'USDA FSIS' ? 'USDA FSIS' : 'FDA';
+}
+
+function formatNewsPublishedAt(date: string) {
+  const parsedDate = new Date(date);
+  if (Number.isNaN(parsedDate.getTime())) return 'Recently published';
+  return parsedDate.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+interface RecentNewsCardProps extends StateProps {
+  articles: RecallNewsArticle[];
+}
+
+function RecentNewsCard({ articles, colors }: RecentNewsCardProps) {
+  return (
+    <View style={[styles.newsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <View style={styles.newsCardHeading}>
+        <View style={[styles.newsIcon, { backgroundColor: colors.blueSoft }]}>
+          <Feather name="globe" size={17} color={colors.primary} />
+        </View>
+        <View style={styles.newsHeadingCopy}>
+          <Text style={[styles.newsTitle, { color: colors.foreground }]}>Recent news mentions</Text>
+          <Text style={[styles.newsCount, { color: colors.mutedForeground }]}>
+            {articles.length} {articles.length === 1 ? 'article' : 'articles'} from the last 14 days
+          </Text>
+        </View>
+      </View>
+      <Text style={[styles.newsDisclaimer, { color: colors.mutedForeground }]}>
+        These are news articles, not official FDA announcements. Verify with FDA.gov.
+      </Text>
+      <View style={styles.newsArticleList}>
+        {articles.slice(0, 5).map((article, index) => (
+          <Pressable
+            accessibilityHint="Opens this news article."
+            accessibilityRole="link"
+            key={`${article.url}-${index}`}
+            onPress={() => void Linking.openURL(article.url)}
+            style={({ pressed }) => [
+              styles.newsArticle,
+              { borderTopColor: colors.border, opacity: pressed ? 0.65 : 1 },
+            ]}
+          >
+            <View style={styles.newsArticleCopy}>
+              <Text style={[styles.newsArticleTitle, { color: colors.foreground }]}>
+                {article.title}
+              </Text>
+              <Text style={[styles.newsMeta, { color: colors.mutedForeground }]}>
+                {article.source} · {formatNewsPublishedAt(article.publishedAt)}
+              </Text>
+            </View>
+            <Feather name="arrow-up-right" size={16} color={colors.primary} />
+          </Pressable>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+interface OfficialRecallSectionHeadingProps extends StateProps {
+  source: RecallSourceGroup;
+  count: number;
+  lastUpdated: string;
+  fromCache: boolean;
+}
+
+function OfficialRecallSectionHeading({
+  colors,
+  source,
+  count,
+  lastUpdated,
+  fromCache,
+}: OfficialRecallSectionHeadingProps) {
+  return (
+    <View style={[styles.officialSectionHeader, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <View style={styles.officialSectionCopy}>
+        <Text style={[styles.officialSectionTitle, { color: colors.foreground }]}>
+          {source === 'USDA FSIS' ? 'Official USDA FSIS recalls' : 'Official FDA recalls'}
+        </Text>
+        <Text style={[styles.updatedText, { color: colors.mutedForeground }]}>
+          {count} {count === 1 ? 'recall' : 'recalls'} · Updated {formatUpdatedAt(lastUpdated)}
+        </Text>
+      </View>
+      {fromCache ? (
+        <View style={[styles.cachedBadge, { backgroundColor: colors.warningSoft }]}>
+          <Feather name="wifi-off" size={13} color={colors.warning} />
+          <Text style={[styles.cachedBadgeText, { color: colors.warning }]}>Saved</Text>
+        </View>
+      ) : null}
+    </View>
+  );
 }
 
 function EmptySearchState({ colors }: StateProps) {
@@ -628,6 +733,85 @@ const styles = StyleSheet.create({
   },
   resultsBlock: {
     gap: 10,
+  },
+  recallListItem: {
+    gap: 10,
+  },
+  officialSectionHeader: {
+    alignItems: 'center',
+    borderRadius: 15,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 10,
+    justifyContent: 'space-between',
+    padding: 14,
+  },
+  officialSectionCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  officialSectionTitle: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 16,
+  },
+  newsCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 12,
+    padding: 15,
+  },
+  newsCardHeading: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+  },
+  newsIcon: {
+    alignItems: 'center',
+    borderRadius: 10,
+    height: 36,
+    justifyContent: 'center',
+    width: 36,
+  },
+  newsHeadingCopy: {
+    flex: 1,
+    gap: 3,
+  },
+  newsTitle: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 16,
+  },
+  newsCount: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 12,
+  },
+  newsDisclaimer: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  newsArticleList: {
+    marginTop: -4,
+  },
+  newsArticle: {
+    alignItems: 'center',
+    borderTopWidth: 1,
+    flexDirection: 'row',
+    gap: 10,
+    justifyContent: 'space-between',
+    paddingVertical: 11,
+  },
+  newsArticleCopy: {
+    flex: 1,
+    gap: 5,
+  },
+  newsArticleTitle: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  newsMeta: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 11,
   },
   searchOutcomeStack: {
     gap: 12,

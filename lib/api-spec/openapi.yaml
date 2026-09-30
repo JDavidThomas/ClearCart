@@ -100,6 +100,29 @@ paths:
           description: Invalid search query
         "502":
           description: OpenFDA is unavailable
+  /recalls/news:
+    get:
+      operationId: getRecallNews
+      tags: [recalls]
+      summary: Search recent recall news mentions
+      description: Searches GNews for matching articles published during the previous 14 days. An unavailable news source returns an empty list.
+      parameters:
+        - name: term
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 100
+      responses:
+        "200":
+          description: Recent recall-related news articles
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecallNewsResponse"
+        "400":
+          description: Invalid product search term
   /auth/signup:
     post:
       operationId: authSignUp
@@ -296,6 +319,53 @@ components:
             $ref: "#/components/schemas/OpenFdaRecall"
       required:
         - results
+    RecallNewsArticle:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        url:
+          type: string
+          format: uri
+        publishedAt:
+          type: string
+          format: date-time
+        source:
+          type: string
+      required:
+        - title
+        - url
+        - publishedAt
+        - source
+    RecallNewsDateRange:
+      type: object
+      properties:
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+      required:
+        - from
+        - to
+    RecallNewsResponse:
+      type: object
+      properties:
+        articles:
+          type: array
+          items:
+            $ref: "#/components/schemas/RecallNewsArticle"
+        unavailable:
+          type: boolean
+        dateRange:
+          $ref: "#/components/schemas/RecallNewsDateRange"
+      required:
+        - articles
+        - unavailable
+        - dateRange
     AuthCredentialsPayload:
       type: object
       properties:

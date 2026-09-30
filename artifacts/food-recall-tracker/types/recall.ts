@@ -22,9 +22,19 @@ export interface FoodRecall {
 export type RecallRelevance = 'high' | 'medium' | 'low';
 export type ProduceRecallGroup = 'direct' | 'related';
 
+export interface RecallNewsArticle {
+  title: string;
+  description?: string;
+  url: string;
+  publishedAt: string;
+  source: string;
+}
+
 export interface RecallSearchResult {
   recalls: FoodRecall[];
   relatedRecalls?: FoodRecall[];
+  recentNews?: RecallNewsArticle[];
+  newsUnavailable?: boolean;
   lastUpdated: string;
   fromCache: boolean;
   relevanceNotice?: string;

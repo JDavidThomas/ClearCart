@@ -8,6 +8,10 @@ import {
   FdaDnsResolutionError,
   fetchOpenFdaWithDnsRetry,
 } from './openFdaNetwork.ts';
+import {
+  addOpenFdaReportDateRange,
+  getOpenFdaReportDateRange,
+} from './openFdaDateRange.ts';
 
 const OPENFDA_ENDPOINT = 'https://api.fda.gov/food/enforcement.json';
 const DEFAULT_FDA_NOTICES_URL =
@@ -263,6 +267,12 @@ export async function searchFdaRecalls(
     0,
     MAX_SEARCH_ATTEMPTS,
   );
+  const dateRange = getOpenFdaReportDateRange();
+  console.info('[OpenFDA] applying rolling report_date window', {
+    from: dateRange.from,
+    to: dateRange.to,
+    sort: 'report_date:desc',
+  });
   const records: OpenFdaRecord[] = [];
   let completedSearch = false;
   let lastErrorPayload: FdaErrorPayloadError | null = null;
@@ -270,7 +280,10 @@ export async function searchFdaRecalls(
   for (const [index, strategy] of strategies.entries()) {
     if (index > 0) await wait(SEARCH_ATTEMPT_DELAY_MS);
     try {
-      const results = await searchEndpoint(strategy.query, index + 1);
+      const results = await searchEndpoint(
+        addOpenFdaReportDateRange(strategy.query, dateRange),
+        index + 1,
+      );
       completedSearch = true;
       records.push(...results);
       const relevantResults = rankAndFilterRecalls(

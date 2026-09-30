@@ -26,10 +26,12 @@ import type {
   AuthSessionPayload,
   FsisRecallResponse,
   GetFdaRecallsParams,
+  GetRecallNewsParams,
   HealthStatus,
   IdentifyFoodPayload,
   IdentifyFoodRequest,
-  OpenFdaRecallResponse
+  OpenFdaRecallResponse,
+  RecallNewsResponse
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -377,6 +379,91 @@ export function useGetFdaRecalls<TData = Awaited<ReturnType<typeof getFdaRecalls
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetFdaRecallsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetRecallNewsUrl = (params: GetRecallNewsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/recalls/news?${stringifiedParams}` : `/api/recalls/news`
+}
+
+/**
+ * Searches GNews for matching articles published during the previous 14 days. An unavailable news source returns an empty list.
+ * @summary Search recent recall news mentions
+ */
+export const getRecallNews = async (params: GetRecallNewsParams, options?: Parameters<typeof customFetch>[1]): Promise<RecallNewsResponse> => {
+
+  return customFetch<RecallNewsResponse>(getGetRecallNewsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetRecallNewsQueryKey = (params?: GetRecallNewsParams,) => {
+    return [
+    `/api/recalls/news`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetRecallNewsQueryOptions = <TData = Awaited<ReturnType<typeof getRecallNews>>, TError = ErrorType<void>>(params: GetRecallNewsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRecallNews>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetRecallNewsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getRecallNews>>> = ({ signal }) => getRecallNews(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getRecallNews>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetRecallNewsQueryResult = NonNullable<Awaited<ReturnType<typeof getRecallNews>>>
+export type GetRecallNewsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Search recent recall news mentions
+ */
+
+export function useGetRecallNews<TData = Awaited<ReturnType<typeof getRecallNews>>, TError = ErrorType<void>>(
+ params: GetRecallNewsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRecallNews>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetRecallNewsQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
