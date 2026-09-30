@@ -5,18 +5,19 @@ import {
 import { Router, type IRouter } from "express";
 import { logger } from "../lib/logger";
 import {
-  buildGNewsQuery,
+  buildNewsQuery,
   getNewsDateRange,
-  GNEWS_RESULT_LIMIT,
-  normalizeGNewsArticles,
+  NEWS_API_RESULT_LIMIT,
+  normalizeNewsArticles,
   normalizeNewsSearchTerm,
 } from "../lib/recallNews";
 
 const router: IRouter = Router();
-const GNEWS_SEARCH_URL = "https://gnews.io/api/v4/search";
-const GNEWS_REQUEST_TIMEOUT_MS = 8_000;
+const NEWS_API_SEARCH_URL = "https://newsapi.org/v2/everything";
+const NEWS_API_REQUEST_TIMEOUT_MS = 8_000;
 
-interface GNewsResponse {
+interface NewsApiResponse {
+  status?: unknown;
   articles?: unknown;
 }
 
@@ -38,7 +39,7 @@ router.get("/recalls/news", async (req, res) => {
   }
 
   const dateRange = getNewsDateRange();
-  const apiKey = process.env.GNEWS_API_KEY?.trim();
+  const apiKey = process.env.NEWSAPI_API_KEY?.trim();
   const emptyResponse = (unavailable: boolean) =>
     GetRecallNewsResponse.parse({
       articles: [],
@@ -49,32 +50,30 @@ router.get("/recalls/news", async (req, res) => {
   if (!apiKey) {
     logger.warn(
       { term, dateRange, unavailable: true },
-      "GNews skipped because its server-side API key is not configured",
+      "NewsAPI skipped because its server-side API key is not configured",
     );
     res.json(emptyResponse(true));
     return;
   }
 
-  const query = buildGNewsQuery(term);
+  const query = buildNewsQuery(term);
   const params = new URLSearchParams({
     q: query,
-    lang: "en",
-    country: "us",
     from: dateRange.from,
     to: dateRange.to,
-    sortby: "publishedAt",
-    max: String(GNEWS_RESULT_LIMIT),
-    apikey: apiKey,
+    language: "en",
+    sortBy: "publishedAt",
+    pageSize: String(NEWS_API_RESULT_LIMIT),
   });
   const controller = new AbortController();
   const timeoutId = setTimeout(
     () => controller.abort(),
-    GNEWS_REQUEST_TIMEOUT_MS,
+    NEWS_API_REQUEST_TIMEOUT_MS,
   );
 
   try {
-    const response = await fetch(`${GNEWS_SEARCH_URL}?${params.toString()}`, {
-      headers: { accept: "application/json" },
+    const response = await fetch(`${NEWS_API_SEARCH_URL}?${params.toString()}`, {
+      headers: { accept: "application/json", "X-Api-Key": apiKey },
       signal: controller.signal,
     });
     if (!response.ok) {
@@ -86,22 +85,26 @@ router.get("/recalls/news", async (req, res) => {
           upstreamStatus: response.status,
           unavailable: true,
         },
-        "GNews search was unavailable",
+        "NewsAPI search was unavailable",
       );
       res.json(emptyResponse(true));
       return;
     }
 
-    const payload = (await response.json()) as GNewsResponse;
-    if (!isRecord(payload) || !Array.isArray(payload.articles)) {
+    const payload = (await response.json()) as NewsApiResponse;
+    if (
+      !isRecord(payload) ||
+      payload.status !== "ok" ||
+      !Array.isArray(payload.articles)
+    ) {
       logger.warn(
         { term, query, dateRange, unavailable: true },
-        "GNews returned an invalid search payload",
+        "NewsAPI returned an invalid search payload",
       );
       res.json(emptyResponse(true));
       return;
     }
-    const articles = normalizeGNewsArticles(
+    const articles = normalizeNewsArticles(
       payload.articles,
       dateRange.from,
       dateRange.to,
@@ -114,7 +117,7 @@ router.get("/recalls/news", async (req, res) => {
         articleCount: articles.length,
         unavailable: false,
       },
-      "GNews recent recall search completed",
+      "NewsAPI recent recall search completed",
     );
     res.json(
       GetRecallNewsResponse.parse({
@@ -126,7 +129,7 @@ router.get("/recalls/news", async (req, res) => {
   } catch {
     logger.warn(
       { term, query, dateRange, unavailable: true },
-      "GNews request failed; continuing without news mentions",
+      "NewsAPI request failed; continuing without news mentions",
     );
     res.json(emptyResponse(true));
   } finally {

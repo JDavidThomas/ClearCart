@@ -357,14 +357,14 @@ function RecentNewsCard({ articles, colors }: RecentNewsCardProps) {
           <Feather name="globe" size={17} color={colors.primary} />
         </View>
         <View style={styles.newsHeadingCopy}>
-          <Text style={[styles.newsTitle, { color: colors.foreground }]}>Recent news mentions</Text>
+          <Text style={[styles.newsTitle, { color: colors.foreground }]}>Recent News Mentions</Text>
           <Text style={[styles.newsCount, { color: colors.mutedForeground }]}>
             {articles.length} {articles.length === 1 ? 'article' : 'articles'} from the last 14 days
           </Text>
         </View>
       </View>
       <Text style={[styles.newsDisclaimer, { color: colors.mutedForeground }]}>
-        These are news articles, not official FDA announcements. Verify with FDA.gov.
+        This is a news article, not an official FDA/FSIS announcement. Please verify with the agency.
       </Text>
       <View style={styles.newsArticleList}>
         {articles.slice(0, 5).map((article, index) => (

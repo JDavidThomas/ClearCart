@@ -1,4 +1,4 @@
-export const GNEWS_RESULT_LIMIT = 10;
+export const NEWS_API_RESULT_LIMIT = 10;
 const RECENT_NEWS_WINDOW_MS = 14 * 24 * 60 * 60 * 1_000;
 
 export interface RecallNewsDateRange {
@@ -6,7 +6,7 @@ export interface RecallNewsDateRange {
   to: string;
 }
 
-interface GNewsArticle {
+interface NewsApiArticle {
   title?: unknown;
   description?: unknown;
   url?: unknown;
@@ -30,7 +30,7 @@ export function normalizeNewsSearchTerm(term: string) {
     .trim();
 }
 
-export function buildGNewsQuery(term: string) {
+export function buildNewsQuery(term: string) {
   const phrase = term.includes(" ") ? `"${term}"` : term;
   return `${phrase} recall`;
 }
@@ -39,7 +39,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-export function normalizeGNewsArticles(
+export function normalizeNewsArticles(
   value: unknown,
   from: string,
   to: string,
@@ -51,7 +51,7 @@ export function normalizeGNewsArticles(
 
   return value
     .filter(isRecord)
-    .map((article) => article as GNewsArticle)
+    .map((article) => article as NewsApiArticle)
     .flatMap((article) => {
       if (
         typeof article.title !== "string" ||
@@ -96,5 +96,5 @@ export function normalizeGNewsArticles(
       (left, right) =>
         Date.parse(right.publishedAt) - Date.parse(left.publishedAt),
     )
-    .slice(0, GNEWS_RESULT_LIMIT);
+    .slice(0, NEWS_API_RESULT_LIMIT);
 }

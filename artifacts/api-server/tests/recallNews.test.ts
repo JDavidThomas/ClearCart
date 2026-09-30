@@ -1,19 +1,19 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  buildGNewsQuery,
+  buildNewsQuery,
   getNewsDateRange,
-  normalizeGNewsArticles,
+  normalizeNewsArticles,
   normalizeNewsSearchTerm,
 } from "../src/lib/recallNews.ts";
 
-test("GNews search quotes multiword product names and asks for recall mentions", () => {
-  assert.equal(buildGNewsQuery("banana"), "banana recall");
-  assert.equal(buildGNewsQuery("baby spinach"), '"baby spinach" recall');
+test("NewsAPI search quotes multiword product names and asks for recall mentions", () => {
+  assert.equal(buildNewsQuery("banana"), "banana recall");
+  assert.equal(buildNewsQuery("baby spinach"), '"baby spinach" recall');
   assert.equal(normalizeNewsSearchTerm("  café—style  eggs! "), "cafe style eggs");
 });
 
-test("GNews date window is exactly the rolling previous 14 days", () => {
+test("NewsAPI date window is exactly the rolling previous 14 days", () => {
   const now = new Date("2026-09-30T12:00:00.000Z");
 
   assert.deepEqual(getNewsDateRange(now), {
@@ -25,7 +25,7 @@ test("GNews date window is exactly the rolling previous 14 days", () => {
 test("news normalization filters out-of-range or unsafe articles and sorts newest first", () => {
   const from = "2026-09-16T12:00:00.000Z";
   const to = "2026-09-30T12:00:00.000Z";
-  const articles = normalizeGNewsArticles(
+  const articles = normalizeNewsArticles(
     [
       {
         title: "Older recall article",
