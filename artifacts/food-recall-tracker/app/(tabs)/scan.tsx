@@ -21,6 +21,7 @@ import { PossiblyRelatedRecalls } from '@/components/PossiblyRelatedRecalls';
 import { ProduceRecallVerdict } from '@/components/ProduceRecallVerdict';
 import { RecallCard } from '@/components/RecallCard';
 import { RecallRelevanceNotice } from '@/components/RecallRelevanceNotice';
+import { RecentNewsSection } from '@/components/RecentNewsSection';
 import { useColors } from '@/hooks/useColors';
 import {
   lookupOpenFoodFactsProduct,
@@ -399,6 +400,7 @@ function VerdictView({
   colors: ReturnType<typeof useColors>;
   onScanAgain: () => void;
 }) {
+  const router = useRouter();
   const productLabel = verdict.product
     ? `${verdict.product.brand} ${verdict.product.name}`.trim()
     : `Barcode ${verdict.barcode}`;
@@ -428,6 +430,7 @@ function VerdictView({
         <AllergenInsights productName="" productText="" dataAvailable={false} source="barcode" colors={colors} />
         <HealthDietInsights productName="" productText="" source="barcode" colors={colors} />
         <ScanAgainButton colors={colors} onPress={onScanAgain} />
+        <SearchByNameButton colors={colors} onPress={() => void router.push('/')} />
       </View>
     );
   }
@@ -442,17 +445,29 @@ function VerdictView({
   if (recallResult?.isProduceSearch) {
     return (
       <View style={styles.verdictStack}>
-        <ProduceRecallVerdict item={produceItem} hasDirectRecall={recallCards.length > 0} />
-        {recallCards.map((recall, index) => (
-          <RecallCard key={`${recall.recallNumber ?? recall.productDescription}-${index}`} recall={recall} />
-        ))}
-        <PossiblyRelatedRecalls item={produceItem} recalls={relatedRecalls} />
+        <BarcodeProductIdentityCard
+          barcode={verdict.barcode}
+          productLabel={productLabel}
+          colors={colors}
+        />
         <AllergenInsights
           productName={productLabel}
           productText={buildProductAllergenText(verdict.product)}
           dataAvailable={hasAllergenData(verdict.product)}
           source="barcode"
           colors={colors}
+        />
+        <Text style={[styles.recallSectionTitle, { color: colors.foreground }]}>
+          Official FDA Recalls
+        </Text>
+        <ProduceRecallVerdict item={produceItem} hasDirectRecall={recallCards.length > 0} />
+        {recallCards.map((recall, index) => (
+          <RecallCard key={`${recall.recallNumber ?? recall.productDescription}-${index}`} recall={recall} />
+        ))}
+        <PossiblyRelatedRecalls item={produceItem} recalls={relatedRecalls} />
+        <RecentNewsSection
+          articles={recallResult?.recentNews ?? []}
+          unavailable={recallResult?.newsUnavailable !== false}
         />
         <HealthDietInsights
           productName={productLabel}
@@ -462,12 +477,28 @@ function VerdictView({
           colors={colors}
         />
         <ScanAgainButton colors={colors} onPress={onScanAgain} />
+        <SearchByNameButton colors={colors} onPress={() => void router.push('/')} />
       </View>
     );
   }
 
   return (
     <View style={styles.verdictStack}>
+      <BarcodeProductIdentityCard
+        barcode={verdict.barcode}
+        productLabel={productLabel}
+        colors={colors}
+      />
+      <AllergenInsights
+        productName={productLabel}
+        productText={buildProductAllergenText(verdict.product)}
+        dataAvailable={hasAllergenData(verdict.product)}
+        source="barcode"
+        colors={colors}
+      />
+      <Text style={[styles.recallSectionTitle, { color: colors.foreground }]}>
+        Official FDA Recalls
+      </Text>
       <View
         style={[
           styles.verdictCard,
@@ -525,7 +556,6 @@ function VerdictView({
                 ? 'Recall Found'
                 : 'No Active Recall Found'}
         </Text>
-        <Text style={[styles.productName, { color: colors.foreground }]}>{productLabel}</Text>
         <Text style={[styles.verdictBody, { color: colors.mutedForeground }]}>
           {recallCheckStatus === 'checking'
             ? 'The product was found. Checking its name and brand against current FDA recall records.'
@@ -549,12 +579,10 @@ function VerdictView({
         <RecallCard key={`${recall.recallNumber ?? recall.productDescription}-${index}`} recall={recall} />
       ))}
 
-      <AllergenInsights
-        productName={productLabel}
-        productText={buildProductAllergenText(verdict.product)}
-        dataAvailable={hasAllergenData(verdict.product)}
-        source="barcode"
-        colors={colors}
+      <PossiblyRelatedRecalls item={produceItem} recalls={relatedRecalls} />
+      <RecentNewsSection
+        articles={recallResult?.recentNews ?? []}
+        unavailable={recallResult?.newsUnavailable !== false}
       />
       <HealthDietInsights
         productName={productLabel}
@@ -564,6 +592,35 @@ function VerdictView({
         colors={colors}
       />
       <ScanAgainButton colors={colors} onPress={onScanAgain} />
+      <SearchByNameButton colors={colors} onPress={() => void router.push('/')} />
+    </View>
+  );
+}
+
+function BarcodeProductIdentityCard({
+  barcode,
+  productLabel,
+  colors,
+}: {
+  barcode: string;
+  productLabel: string;
+  colors: ReturnType<typeof useColors>;
+}) {
+  return (
+    <View
+      style={[
+        styles.productIdentityCard,
+        { backgroundColor: colors.blueSoft, borderColor: colors.border },
+      ]}
+    >
+      <Feather name="check-circle" size={22} color={colors.primary} />
+      <Text style={[styles.productIdentityEyebrow, { color: colors.primary }]}>
+        PRODUCT IDENTIFIED
+      </Text>
+      <Text style={[styles.productName, { color: colors.foreground }]}>{productLabel}</Text>
+      <Text style={[styles.barcodeText, { color: colors.mutedForeground }]}>
+        Barcode: {barcode}
+      </Text>
     </View>
   );
 }
@@ -592,6 +649,29 @@ function ScanAgainButton({
     >
       <Feather name="maximize" size={18} color={colors.primaryForeground} />
       <Text style={[styles.primaryButtonText, { color: colors.primaryForeground }]}>Scan Another Product</Text>
+    </Pressable>
+  );
+}
+
+function SearchByNameButton({
+  colors,
+  onPress,
+}: {
+  colors: ReturnType<typeof useColors>;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.searchByNameButton,
+        { borderColor: colors.border, opacity: pressed ? 0.65 : 1 },
+      ]}
+      testID="search-by-name-button"
+    >
+      <Feather name="search" size={17} color={colors.primary} />
+      <Text style={[styles.searchByNameText, { color: colors.primary }]}>Search by name</Text>
     </Pressable>
   );
 }
@@ -788,6 +868,22 @@ const styles = StyleSheet.create({
   verdictStack: {
     gap: 14,
   },
+  productIdentityCard: {
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: 8,
+    padding: 20,
+  },
+  productIdentityEyebrow: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 11,
+    letterSpacing: 1.2,
+  },
+  recallSectionTitle: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 18,
+    marginTop: 2,
+  },
   verdictCard: {
     borderRadius: 20,
     borderWidth: 1,
@@ -810,6 +906,20 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_600SemiBold',
     fontSize: 16,
     lineHeight: 22,
+  },
+  searchByNameButton: {
+    alignItems: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'center',
+    minHeight: 48,
+    paddingHorizontal: 18,
+  },
+  searchByNameText: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 14,
   },
   verdictBody: {
     fontFamily: 'Inter_400Regular',

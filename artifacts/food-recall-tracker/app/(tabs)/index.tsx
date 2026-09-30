@@ -22,9 +22,10 @@ import { PossiblyRelatedRecalls } from '@/components/PossiblyRelatedRecalls';
 import { ProduceRecallVerdict } from '@/components/ProduceRecallVerdict';
 import { RecallCard } from '@/components/RecallCard';
 import { RecallRelevanceNotice } from '@/components/RecallRelevanceNotice';
+import { RecentNewsSection } from '@/components/RecentNewsSection';
 import { useColors } from '@/hooks/useColors';
 import { searchFoodRecalls } from '@/services/recallApi';
-import type { RecallNewsArticle, RecallSearchResult } from '@/types/recall';
+import type { RecallSearchResult } from '@/types/recall';
 
 const FSIS_RECALLS_URL = 'https://www.fsis.usda.gov/recalls';
 
@@ -77,17 +78,9 @@ export default function HomeScreen() {
       <FlatList
         data={recalls}
         keyExtractor={(item, index) => `${item.recallNumber ?? item.productDescription}-${index}`}
-        renderItem={({ item, index }) => {
+        renderItem={({ item }) => {
           return (
             <View style={styles.recallListItem}>
-              {index === 0 ? (
-                <OfficialRecallSectionHeading
-                  colors={colors}
-                  count={recallCount}
-                  fromCache={data?.fromCache ?? false}
-                  lastUpdated={lastUpdated}
-                />
-              ) : null}
               <RecallCard recall={item} />
             </View>
           );
@@ -233,8 +226,22 @@ export default function HomeScreen() {
               </Pressable>
             </View>
 
-            {data?.recentNews?.length && !isFetching ? (
-              <RecentNewsCard articles={data.recentNews} colors={colors} />
+            {submittedTerm.length > 0 && data && !isFetching && !isError ? (
+              <>
+                <AllergenInsights
+                  productName={submittedTerm}
+                  productText={submittedTerm}
+                  dataAvailable={false}
+                  source="search"
+                  colors={colors}
+                />
+                <OfficialRecallSectionHeading
+                  colors={colors}
+                  count={recallCount}
+                  fromCache={data.fromCache}
+                  lastUpdated={lastUpdated}
+                />
+              </>
             ) : null}
 
             {submittedTerm.length === 0 ? (
@@ -279,12 +286,9 @@ export default function HomeScreen() {
                 item={data.produceItem ?? submittedTerm}
                 recalls={relatedRecalls}
               />
-              <AllergenInsights
-                productName={submittedTerm}
-                productText=""
-                dataAvailable={false}
-                source="search"
-                colors={colors}
+              <RecentNewsSection
+                articles={data.recentNews ?? []}
+                unavailable={data.newsUnavailable !== false}
               />
               <HealthDietInsights
                 productName={submittedTerm}
@@ -305,66 +309,6 @@ interface StateProps {
   colors: ReturnType<typeof useColors>;
 }
 
-function formatNewsPublishedAt(date: string) {
-  const parsedDate = new Date(date);
-  if (Number.isNaN(parsedDate.getTime())) return 'Recently published';
-  return parsedDate.toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-}
-
-interface RecentNewsCardProps extends StateProps {
-  articles: RecallNewsArticle[];
-}
-
-function RecentNewsCard({ articles, colors }: RecentNewsCardProps) {
-  return (
-    <View style={[styles.newsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-      <View style={styles.newsCardHeading}>
-        <View style={[styles.newsIcon, { backgroundColor: colors.blueSoft }]}>
-          <Feather name="globe" size={17} color={colors.primary} />
-        </View>
-        <View style={styles.newsHeadingCopy}>
-          <Text style={[styles.newsTitle, { color: colors.foreground }]}>Recent News Mentions</Text>
-          <Text style={[styles.newsCount, { color: colors.mutedForeground }]}>
-            {articles.length} {articles.length === 1 ? 'article' : 'articles'} from the last 14 days
-          </Text>
-        </View>
-      </View>
-      <Text style={[styles.newsDisclaimer, { color: colors.mutedForeground }]}>
-        This is a news article, not official FDA recall data. Verify findings with the agency.
-      </Text>
-      <View style={styles.newsArticleList}>
-        {articles.slice(0, 5).map((article, index) => (
-          <Pressable
-            accessibilityHint="Opens this news article."
-            accessibilityRole="link"
-            key={`${article.url}-${index}`}
-            onPress={() => void Linking.openURL(article.url)}
-            style={({ pressed }) => [
-              styles.newsArticle,
-              { borderTopColor: colors.border, opacity: pressed ? 0.65 : 1 },
-            ]}
-          >
-            <View style={styles.newsArticleCopy}>
-              <Text style={[styles.newsArticleTitle, { color: colors.foreground }]}>
-                {article.title}
-              </Text>
-              <Text style={[styles.newsMeta, { color: colors.mutedForeground }]}>
-                {article.source} · {formatNewsPublishedAt(article.publishedAt)}
-              </Text>
-            </View>
-            <Feather name="arrow-up-right" size={16} color={colors.primary} />
-          </Pressable>
-        ))}
-      </View>
-    </View>
-  );
-}
-
 interface OfficialRecallSectionHeadingProps extends StateProps {
   count: number;
   lastUpdated: string;
@@ -381,7 +325,7 @@ function OfficialRecallSectionHeading({
     <View style={[styles.officialSectionHeader, { backgroundColor: colors.card, borderColor: colors.border }]}>
       <View style={styles.officialSectionCopy}>
         <Text style={[styles.officialSectionTitle, { color: colors.foreground }]}>
-          FDA recalls
+          Official FDA Recalls
         </Text>
         <Text style={[styles.updatedText, { color: colors.mutedForeground }]}>
           {count} {count === 1 ? 'recall' : 'recalls'} · Updated {formatUpdatedAt(lastUpdated)}
@@ -691,65 +635,6 @@ const styles = StyleSheet.create({
   officialSectionTitle: {
     fontFamily: 'Inter_700Bold',
     fontSize: 16,
-  },
-  newsCard: {
-    borderRadius: 16,
-    borderWidth: 1,
-    gap: 12,
-    padding: 15,
-  },
-  newsCardHeading: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 10,
-  },
-  newsIcon: {
-    alignItems: 'center',
-    borderRadius: 10,
-    height: 36,
-    justifyContent: 'center',
-    width: 36,
-  },
-  newsHeadingCopy: {
-    flex: 1,
-    gap: 3,
-  },
-  newsTitle: {
-    fontFamily: 'Inter_700Bold',
-    fontSize: 16,
-  },
-  newsCount: {
-    fontFamily: 'Inter_400Regular',
-    fontSize: 12,
-  },
-  newsDisclaimer: {
-    fontFamily: 'Inter_400Regular',
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  newsArticleList: {
-    marginTop: -4,
-  },
-  newsArticle: {
-    alignItems: 'center',
-    borderTopWidth: 1,
-    flexDirection: 'row',
-    gap: 10,
-    justifyContent: 'space-between',
-    paddingVertical: 11,
-  },
-  newsArticleCopy: {
-    flex: 1,
-    gap: 5,
-  },
-  newsArticleTitle: {
-    fontFamily: 'Inter_600SemiBold',
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  newsMeta: {
-    fontFamily: 'Inter_400Regular',
-    fontSize: 11,
   },
   searchOutcomeStack: {
     gap: 12,

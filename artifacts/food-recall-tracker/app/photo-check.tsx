@@ -21,6 +21,7 @@ import { FdaFreshnessNotice } from '@/components/FdaFreshnessNotice';
 import { PossiblyRelatedRecalls } from '@/components/PossiblyRelatedRecalls';
 import { RecallCard } from '@/components/RecallCard';
 import { RecallRelevanceNotice } from '@/components/RecallRelevanceNotice';
+import { RecentNewsSection } from '@/components/RecentNewsSection';
 import { useColors } from '@/hooks/useColors';
 import {
   type FoodIdentification,
@@ -624,13 +625,9 @@ function PhotoVerdictView({
         source="photo"
         colors={colors}
       />
-      <HealthDietInsights
-        productName={verdict.productName}
-        productText={`${verdict.nutritionProduct.ingredients ?? ''} ${verdict.nutritionProduct.allergens ?? ''}`}
-        product={verdict.nutritionProduct}
-        source="photo"
-        colors={colors}
-      />
+      <Text style={[styles.recallSectionTitle, { color: colors.foreground }]}>
+        Official FDA Recalls
+      </Text>
       <PhotoFdaRecallCard verdict={verdict} colors={colors} />
       {recalls.length > 0 ? <RecallRelevanceNotice message={verdict.recallResult?.relevanceNotice} /> : null}
       {recalls.map((recall, index) => (
@@ -639,7 +636,25 @@ function PhotoVerdictView({
       {verdict.recallCheckStatus === 'available' ? (
         <PossiblyRelatedRecalls item={produceItem} recalls={relatedRecalls} />
       ) : null}
+      <RecentNewsSection
+        articles={verdict.recallResult?.recentNews ?? []}
+        unavailable={
+          !verdict.recallResult || verdict.recallResult.newsUnavailable !== false
+        }
+      />
+      <HealthDietInsights
+        productName={verdict.productName}
+        productText={`${verdict.nutritionProduct.ingredients ?? ''} ${verdict.nutritionProduct.allergens ?? ''}`}
+        product={verdict.nutritionProduct}
+        source="photo"
+        colors={colors}
+      />
       <RetakeButton colors={colors} onPress={onRetake} />
+      <ManualSearchButton
+        colors={colors}
+        onPress={() => void router.push('/')}
+        label="Search by name"
+      />
     </View>
   );
 }
@@ -946,6 +961,7 @@ const styles = StyleSheet.create({
   fdaStatusCard: { alignItems: 'flex-start', borderRadius: 20, borderWidth: 1, flexDirection: 'row', gap: 12, padding: 18 },
   fdaStatusCopy: { flex: 1, gap: 9 },
   fdaStatusTitle: { fontFamily: 'Inter_700Bold', fontSize: 17, lineHeight: 22 },
+  recallSectionTitle: { fontFamily: 'Inter_700Bold', fontSize: 18, marginTop: 2 },
   fdaInfoButton: { alignItems: 'center', borderRadius: 12, flexDirection: 'row', gap: 8, justifyContent: 'center', minHeight: 46, paddingHorizontal: 14 },
   suggestionCard: { borderRadius: 20, borderWidth: 1, gap: 12, padding: 22 },
   tipList: { alignSelf: 'stretch', gap: 10, marginTop: 4 },

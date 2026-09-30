@@ -90,7 +90,7 @@ paths:
       operationId: getRecallNews
       tags: [recalls]
       summary: Search recent recall news mentions
-      description: Searches NewsAPI for matching articles published during the previous 14 days. An unavailable news source returns an empty list.
+      description: Searches NewsAPI for matching articles published during the previous 30 days. An unavailable news source returns an empty list.
       parameters:
         - name: term
           in: query

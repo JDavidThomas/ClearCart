@@ -160,6 +160,7 @@ router.get("/recalls/news", async (req, res) => {
       rawArticles,
       dateRange.from,
       dateRange.to,
+      term,
     );
     logger.info(
       {

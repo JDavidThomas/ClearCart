@@ -1,5 +1,5 @@
 export const NEWS_API_RESULT_LIMIT = 10;
-const RECENT_NEWS_WINDOW_MS = 14 * 24 * 60 * 60 * 1_000;
+const RECENT_NEWS_WINDOW_MS = 30 * 24 * 60 * 60 * 1_000;
 
 export function isNewsApiAllowed(
   nodeEnvironment: string | undefined,
@@ -41,6 +41,44 @@ export function normalizeNewsSearchTerm(term: string) {
     .trim();
 }
 
+function normalizeNewsWord(word: string) {
+  if (word.length > 4 && word.endsWith("ies")) return `${word.slice(0, -3)}y`;
+  if (word.length > 4 && word.endsWith("s") && !word.endsWith("ss")) {
+    return word.slice(0, -1);
+  }
+  return word;
+}
+
+function isRelevantNewsArticle(
+  article: { title: string; description?: string },
+  term: string,
+) {
+  const text = normalizeNewsSearchTerm(
+    `${article.title} ${article.description ?? ""}`,
+  ).toLowerCase();
+  const hasRecallContext =
+    /\b(?:recalls?|recalled|withdraw(?:al|n)?|warning|advisory|safety alert|outbreaks?|contaminat\w*|illness(?:es)?|sickened|hospitali[sz]\w*|foodborne|listeria|salmonella|e coli|botulism|foreign object|plastic|undeclared allergen|food poisoning)\b/i.test(text);
+  if (!hasRecallContext) return false;
+
+  const terms = normalizeNewsSearchTerm(term)
+    .toLowerCase()
+    .split(" ")
+    .filter((word) => word && !/^(recall|recalls)$/i.test(word))
+    .map(normalizeNewsWord);
+  if (terms.length === 0) return false;
+
+  const articleWords = new Set(text.split(" ").map(normalizeNewsWord));
+  if (terms.length >= 4) {
+    const brandPhrase = terms.slice(0, 2).join(" ");
+    const productPhrase = terms.slice(-3).join(" ");
+    if (text.includes(brandPhrase) || text.includes(productPhrase)) return true;
+  }
+
+  const matchingTerms = terms.filter((word) => articleWords.has(word)).length;
+  const minimumMatches = terms.length === 1 ? 1 : Math.min(2, terms.length);
+  return matchingTerms >= minimumMatches;
+}
+
 export function buildNewsQuery(term: string) {
   const terms = normalizeNewsSearchTerm(term)
     .split(" ")
@@ -51,13 +89,7 @@ export function buildNewsQuery(term: string) {
   if (terms.length <= 3) return `${terms.join(" ")} AND recall`;
 
   const brand = terms.slice(0, 2).join(" ");
-  const product = terms.slice(-3).map((word) => {
-    if (word.length > 4 && word.endsWith("ies")) return `${word.slice(0, -3)}y`;
-    if (word.length > 4 && word.endsWith("s") && !word.endsWith("ss")) {
-      return word.slice(0, -1);
-    }
-    return word;
-  }).join(" ");
+  const product = terms.slice(-3).map(normalizeNewsWord).join(" ");
 
   return `("${brand}" OR "${product}") AND recall`;
 }
@@ -70,6 +102,7 @@ export function normalizeNewsArticles(
   value: unknown,
   from: string,
   to: string,
+  term?: string,
 ) {
   if (!Array.isArray(value)) return [];
 
@@ -119,6 +152,7 @@ export function normalizeNewsArticles(
         source: source.trim(),
       }];
     })
+    .filter((article) => !term || isRelevantNewsArticle(article, term))
     .sort(
       (left, right) =>
         Date.parse(right.publishedAt) - Date.parse(left.publishedAt),

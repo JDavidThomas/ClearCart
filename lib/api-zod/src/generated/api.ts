@@ -65,7 +65,7 @@ export const GetFdaRecallsResponse = zod.object({
 
 
 /**
- * Searches NewsAPI for matching articles published during the previous 14 days. An unavailable news source returns an empty list.
+ * Searches NewsAPI for matching articles published during the previous 30 days. An unavailable news source returns an empty list.
  * @summary Search recent recall news mentions
  */
 export const getRecallNewsQueryTermMax = 100;

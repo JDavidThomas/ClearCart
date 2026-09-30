@@ -15,9 +15,11 @@ import {
 import {
   isRecallNewsQueryCacheCurrent,
   isRecallSearchCacheFresh,
+  shouldRefreshRecallNews,
   RECALL_NEWS_QUERY_CACHE_VERSION,
   RECALL_SEARCH_CACHE_TTL_MS,
 } from './recallCache';
+import { filterRecentNews } from './recallNewsFilters';
 export {
   lookupOpenFoodFactsProduct,
   searchOpenFoodFactsProduct,
@@ -28,12 +30,12 @@ export { buildOpenFdaSearchQuery, cleanRecallSearchTerm } from './recallSearch';
 const CACHE_PREFIX = '@food-recall-tracker/recalls/';
 const CACHE_INDEX_KEY = '@food-recall-tracker/recent-searches';
 const MAX_CACHED_SEARCHES = 8;
-const RECENT_NEWS_WINDOW_MS = 14 * 24 * 60 * 60 * 1_000;
 
 interface CachedSearch {
   recalls: FoodRecall[];
   recentNews?: RecallNewsArticle[];
   newsUnavailable?: boolean;
+  newsCheckedAt?: string;
   newsQueryVersion: number;
   lastUpdated: string;
   relevanceNotice?: string;
@@ -67,14 +69,6 @@ function normalizeNewsArticles(value: unknown): RecallNewsArticle[] {
   });
 }
 
-function filterRecentNews(articles: RecallNewsArticle[], now = Date.now()) {
-  const cutoff = now - RECENT_NEWS_WINDOW_MS;
-  return articles.filter((article) => {
-    const publishedAt = Date.parse(article.publishedAt);
-    return Number.isFinite(publishedAt) && publishedAt >= cutoff && publishedAt <= now;
-  });
-}
-
 function normalizeCachedSearch(value: unknown): CachedSearch | null {
   let candidate: unknown = value;
 
@@ -98,6 +92,8 @@ function normalizeCachedSearch(value: unknown): CachedSearch | null {
         newsUnavailable:
           candidate.newsUnavailable === true ||
           !isRecallNewsQueryCacheCurrent(candidate.newsQueryVersion),
+        newsCheckedAt:
+          typeof candidate.newsCheckedAt === 'string' ? candidate.newsCheckedAt : undefined,
         newsQueryVersion: RECALL_NEWS_QUERY_CACHE_VERSION,
         lastUpdated,
         relevanceNotice:
@@ -282,12 +278,20 @@ export async function searchFoodRecalls(
       ageMs: Math.max(0, Date.now() - Date.parse(cached.lastUpdated)),
       ttlMs: RECALL_SEARCH_CACHE_TTL_MS,
     });
-    if (cached.newsUnavailable) {
+    if (
+      shouldRefreshRecallNews(
+        cached.newsUnavailable,
+        cached.recentNews?.length ?? 0,
+        cached.newsCheckedAt,
+      )
+    ) {
       const news = await searchRecentRecallNews(normalizedTerm);
       const refreshedCache = {
         ...cached,
         recentNews: news.articles,
         newsUnavailable: news.unavailable,
+        newsCheckedAt: new Date().toISOString(),
+        newsQueryVersion: RECALL_NEWS_QUERY_CACHE_VERSION,
       };
       if (!news.unavailable) {
         await saveSearch(key, normalizedTerm, refreshedCache);
@@ -313,7 +317,7 @@ export async function searchFoodRecalls(
     }
 
     if (fdaResult.status === 'rejected') {
-      if (recentNews.length === 0) throw fdaResult.reason;
+      if (newsUnavailable) throw fdaResult.reason;
       recalls = [];
       fdaUnavailable = true;
       console.warn('[RecallSearch] FDA unavailable; showing recent news mentions', {
@@ -328,6 +332,7 @@ export async function searchFoodRecalls(
       recalls,
       recentNews,
       newsUnavailable,
+      newsCheckedAt: new Date().toISOString(),
       newsQueryVersion: RECALL_NEWS_QUERY_CACHE_VERSION,
       lastUpdated: new Date().toISOString(),
       fdaUnavailable,
