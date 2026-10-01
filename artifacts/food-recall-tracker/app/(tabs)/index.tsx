@@ -23,6 +23,11 @@ import { ProduceRecallVerdict } from '@/components/ProduceRecallVerdict';
 import { RecallCard } from '@/components/RecallCard';
 import { RecallRelevanceNotice } from '@/components/RecallRelevanceNotice';
 import { RecentNewsSection } from '@/components/RecentNewsSection';
+import {
+  RecallResultTabBar,
+  useRecallResultSwipe,
+  type RecallResultTab,
+} from '@/components/RecallResultTabBar';
 import { useColors } from '@/hooks/useColors';
 import { searchFoodRecalls } from '@/services/recallApi';
 import type { RecallSearchResult } from '@/types/recall';
@@ -46,6 +51,8 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const [term, setTerm] = useState<string>('');
   const [submittedTerm, setSubmittedTerm] = useState<string>('');
+  const [activeResultTab, setActiveResultTab] = useState<RecallResultTab>('fda');
+  const swipeHandlers = useRecallResultSwipe(activeResultTab, setActiveResultTab);
   const topPadding = Platform.OS === 'web' ? Math.max(insets.top, 67) : insets.top;
 
   const { data, error, isFetching, isError, refetch } = useQuery<RecallSearchResult, Error>({
@@ -64,6 +71,7 @@ export default function HomeScreen() {
     const nextTerm = term.trim();
     if (!nextTerm) return;
     await Haptics.selectionAsync();
+    setActiveResultTab('fda');
     if (nextTerm === submittedTerm) {
       await refetch();
       return;
@@ -74,9 +82,9 @@ export default function HomeScreen() {
   const searchButtonLabel = isFetching ? 'Searching…' : 'Search Recalls';
 
   return (
-    <View style={[styles.screen, { backgroundColor: colors.background }]}>
+    <View {...swipeHandlers} style={[styles.screen, { backgroundColor: colors.background }]}>
       <FlatList
-        data={recalls}
+        data={activeResultTab === 'fda' ? recalls : []}
         keyExtractor={(item, index) => `${item.recallNumber ?? item.productDescription}-${index}`}
         renderItem={({ item }) => {
           return (
@@ -235,12 +243,48 @@ export default function HomeScreen() {
                   source="search"
                   colors={colors}
                 />
-                <OfficialRecallSectionHeading
-                  colors={colors}
-                  count={recallCount}
-                  fromCache={data.fromCache}
-                  lastUpdated={lastUpdated}
+                <RecallResultTabBar
+                  activeTab={activeResultTab}
+                  onChangeTab={setActiveResultTab}
                 />
+                {activeResultTab === 'fda' ? (
+                  <View style={styles.searchOutcomeStack} testID="fda-recalls-panel">
+                    <OfficialRecallSectionHeading
+                      colors={colors}
+                      count={recallCount}
+                      fromCache={data.fromCache}
+                      lastUpdated={lastUpdated}
+                    />
+                    {data.isProduceSearch ? (
+                      <ProduceRecallVerdict
+                        item={data.produceItem ?? submittedTerm}
+                        hasDirectRecall={recallCount > 0}
+                      />
+                    ) : recallCount === 0 ? (
+                      <>
+                        <NoResultsState
+                          term={submittedTerm}
+                          updatedAt={lastUpdated}
+                          colors={colors}
+                          fdaUnavailable={data.fdaUnavailable}
+                        />
+                        {data.fdaUnavailable ? <FdaUnavailableNotice colors={colors} /> : null}
+                      </>
+                    ) : (
+                      <>
+                        <RecallRelevanceNotice message={data.relevanceNotice} />
+                        {data.fdaUnavailable ? <FdaUnavailableNotice colors={colors} /> : null}
+                      </>
+                    )}
+                  </View>
+                ) : (
+                  <View testID="news-updates-panel">
+                    <RecentNewsSection
+                      articles={data.recentNews ?? []}
+                      unavailable={data.newsUnavailable !== false}
+                    />
+                  </View>
+                )}
               </>
             ) : null}
 
@@ -256,40 +300,18 @@ export default function HomeScreen() {
               </View>
             ) : isFetching ? (
               <LoadingState colors={colors} />
-            ) : data?.isProduceSearch ? (
-              <ProduceRecallVerdict
-                item={data.produceItem ?? submittedTerm}
-                hasDirectRecall={recallCount > 0}
-              />
-            ) : recallCount === 0 ? (
-              <View style={styles.searchOutcomeStack}>
-                <NoResultsState
-                  term={submittedTerm}
-                  updatedAt={lastUpdated}
-                  colors={colors}
-                  fdaUnavailable={data?.fdaUnavailable}
-                />
-                {data?.fdaUnavailable ? <FdaUnavailableNotice colors={colors} /> : null}
-              </View>
-            ) : (
-              <View style={styles.searchOutcomeStack}>
-                <RecallRelevanceNotice message={data?.relevanceNotice} />
-                {data?.fdaUnavailable ? <FdaUnavailableNotice colors={colors} /> : null}
-              </View>
-            )}
+            ) : null}
           </View>
         }
         ListFooterComponent={
           submittedTerm.length > 0 && data && !isFetching ? (
             <View style={styles.footerStack}>
-              <PossiblyRelatedRecalls
-                item={data.produceItem ?? submittedTerm}
-                recalls={relatedRecalls}
-              />
-              <RecentNewsSection
-                articles={data.recentNews ?? []}
-                unavailable={data.newsUnavailable !== false}
-              />
+              {activeResultTab === 'fda' ? (
+                <PossiblyRelatedRecalls
+                  item={data.produceItem ?? submittedTerm}
+                  recalls={relatedRecalls}
+                />
+              ) : null}
               <HealthDietInsights
                 productName={submittedTerm}
                 productText={submittedTerm}
@@ -322,7 +344,10 @@ function OfficialRecallSectionHeading({
   fromCache,
 }: OfficialRecallSectionHeadingProps) {
   return (
-    <View style={[styles.officialSectionHeader, { backgroundColor: colors.card, borderColor: colors.border }]}>
+    <View
+      style={[styles.officialSectionHeader, { backgroundColor: colors.card, borderColor: colors.border }]}
+      testID="fda-recalls-heading"
+    >
       <View style={styles.officialSectionCopy}>
         <Text style={[styles.officialSectionTitle, { color: colors.foreground }]}>
           Official FDA Recalls
@@ -400,7 +425,7 @@ function NoResultsState({
         size={22}
         color={fdaUnavailable ? colors.warning : colors.success}
       />
-      <Text style={[styles.stateTitle, { color: colors.foreground }]}>
+      <Text style={[styles.stateTitle, { color: colors.foreground }]} testID="fda-no-results">
         {fdaUnavailable ? 'FDA recall check unavailable' : 'No active FDA recalls found for this product.'}
       </Text>
       <Text style={[styles.stateBody, { color: colors.mutedForeground }]}>

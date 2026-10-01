@@ -22,6 +22,11 @@ import { PossiblyRelatedRecalls } from '@/components/PossiblyRelatedRecalls';
 import { RecallCard } from '@/components/RecallCard';
 import { RecallRelevanceNotice } from '@/components/RecallRelevanceNotice';
 import { RecentNewsSection } from '@/components/RecentNewsSection';
+import {
+  RecallResultTabBar,
+  useRecallResultSwipe,
+  type RecallResultTab,
+} from '@/components/RecallResultTabBar';
 import { useColors } from '@/hooks/useColors';
 import {
   type FoodIdentification,
@@ -601,6 +606,8 @@ function PhotoVerdictView({
   onRetake: () => void;
 }) {
   const router = useRouter();
+  const [activeResultTab, setActiveResultTab] = useState<RecallResultTab>('fda');
+  const swipeHandlers = useRecallResultSwipe(activeResultTab, setActiveResultTab);
   if (!verdict.productName) {
     return (
       <PhotoSuggestionView
@@ -616,7 +623,7 @@ function PhotoVerdictView({
   const produceItem = verdict.recallResult?.produceItem ?? verdict.productName;
 
   return (
-    <View style={styles.verdictStack}>
+    <View {...swipeHandlers} style={styles.verdictStack}>
       <ProductIdentityCard verdict={verdict} colors={colors} />
       <AllergenInsights
         productName={verdict.productName}
@@ -625,23 +632,39 @@ function PhotoVerdictView({
         source="photo"
         colors={colors}
       />
-      <Text style={[styles.recallSectionTitle, { color: colors.foreground }]}>
-        Official FDA Recalls
-      </Text>
-      <PhotoFdaRecallCard verdict={verdict} colors={colors} />
-      {recalls.length > 0 ? <RecallRelevanceNotice message={verdict.recallResult?.relevanceNotice} /> : null}
-      {recalls.map((recall, index) => (
-        <RecallCard key={`${recall.recallNumber ?? recall.productDescription}-${index}`} recall={recall} />
-      ))}
-      {verdict.recallCheckStatus === 'available' ? (
-        <PossiblyRelatedRecalls item={produceItem} recalls={relatedRecalls} />
-      ) : null}
-      <RecentNewsSection
-        articles={verdict.recallResult?.recentNews ?? []}
-        unavailable={
-          !verdict.recallResult || verdict.recallResult.newsUnavailable !== false
-        }
+      <RecallResultTabBar
+        activeTab={activeResultTab}
+        onChangeTab={setActiveResultTab}
       />
+      {activeResultTab === 'fda' ? (
+        <>
+          <Text style={[styles.recallSectionTitle, { color: colors.foreground }]}>
+            Official FDA Recalls
+          </Text>
+          <PhotoFdaRecallCard verdict={verdict} colors={colors} />
+          {recalls.length > 0 ? (
+            <RecallRelevanceNotice message={verdict.recallResult?.relevanceNotice} />
+          ) : null}
+          {recalls.map((recall, index) => (
+            <RecallCard
+              key={`${recall.recallNumber ?? recall.productDescription}-${index}`}
+              recall={recall}
+            />
+          ))}
+          {verdict.recallCheckStatus === 'available' ? (
+            <PossiblyRelatedRecalls item={produceItem} recalls={relatedRecalls} />
+          ) : null}
+        </>
+      ) : (
+        <View testID="news-updates-panel">
+          <RecentNewsSection
+            articles={verdict.recallResult?.recentNews ?? []}
+            unavailable={
+              !verdict.recallResult || verdict.recallResult.newsUnavailable !== false
+            }
+          />
+        </View>
+      )}
       <HealthDietInsights
         productName={verdict.productName}
         productText={`${verdict.nutritionProduct.ingredients ?? ''} ${verdict.nutritionProduct.allergens ?? ''}`}

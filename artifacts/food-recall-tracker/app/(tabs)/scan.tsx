@@ -22,6 +22,11 @@ import { ProduceRecallVerdict } from '@/components/ProduceRecallVerdict';
 import { RecallCard } from '@/components/RecallCard';
 import { RecallRelevanceNotice } from '@/components/RecallRelevanceNotice';
 import { RecentNewsSection } from '@/components/RecentNewsSection';
+import {
+  RecallResultTabBar,
+  useRecallResultSwipe,
+  type RecallResultTab,
+} from '@/components/RecallResultTabBar';
 import { useColors } from '@/hooks/useColors';
 import {
   lookupOpenFoodFactsProduct,
@@ -401,6 +406,8 @@ function VerdictView({
   onScanAgain: () => void;
 }) {
   const router = useRouter();
+  const [activeResultTab, setActiveResultTab] = useState<RecallResultTab>('fda');
+  const swipeHandlers = useRecallResultSwipe(activeResultTab, setActiveResultTab);
   const productLabel = verdict.product
     ? `${verdict.product.brand} ${verdict.product.name}`.trim()
     : `Barcode ${verdict.barcode}`;
@@ -444,7 +451,7 @@ function VerdictView({
 
   if (recallResult?.isProduceSearch) {
     return (
-      <View style={styles.verdictStack}>
+      <View {...swipeHandlers} style={styles.verdictStack}>
         <BarcodeProductIdentityCard
           barcode={verdict.barcode}
           productLabel={productLabel}
@@ -457,18 +464,32 @@ function VerdictView({
           source="barcode"
           colors={colors}
         />
-        <Text style={[styles.recallSectionTitle, { color: colors.foreground }]}>
-          Official FDA Recalls
-        </Text>
-        <ProduceRecallVerdict item={produceItem} hasDirectRecall={recallCards.length > 0} />
-        {recallCards.map((recall, index) => (
-          <RecallCard key={`${recall.recallNumber ?? recall.productDescription}-${index}`} recall={recall} />
-        ))}
-        <PossiblyRelatedRecalls item={produceItem} recalls={relatedRecalls} />
-        <RecentNewsSection
-          articles={recallResult?.recentNews ?? []}
-          unavailable={recallResult?.newsUnavailable !== false}
+        <RecallResultTabBar
+          activeTab={activeResultTab}
+          onChangeTab={setActiveResultTab}
         />
+        {activeResultTab === 'fda' ? (
+          <>
+            <Text style={[styles.recallSectionTitle, { color: colors.foreground }]}>
+              Official FDA Recalls
+            </Text>
+            <ProduceRecallVerdict item={produceItem} hasDirectRecall={recallCards.length > 0} />
+            {recallCards.map((recall, index) => (
+              <RecallCard
+                key={`${recall.recallNumber ?? recall.productDescription}-${index}`}
+                recall={recall}
+              />
+            ))}
+            <PossiblyRelatedRecalls item={produceItem} recalls={relatedRecalls} />
+          </>
+        ) : (
+          <View testID="news-updates-panel">
+            <RecentNewsSection
+              articles={recallResult?.recentNews ?? []}
+              unavailable={recallResult?.newsUnavailable !== false}
+            />
+          </View>
+        )}
         <HealthDietInsights
           productName={productLabel}
           productText={`${verdict.product?.ingredients ?? ''} ${verdict.product?.allergens ?? ''}`}
@@ -483,7 +504,7 @@ function VerdictView({
   }
 
   return (
-    <View style={styles.verdictStack}>
+    <View {...swipeHandlers} style={styles.verdictStack}>
       <BarcodeProductIdentityCard
         barcode={verdict.barcode}
         productLabel={productLabel}
@@ -496,94 +517,108 @@ function VerdictView({
         source="barcode"
         colors={colors}
       />
-      <Text style={[styles.recallSectionTitle, { color: colors.foreground }]}>
-        Official FDA Recalls
-      </Text>
-      <View
-        style={[
-          styles.verdictCard,
-          {
-            backgroundColor:
-              hasRecall
-                ? colors.dangerSoft
-                : recallCheckStatus === 'unavailable' || recallCheckStatus === 'checking'
-                  ? colors.blueSoft
-                  : colors.successSoft,
-            borderColor:
-              hasRecall
-                ? colors.destructive
-                : recallCheckStatus === 'unavailable' || recallCheckStatus === 'checking'
-                  ? colors.primary
-                  : colors.success,
-          },
-        ]}
-      >
-        <View
-          style={[
-            styles.verdictIcon,
-            {
-              backgroundColor:
-                hasRecall
-                  ? colors.destructive
-                  : recallCheckStatus === 'unavailable' || recallCheckStatus === 'checking'
-                    ? colors.primary
-                    : colors.success,
-            },
-          ]}
-        >
-          {recallCheckStatus === 'checking' ? (
-            <ActivityIndicator color={colors.primaryForeground} />
-          ) : (
-            <Feather
-              name={
-                hasRecall
-                  ? 'alert-triangle'
-                  : recallCheckStatus === 'unavailable'
-                    ? 'info'
-                    : 'check'
-              }
-              size={25}
-              color={colors.primaryForeground}
-            />
-          )}
-        </View>
-        <Text style={[styles.verdictTitle, { color: colors.foreground }]}>
-          {recallCheckStatus === 'checking'
-            ? 'Checking FDA Recalls'
-            : recallCheckStatus === 'unavailable'
-              ? 'FDA Recall Check Unavailable'
-              : hasRecall
-                ? 'Recall Found'
-                : 'No Active Recall Found'}
-        </Text>
-        <Text style={[styles.verdictBody, { color: colors.mutedForeground }]}>
-          {recallCheckStatus === 'checking'
-            ? 'The product was found. Checking its name and brand against current FDA recall records.'
-            : recallCheckStatus === 'unavailable'
-              ? 'The product was found, but FDA recall records could not be checked. This is not confirmation that the product has no recall.'
-              : hasRecall
-                ? 'This product matches an active FDA recall. Review the details below and follow the official notice.'
-                : 'No active FDA food or drug recall matched this product name.'}
-        </Text>
-        {recallCheckStatus === 'available' && !hasRecall ? <FdaFreshnessNotice colors={colors} /> : null}
-        {recallResult?.fromCache ? (
-          <View style={[styles.savedPill, { backgroundColor: colors.warningSoft }]}>
-            <Feather name="wifi-off" size={13} color={colors.warning} />
-            <Text style={[styles.savedPillText, { color: colors.warning }]}>Showing a saved result</Text>
-          </View>
-        ) : null}
-      </View>
-
-      <RecallRelevanceNotice message={recallResult?.relevanceNotice} />
-      {recallCards.map((recall, index) => (
-        <RecallCard key={`${recall.recallNumber ?? recall.productDescription}-${index}`} recall={recall} />
-      ))}
-
-      <PossiblyRelatedRecalls item={produceItem} recalls={relatedRecalls} />
-      <RecentNewsSection
-        articles={recallResult?.recentNews ?? []}
-        unavailable={recallResult?.newsUnavailable !== false}
+      <RecallResultTabBar
+        activeTab={activeResultTab}
+        onChangeTab={setActiveResultTab}
       />
+      {activeResultTab === 'fda' ? (
+        <>
+          <Text style={[styles.recallSectionTitle, { color: colors.foreground }]}>
+            Official FDA Recalls
+          </Text>
+          <View
+            style={[
+              styles.verdictCard,
+              {
+                backgroundColor:
+                  hasRecall
+                    ? colors.dangerSoft
+                    : recallCheckStatus === 'unavailable' || recallCheckStatus === 'checking'
+                      ? colors.blueSoft
+                      : colors.successSoft,
+                borderColor:
+                  hasRecall
+                    ? colors.destructive
+                    : recallCheckStatus === 'unavailable' || recallCheckStatus === 'checking'
+                      ? colors.primary
+                      : colors.success,
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.verdictIcon,
+                {
+                  backgroundColor:
+                    hasRecall
+                      ? colors.destructive
+                      : recallCheckStatus === 'unavailable' || recallCheckStatus === 'checking'
+                        ? colors.primary
+                        : colors.success,
+                },
+              ]}
+            >
+              {recallCheckStatus === 'checking' ? (
+                <ActivityIndicator color={colors.primaryForeground} />
+              ) : (
+                <Feather
+                  name={
+                    hasRecall
+                      ? 'alert-triangle'
+                      : recallCheckStatus === 'unavailable'
+                        ? 'info'
+                        : 'check'
+                  }
+                  size={25}
+                  color={colors.primaryForeground}
+                />
+              )}
+            </View>
+            <Text style={[styles.verdictTitle, { color: colors.foreground }]}>
+              {recallCheckStatus === 'checking'
+                ? 'Checking FDA Recalls'
+                : recallCheckStatus === 'unavailable'
+                  ? 'FDA Recall Check Unavailable'
+                  : hasRecall
+                    ? 'Recall Found'
+                  : 'No Active FDA Recall Found'}
+            </Text>
+            <Text style={[styles.verdictBody, { color: colors.mutedForeground }]}>
+              {recallCheckStatus === 'checking'
+                ? 'The product was found. Checking its name and brand against current FDA recall records.'
+                : recallCheckStatus === 'unavailable'
+                  ? 'The product was found, but FDA recall records could not be checked. This is not confirmation that the product has no recall.'
+                  : hasRecall
+                    ? 'This product matches an active FDA recall. Review the details below and follow the official notice.'
+                    : 'No active FDA food recall matched this product name.'}
+            </Text>
+            {recallCheckStatus === 'available' && !hasRecall ? <FdaFreshnessNotice colors={colors} /> : null}
+            {recallResult?.fromCache ? (
+              <View style={[styles.savedPill, { backgroundColor: colors.warningSoft }]}>
+                <Feather name="wifi-off" size={13} color={colors.warning} />
+                <Text style={[styles.savedPillText, { color: colors.warning }]}>Showing a saved result</Text>
+              </View>
+            ) : null}
+          </View>
+
+          <RecallRelevanceNotice message={recallResult?.relevanceNotice} />
+          {recallCards.map((recall, index) => (
+            <RecallCard
+              key={`${recall.recallNumber ?? recall.productDescription}-${index}`}
+              recall={recall}
+            />
+          ))}
+
+          <PossiblyRelatedRecalls item={produceItem} recalls={relatedRecalls} />
+        </>
+      ) : (
+          <View testID="news-updates-panel">
+            <RecentNewsSection
+              articles={recallResult?.recentNews ?? []}
+              unavailable={recallResult?.newsUnavailable !== false}
+            />
+          </View>
+      )}
       <HealthDietInsights
         productName={productLabel}
         productText={`${verdict.product?.ingredients ?? ''} ${verdict.product?.allergens ?? ''}`}
