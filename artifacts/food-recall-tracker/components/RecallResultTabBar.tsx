@@ -117,6 +117,8 @@ export function RecallResultPanels({
   source,
   fdaSummary,
   newsSummary,
+  newsArticleCount,
+  newsUnavailable,
   fdaContent,
   newsContent,
   swipeHandlers,
@@ -125,6 +127,8 @@ export function RecallResultPanels({
   source: 'search' | 'photo' | 'barcode';
   fdaSummary: string;
   newsSummary: string;
+  newsArticleCount: number;
+  newsUnavailable: boolean;
   fdaContent: ReactNode;
   newsContent: ReactNode;
   swipeHandlers: ReturnType<typeof useRecallResultSwipe>;
@@ -132,18 +136,35 @@ export function RecallResultPanels({
   const activeIndex = getRecallResultTabIndex(activeTab);
   const renderedSummary = getRecallResultPanelContent(activeTab, fdaSummary, newsSummary);
   const renderedContent = getRecallResultPanelContent(activeTab, fdaContent, newsContent);
+  const isFdaPanelRendering = activeTab === 'fda';
+  const isNewsPanelRendering = activeTab === 'news';
 
   useEffect(() => {
     console.info('[RecallResultTabs] panel render', {
       source,
-      activeIndex,
+      activeTabIndex: activeIndex,
       activeTab,
-      fdaPanel: fdaSummary,
-      newsPanel: newsSummary,
+      isFdaPanelRendering,
+      isNewsPanelRendering,
+      newsArticleCount,
+      newsUnavailable,
+      fdaPanelContent: fdaSummary,
+      newsPanelContent: newsSummary,
       renderedPanel: activeTab === 'fda' ? 'FDA Recalls' : 'News & Updates',
-      renderedContent: renderedSummary,
+      selectedPanelContent: renderedSummary,
     });
-  }, [activeIndex, activeTab, fdaSummary, newsSummary, renderedSummary, source]);
+  }, [
+    activeIndex,
+    activeTab,
+    fdaSummary,
+    isFdaPanelRendering,
+    isNewsPanelRendering,
+    newsArticleCount,
+    newsSummary,
+    newsUnavailable,
+    renderedSummary,
+    source,
+  ]);
 
   return (
     <View

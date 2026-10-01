@@ -242,6 +242,8 @@ export default function HomeScreen() {
                   activeTab={activeResultTab}
                   source="search"
                   swipeHandlers={swipeHandlers}
+                  newsArticleCount={data.recentNews?.length ?? 0}
+                  newsUnavailable={data.newsUnavailable !== false}
                   fdaSummary={
                     data.isProduceSearch
                       ? `Produce verdict with ${recallCount} direct FDA recall(s)`
@@ -252,10 +254,10 @@ export default function HomeScreen() {
                           : 'empty state: No active FDA recalls found'
                   }
                   newsSummary={
-                    data.newsUnavailable !== false
-                      ? 'hidden: news source unavailable'
-                      : data.recentNews?.length
-                        ? `${data.recentNews.length} article(s): ${data.recentNews.map((article) => article.title).join(' | ')}`
+                    data.recentNews?.length
+                      ? `${data.recentNews.length} article(s): ${data.recentNews.map((article) => article.title).join(' | ')}${data.newsUnavailable !== false ? ' (news source unavailable)' : ''}`
+                      : data.newsUnavailable !== false
+                        ? 'unavailable state: no news articles received'
                         : 'empty state: No recent news found for this product'
                   }
                   fdaContent={

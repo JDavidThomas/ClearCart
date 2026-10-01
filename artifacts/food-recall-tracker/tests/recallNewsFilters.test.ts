@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { filterRecentNews } from '../services/recallNewsFilters.ts';
+import {
+  filterRecentNews,
+  getRecentNewsPanelState,
+} from '../services/recallNewsFilters.ts';
 import type { RecallNewsArticle } from '../types/recall.ts';
 
 const now = Date.parse('2026-09-30T12:00:00.000Z');
@@ -13,6 +16,12 @@ function article(title: string, publishedAt: string): RecallNewsArticle {
     publishedAt,
   };
 }
+
+test('news panel displays available articles even when refresh is unavailable', () => {
+  assert.equal(getRecentNewsPanelState(1, true), 'articles');
+  assert.equal(getRecentNewsPanelState(0, true), 'unavailable');
+  assert.equal(getRecentNewsPanelState(0, false), 'empty');
+});
 
 test('recent news uses a 30-day window, sorts newest first, and caps at three', () => {
   const result = filterRecentNews(

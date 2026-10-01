@@ -644,6 +644,8 @@ function PhotoVerdictView({
         activeTab={activeResultTab}
         source="photo"
         swipeHandlers={swipeHandlers}
+        newsArticleCount={recentNews.length}
+        newsUnavailable={newsUnavailable}
         fdaSummary={
           recalls.length > 0
             ? `${recalls.length} FDA recall card(s)`
@@ -652,10 +654,10 @@ function PhotoVerdictView({
               : `FDA status: ${verdict.recallCheckStatus ?? 'unavailable'}`
         }
         newsSummary={
-          newsUnavailable
-            ? 'hidden: news source unavailable'
-            : recentNews.length > 0
-              ? `${recentNews.length} article(s): ${recentNews.map((article) => article.title).join(' | ')}`
+          recentNews.length > 0
+            ? `${recentNews.length} article(s): ${recentNews.map((article) => article.title).join(' | ')}${newsUnavailable ? ' (news source unavailable)' : ''}`
+            : newsUnavailable
+              ? 'unavailable state: no news articles received'
               : 'empty state: No recent news found for this product'
         }
         fdaContent={

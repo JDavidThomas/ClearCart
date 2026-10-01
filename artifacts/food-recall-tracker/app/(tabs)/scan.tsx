@@ -475,16 +475,18 @@ function VerdictView({
           activeTab={activeResultTab}
           source="barcode"
           swipeHandlers={swipeHandlers}
+          newsArticleCount={recentNews.length}
+          newsUnavailable={newsUnavailable}
           fdaSummary={
             recallCards.length > 0
               ? `${recallCards.length} FDA recall card(s)`
               : 'produce verdict: No active FDA recalls found'
           }
           newsSummary={
-            newsUnavailable
-              ? 'hidden: news source unavailable'
-              : recentNews.length > 0
-                ? `${recentNews.length} article(s): ${recentNews.map((article) => article.title).join(' | ')}`
+            recentNews.length > 0
+              ? `${recentNews.length} article(s): ${recentNews.map((article) => article.title).join(' | ')}${newsUnavailable ? ' (news source unavailable)' : ''}`
+              : newsUnavailable
+                ? 'unavailable state: no news articles received'
                 : 'empty state: No recent news found for this product'
           }
           fdaContent={
@@ -541,6 +543,8 @@ function VerdictView({
         activeTab={activeResultTab}
         source="barcode"
         swipeHandlers={swipeHandlers}
+        newsArticleCount={recentNews.length}
+        newsUnavailable={newsUnavailable}
         fdaSummary={
           recallCheckStatus === 'checking'
             ? 'FDA recall check in progress'
@@ -551,10 +555,10 @@ function VerdictView({
                 : 'empty state: No active FDA recalls found'
         }
         newsSummary={
-          newsUnavailable
-            ? 'hidden: news source unavailable'
-            : recentNews.length > 0
-              ? `${recentNews.length} article(s): ${recentNews.map((article) => article.title).join(' | ')}`
+          recentNews.length > 0
+            ? `${recentNews.length} article(s): ${recentNews.map((article) => article.title).join(' | ')}${newsUnavailable ? ' (news source unavailable)' : ''}`
+            : newsUnavailable
+              ? 'unavailable state: no news articles received'
               : 'empty state: No recent news found for this product'
         }
         fdaContent={

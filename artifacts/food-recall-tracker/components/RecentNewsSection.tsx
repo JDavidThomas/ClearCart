@@ -3,7 +3,10 @@ import { useEffect } from 'react';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { RecallNewsArticle } from '@/types/recall';
 import { useColors } from '@/hooks/useColors';
-import { MAX_RECENT_NEWS_ARTICLES } from '@/services/recallNewsFilters';
+import {
+  getRecentNewsPanelState,
+  MAX_RECENT_NEWS_ARTICLES,
+} from '@/services/recallNewsFilters';
 
 function formatPublishedDate(value: string) {
   const date = new Date(value);
@@ -24,21 +27,16 @@ export function RecentNewsSection({
 }) {
   const colors = useColors();
   const visibleArticles = articles.slice(0, MAX_RECENT_NEWS_ARTICLES);
+  const panelState = getRecentNewsPanelState(visibleArticles.length, unavailable);
 
   useEffect(() => {
     console.info('[RecallNewsPanel] content render', {
       unavailable,
       articleCount: visibleArticles.length,
-      renderedState: unavailable
-        ? 'hidden: news source unavailable'
-        : visibleArticles.length === 0
-          ? 'empty state: No recent news found for this product'
-          : 'article list',
+      renderedState: panelState,
       articles: visibleArticles.map(({ title, source }) => ({ title, source })),
     });
-  }, [articles, unavailable, visibleArticles.length]);
-
-  if (unavailable) return null;
+  }, [articles, panelState, unavailable]);
 
   return (
     <View
@@ -60,7 +58,23 @@ export function RecentNewsSection({
         </View>
       </View>
 
-      {visibleArticles.length === 0 ? (
+      {unavailable && panelState === 'articles' ? (
+        <Text
+          style={[styles.emptyMessage, { color: colors.mutedForeground }]}
+          testID="recent-news-refresh-warning"
+        >
+          The news source could not be refreshed. Showing the recent articles already received.
+        </Text>
+      ) : null}
+
+      {panelState === 'unavailable' ? (
+        <Text
+          style={[styles.emptyMessage, { color: colors.mutedForeground }]}
+          testID="recent-news-unavailable"
+        >
+          Recent news is temporarily unavailable. Please try again later.
+        </Text>
+      ) : panelState === 'empty' ? (
         <Text
           style={[styles.emptyMessage, { color: colors.mutedForeground }]}
           testID="recent-news-empty"

@@ -141,8 +141,26 @@ async function searchRecentRecallNews(term: string): Promise<{
       unavailable: response.unavailable,
     });
     return { articles, unavailable: response.unavailable };
-  } catch {
-    console.warn('[RecallNews] source unavailable; continuing without news', { term });
+  } catch (error) {
+    const errorDetails =
+      error && typeof error === 'object'
+        ? (error as { name?: unknown; message?: unknown; status?: unknown; statusCode?: unknown })
+        : null;
+    const rawMessage =
+      typeof errorDetails?.message === 'string'
+        ? errorDetails.message
+        : error instanceof Error
+          ? error.message
+          : String(error);
+    const message = rawMessage
+      .replace(/([?&]api_key=)[^&\s]*/gi, '$1[REDACTED]')
+      .replace(/("api_key"\s*:\s*")[^"]+(")/gi, '$1[REDACTED]$2');
+    console.warn('[RecallNews] request failed; continuing without news', {
+      term,
+      errorName: typeof errorDetails?.name === 'string' ? errorDetails.name : 'UnknownError',
+      status: errorDetails?.status ?? errorDetails?.statusCode ?? null,
+      message,
+    });
     return { articles: [], unavailable: true };
   }
 }
