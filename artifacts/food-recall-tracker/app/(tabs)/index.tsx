@@ -5,10 +5,10 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
   ActivityIndicator,
-  FlatList,
   Linking,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -24,6 +24,7 @@ import { RecallCard } from '@/components/RecallCard';
 import { RecallRelevanceNotice } from '@/components/RecallRelevanceNotice';
 import { RecentNewsSection } from '@/components/RecentNewsSection';
 import {
+  RecallResultPanels,
   RecallResultTabBar,
   useRecallResultSwipe,
   type RecallResultTab,
@@ -82,29 +83,19 @@ export default function HomeScreen() {
   const searchButtonLabel = isFetching ? 'Searching…' : 'Search Recalls';
 
   return (
-    <View {...swipeHandlers} style={[styles.screen, { backgroundColor: colors.background }]}>
-      <FlatList
-        data={activeResultTab === 'fda' ? recalls : []}
-        keyExtractor={(item, index) => `${item.recallNumber ?? item.productDescription}-${index}`}
-        renderItem={({ item }) => {
-          return (
-            <View style={styles.recallListItem}>
-              <RecallCard recall={item} />
-            </View>
-          );
-        }}
+    <View style={[styles.screen, { backgroundColor: colors.background }]}>
+      <ScrollView
         contentContainerStyle={[
           styles.listContent,
           {
             paddingTop: topPadding + 22,
-                    paddingBottom: 110,
+            paddingBottom: 110,
           },
         ]}
         keyboardShouldPersistTaps="handled"
-        scrollEnabled
         showsVerticalScrollIndicator={false}
-        ListHeaderComponent={
-          <View style={styles.header}>
+      >
+        <View style={styles.header}>
             <View style={styles.eyebrowRow}>
               <View style={[styles.brandMark, { backgroundColor: colors.primary }]}>
                 <Feather name="shield" size={16} color={colors.primaryForeground} />
@@ -247,44 +238,76 @@ export default function HomeScreen() {
                   activeTab={activeResultTab}
                   onChangeTab={setActiveResultTab}
                 />
-                {activeResultTab === 'fda' ? (
-                  <View style={styles.searchOutcomeStack} testID="fda-recalls-panel">
-                    <OfficialRecallSectionHeading
-                      colors={colors}
-                      count={recallCount}
-                      fromCache={data.fromCache}
-                      lastUpdated={lastUpdated}
-                    />
-                    {data.isProduceSearch ? (
-                      <ProduceRecallVerdict
-                        item={data.produceItem ?? submittedTerm}
-                        hasDirectRecall={recallCount > 0}
+                <RecallResultPanels
+                  activeTab={activeResultTab}
+                  source="search"
+                  swipeHandlers={swipeHandlers}
+                  fdaSummary={
+                    data.isProduceSearch
+                      ? `Produce verdict with ${recallCount} direct FDA recall(s)`
+                      : recallCount > 0
+                        ? `${recallCount} FDA recall card(s)`
+                        : data.fdaUnavailable
+                          ? 'FDA recall check unavailable'
+                          : 'empty state: No active FDA recalls found'
+                  }
+                  newsSummary={
+                    data.newsUnavailable !== false
+                      ? 'hidden: news source unavailable'
+                      : data.recentNews?.length
+                        ? `${data.recentNews.length} article(s): ${data.recentNews.map((article) => article.title).join(' | ')}`
+                        : 'empty state: No recent news found for this product'
+                  }
+                  fdaContent={
+                    <View style={styles.searchOutcomeStack}>
+                      <OfficialRecallSectionHeading
+                        colors={colors}
+                        count={recallCount}
+                        fromCache={data.fromCache}
+                        lastUpdated={lastUpdated}
                       />
-                    ) : recallCount === 0 ? (
-                      <>
-                        <NoResultsState
-                          term={submittedTerm}
-                          updatedAt={lastUpdated}
-                          colors={colors}
-                          fdaUnavailable={data.fdaUnavailable}
+                      {data.isProduceSearch ? (
+                        <ProduceRecallVerdict
+                          item={data.produceItem ?? submittedTerm}
+                          hasDirectRecall={recallCount > 0}
                         />
-                        {data.fdaUnavailable ? <FdaUnavailableNotice colors={colors} /> : null}
-                      </>
-                    ) : (
-                      <>
-                        <RecallRelevanceNotice message={data.relevanceNotice} />
-                        {data.fdaUnavailable ? <FdaUnavailableNotice colors={colors} /> : null}
-                      </>
-                    )}
-                  </View>
-                ) : (
-                  <View testID="news-updates-panel">
+                      ) : recallCount === 0 ? (
+                        <>
+                          <NoResultsState
+                            term={submittedTerm}
+                            updatedAt={lastUpdated}
+                            colors={colors}
+                            fdaUnavailable={data.fdaUnavailable}
+                          />
+                          {data.fdaUnavailable ? <FdaUnavailableNotice colors={colors} /> : null}
+                        </>
+                      ) : (
+                        <>
+                          <RecallRelevanceNotice message={data.relevanceNotice} />
+                          {data.fdaUnavailable ? <FdaUnavailableNotice colors={colors} /> : null}
+                        </>
+                      )}
+                      {recalls.map((recall, index) => (
+                        <View
+                          key={`${recall.recallNumber ?? recall.productDescription}-${index}`}
+                          style={styles.recallListItem}
+                        >
+                          <RecallCard recall={recall} />
+                        </View>
+                      ))}
+                      <PossiblyRelatedRecalls
+                        item={data.produceItem ?? submittedTerm}
+                        recalls={relatedRecalls}
+                      />
+                    </View>
+                  }
+                  newsContent={
                     <RecentNewsSection
                       articles={data.recentNews ?? []}
                       unavailable={data.newsUnavailable !== false}
                     />
-                  </View>
-                )}
+                  }
+                />
               </>
             ) : null}
 
@@ -302,27 +325,17 @@ export default function HomeScreen() {
               <LoadingState colors={colors} />
             ) : null}
           </View>
-        }
-        ListFooterComponent={
-          submittedTerm.length > 0 && data && !isFetching ? (
-            <View style={styles.footerStack}>
-              {activeResultTab === 'fda' ? (
-                <PossiblyRelatedRecalls
-                  item={data.produceItem ?? submittedTerm}
-                  recalls={relatedRecalls}
-                />
-              ) : null}
-              <HealthDietInsights
-                productName={submittedTerm}
-                productText={submittedTerm}
-                source="search"
-                colors={colors}
-              />
-            </View>
-          ) : null
-        }
-        ListEmptyComponent={null}
-      />
+        {submittedTerm.length > 0 && data && !isFetching ? (
+          <View style={styles.footerStack}>
+            <HealthDietInsights
+              productName={submittedTerm}
+              productText={submittedTerm}
+              source="search"
+              colors={colors}
+            />
+          </View>
+        ) : null}
+      </ScrollView>
     </View>
   );
 }

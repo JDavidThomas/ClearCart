@@ -1,4 +1,5 @@
 import { Feather, Ionicons } from '@expo/vector-icons';
+import { useEffect } from 'react';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { RecallNewsArticle } from '@/types/recall';
 import { useColors } from '@/hooks/useColors';
@@ -22,9 +23,23 @@ export function RecentNewsSection({
   unavailable: boolean;
 }) {
   const colors = useColors();
+  const visibleArticles = articles.slice(0, MAX_RECENT_NEWS_ARTICLES);
+
+  useEffect(() => {
+    console.info('[RecallNewsPanel] content render', {
+      unavailable,
+      articleCount: visibleArticles.length,
+      renderedState: unavailable
+        ? 'hidden: news source unavailable'
+        : visibleArticles.length === 0
+          ? 'empty state: No recent news found for this product'
+          : 'article list',
+      articles: visibleArticles.map(({ title, source }) => ({ title, source })),
+    });
+  }, [articles, unavailable, visibleArticles.length]);
+
   if (unavailable) return null;
 
-  const visibleArticles = articles.slice(0, MAX_RECENT_NEWS_ARTICLES);
   return (
     <View
       accessibilityLabel="Recent News and Updates"

@@ -23,6 +23,7 @@ import { RecallCard } from '@/components/RecallCard';
 import { RecallRelevanceNotice } from '@/components/RecallRelevanceNotice';
 import { RecentNewsSection } from '@/components/RecentNewsSection';
 import {
+  RecallResultPanels,
   RecallResultTabBar,
   useRecallResultSwipe,
   type RecallResultTab,
@@ -448,10 +449,12 @@ function VerdictView({
   const recallCards: FoodRecall[] = recallResult?.recalls ?? [];
   const relatedRecalls = recallResult?.relatedRecalls ?? [];
   const produceItem = recallResult?.produceItem ?? productLabel;
+  const recentNews = recallResult?.recentNews ?? [];
+  const newsUnavailable = recallResult?.newsUnavailable !== false;
 
   if (recallResult?.isProduceSearch) {
     return (
-      <View {...swipeHandlers} style={styles.verdictStack}>
+      <View style={styles.verdictStack}>
         <BarcodeProductIdentityCard
           barcode={verdict.barcode}
           productLabel={productLabel}
@@ -468,28 +471,41 @@ function VerdictView({
           activeTab={activeResultTab}
           onChangeTab={setActiveResultTab}
         />
-        {activeResultTab === 'fda' ? (
-          <>
-            <Text style={[styles.recallSectionTitle, { color: colors.foreground }]}>
-              Official FDA Recalls
-            </Text>
-            <ProduceRecallVerdict item={produceItem} hasDirectRecall={recallCards.length > 0} />
-            {recallCards.map((recall, index) => (
-              <RecallCard
-                key={`${recall.recallNumber ?? recall.productDescription}-${index}`}
-                recall={recall}
-              />
-            ))}
-            <PossiblyRelatedRecalls item={produceItem} recalls={relatedRecalls} />
-          </>
-        ) : (
-          <View testID="news-updates-panel">
-            <RecentNewsSection
-              articles={recallResult?.recentNews ?? []}
-              unavailable={recallResult?.newsUnavailable !== false}
-            />
-          </View>
-        )}
+        <RecallResultPanels
+          activeTab={activeResultTab}
+          source="barcode"
+          swipeHandlers={swipeHandlers}
+          fdaSummary={
+            recallCards.length > 0
+              ? `${recallCards.length} FDA recall card(s)`
+              : 'produce verdict: No active FDA recalls found'
+          }
+          newsSummary={
+            newsUnavailable
+              ? 'hidden: news source unavailable'
+              : recentNews.length > 0
+                ? `${recentNews.length} article(s): ${recentNews.map((article) => article.title).join(' | ')}`
+                : 'empty state: No recent news found for this product'
+          }
+          fdaContent={
+            <>
+              <Text style={[styles.recallSectionTitle, { color: colors.foreground }]}>
+                Official FDA Recalls
+              </Text>
+              <ProduceRecallVerdict item={produceItem} hasDirectRecall={recallCards.length > 0} />
+              {recallCards.map((recall, index) => (
+                <RecallCard
+                  key={`${recall.recallNumber ?? recall.productDescription}-${index}`}
+                  recall={recall}
+                />
+              ))}
+              <PossiblyRelatedRecalls item={produceItem} recalls={relatedRecalls} />
+            </>
+          }
+          newsContent={
+            <RecentNewsSection articles={recentNews} unavailable={newsUnavailable} />
+          }
+        />
         <HealthDietInsights
           productName={productLabel}
           productText={`${verdict.product?.ingredients ?? ''} ${verdict.product?.allergens ?? ''}`}
@@ -504,7 +520,7 @@ function VerdictView({
   }
 
   return (
-    <View {...swipeHandlers} style={styles.verdictStack}>
+    <View style={styles.verdictStack}>
       <BarcodeProductIdentityCard
         barcode={verdict.barcode}
         productLabel={productLabel}
@@ -521,8 +537,28 @@ function VerdictView({
         activeTab={activeResultTab}
         onChangeTab={setActiveResultTab}
       />
-      {activeResultTab === 'fda' ? (
-        <>
+      <RecallResultPanels
+        activeTab={activeResultTab}
+        source="barcode"
+        swipeHandlers={swipeHandlers}
+        fdaSummary={
+          recallCheckStatus === 'checking'
+            ? 'FDA recall check in progress'
+            : recallCheckStatus === 'unavailable'
+              ? 'FDA recall check unavailable'
+              : hasRecall
+                ? `${recallCards.length} FDA recall card(s)`
+                : 'empty state: No active FDA recalls found'
+        }
+        newsSummary={
+          newsUnavailable
+            ? 'hidden: news source unavailable'
+            : recentNews.length > 0
+              ? `${recentNews.length} article(s): ${recentNews.map((article) => article.title).join(' | ')}`
+              : 'empty state: No recent news found for this product'
+        }
+        fdaContent={
+          <>
           <Text style={[styles.recallSectionTitle, { color: colors.foreground }]}>
             Official FDA Recalls
           </Text>
@@ -610,15 +646,12 @@ function VerdictView({
           ))}
 
           <PossiblyRelatedRecalls item={produceItem} recalls={relatedRecalls} />
-        </>
-      ) : (
-          <View testID="news-updates-panel">
-            <RecentNewsSection
-              articles={recallResult?.recentNews ?? []}
-              unavailable={recallResult?.newsUnavailable !== false}
-            />
-          </View>
-      )}
+          </>
+        }
+        newsContent={
+          <RecentNewsSection articles={recentNews} unavailable={newsUnavailable} />
+        }
+      />
       <HealthDietInsights
         productName={productLabel}
         productText={`${verdict.product?.ingredients ?? ''} ${verdict.product?.allergens ?? ''}`}

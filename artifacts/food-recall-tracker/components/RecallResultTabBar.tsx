@@ -1,5 +1,5 @@
 import { Feather, Ionicons } from '@expo/vector-icons';
-import { useMemo } from 'react';
+import { useEffect, useMemo, type ReactNode } from 'react';
 import {
   PanResponder,
   Pressable,
@@ -9,6 +9,8 @@ import {
 } from 'react-native';
 import { useColors } from '@/hooks/useColors';
 import {
+  getRecallResultPanelContent,
+  getRecallResultTabIndex,
   getRecallResultTabAfterSwipe,
   type RecallResultTab,
 } from '@/services/recallTabNavigation';
@@ -110,6 +112,51 @@ export function RecallResultTabBar({
   );
 }
 
+export function RecallResultPanels({
+  activeTab,
+  source,
+  fdaSummary,
+  newsSummary,
+  fdaContent,
+  newsContent,
+  swipeHandlers,
+}: {
+  activeTab: RecallResultTab;
+  source: 'search' | 'photo' | 'barcode';
+  fdaSummary: string;
+  newsSummary: string;
+  fdaContent: ReactNode;
+  newsContent: ReactNode;
+  swipeHandlers: ReturnType<typeof useRecallResultSwipe>;
+}) {
+  const activeIndex = getRecallResultTabIndex(activeTab);
+  const renderedSummary = getRecallResultPanelContent(activeTab, fdaSummary, newsSummary);
+  const renderedContent = getRecallResultPanelContent(activeTab, fdaContent, newsContent);
+
+  useEffect(() => {
+    console.info('[RecallResultTabs] panel render', {
+      source,
+      activeIndex,
+      activeTab,
+      fdaPanel: fdaSummary,
+      newsPanel: newsSummary,
+      renderedPanel: activeTab === 'fda' ? 'FDA Recalls' : 'News & Updates',
+      renderedContent: renderedSummary,
+    });
+  }, [activeIndex, activeTab, fdaSummary, newsSummary, renderedSummary, source]);
+
+  return (
+    <View
+      {...swipeHandlers}
+      accessibilityLabel={`${activeTab === 'fda' ? 'FDA Recalls' : 'News & Updates'} panel`}
+      style={styles.panel}
+      testID={activeTab === 'fda' ? 'fda-recalls-panel' : 'news-updates-panel'}
+    >
+      {renderedContent}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   tabBar: {
     borderRadius: 14,
@@ -131,5 +178,8 @@ const styles = StyleSheet.create({
   tabLabel: {
     fontFamily: 'Inter_600SemiBold',
     fontSize: 13,
+  },
+  panel: {
+    gap: 12,
   },
 });

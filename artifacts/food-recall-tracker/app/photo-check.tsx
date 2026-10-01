@@ -23,6 +23,7 @@ import { RecallCard } from '@/components/RecallCard';
 import { RecallRelevanceNotice } from '@/components/RecallRelevanceNotice';
 import { RecentNewsSection } from '@/components/RecentNewsSection';
 import {
+  RecallResultPanels,
   RecallResultTabBar,
   useRecallResultSwipe,
   type RecallResultTab,
@@ -621,9 +622,12 @@ function PhotoVerdictView({
   const recalls = verdict.recallResult?.recalls ?? [];
   const relatedRecalls = verdict.recallResult?.relatedRecalls ?? [];
   const produceItem = verdict.recallResult?.produceItem ?? verdict.productName;
+  const recentNews = verdict.recallResult?.recentNews ?? [];
+  const newsUnavailable =
+    !verdict.recallResult || verdict.recallResult.newsUnavailable !== false;
 
   return (
-    <View {...swipeHandlers} style={styles.verdictStack}>
+    <View style={styles.verdictStack}>
       <ProductIdentityCard verdict={verdict} colors={colors} />
       <AllergenInsights
         productName={verdict.productName}
@@ -636,35 +640,48 @@ function PhotoVerdictView({
         activeTab={activeResultTab}
         onChangeTab={setActiveResultTab}
       />
-      {activeResultTab === 'fda' ? (
-        <>
-          <Text style={[styles.recallSectionTitle, { color: colors.foreground }]}>
-            Official FDA Recalls
-          </Text>
-          <PhotoFdaRecallCard verdict={verdict} colors={colors} />
-          {recalls.length > 0 ? (
-            <RecallRelevanceNotice message={verdict.recallResult?.relevanceNotice} />
-          ) : null}
-          {recalls.map((recall, index) => (
-            <RecallCard
-              key={`${recall.recallNumber ?? recall.productDescription}-${index}`}
-              recall={recall}
-            />
-          ))}
-          {verdict.recallCheckStatus === 'available' ? (
-            <PossiblyRelatedRecalls item={produceItem} recalls={relatedRecalls} />
-          ) : null}
-        </>
-      ) : (
-        <View testID="news-updates-panel">
-          <RecentNewsSection
-            articles={verdict.recallResult?.recentNews ?? []}
-            unavailable={
-              !verdict.recallResult || verdict.recallResult.newsUnavailable !== false
-            }
-          />
-        </View>
-      )}
+      <RecallResultPanels
+        activeTab={activeResultTab}
+        source="photo"
+        swipeHandlers={swipeHandlers}
+        fdaSummary={
+          recalls.length > 0
+            ? `${recalls.length} FDA recall card(s)`
+            : verdict.recallCheckStatus === 'available'
+              ? 'empty state: No active FDA recalls found'
+              : `FDA status: ${verdict.recallCheckStatus ?? 'unavailable'}`
+        }
+        newsSummary={
+          newsUnavailable
+            ? 'hidden: news source unavailable'
+            : recentNews.length > 0
+              ? `${recentNews.length} article(s): ${recentNews.map((article) => article.title).join(' | ')}`
+              : 'empty state: No recent news found for this product'
+        }
+        fdaContent={
+          <>
+            <Text style={[styles.recallSectionTitle, { color: colors.foreground }]}>
+              Official FDA Recalls
+            </Text>
+            <PhotoFdaRecallCard verdict={verdict} colors={colors} />
+            {recalls.length > 0 ? (
+              <RecallRelevanceNotice message={verdict.recallResult?.relevanceNotice} />
+            ) : null}
+            {recalls.map((recall, index) => (
+              <RecallCard
+                key={`${recall.recallNumber ?? recall.productDescription}-${index}`}
+                recall={recall}
+              />
+            ))}
+            {verdict.recallCheckStatus === 'available' ? (
+              <PossiblyRelatedRecalls item={produceItem} recalls={relatedRecalls} />
+            ) : null}
+          </>
+        }
+        newsContent={
+          <RecentNewsSection articles={recentNews} unavailable={newsUnavailable} />
+        }
+      />
       <HealthDietInsights
         productName={verdict.productName}
         productText={`${verdict.nutritionProduct.ingredients ?? ''} ${verdict.nutritionProduct.allergens ?? ''}`}
