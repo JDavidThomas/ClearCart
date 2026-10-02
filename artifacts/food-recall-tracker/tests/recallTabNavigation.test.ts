@@ -4,6 +4,7 @@ import {
   getRecallResultPanelContent,
   getRecallResultTabAfterSwipe,
   getRecallResultTabIndex,
+  shouldRefetchNewsOnTab,
 } from '../services/recallTabNavigation.ts';
 
 test('the active tab selects the matching panel and index', () => {
@@ -23,4 +24,11 @@ test('horizontal swipes select the neighboring recall result tab', () => {
 test('short horizontal movement does not switch recall result tabs', () => {
   assert.equal(getRecallResultTabAfterSwipe('fda', -51), 'fda');
   assert.equal(getRecallResultTabAfterSwipe('news', 51), 'news');
+});
+
+test('selecting News retries only when it has no articles and is not already fetching', () => {
+  assert.equal(shouldRefetchNewsOnTab('news', 0, false), true);
+  assert.equal(shouldRefetchNewsOnTab('news', 1, false), false);
+  assert.equal(shouldRefetchNewsOnTab('news', 0, true), false);
+  assert.equal(shouldRefetchNewsOnTab('fda', 0, false), false);
 });

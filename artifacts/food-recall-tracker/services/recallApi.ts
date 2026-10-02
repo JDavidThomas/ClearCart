@@ -324,12 +324,15 @@ export async function searchFoodRecalls(
   const key = cacheKey(normalizedTerm, options);
   const cached = await readCachedSearch(key);
   const cachedNewsArticleCount = cached?.recentNews?.length ?? 0;
+  const visibleCachedNewsArticleCount = filterRecentNews(
+    cached?.recentNews ?? [],
+  ).length;
   const recentSearchTerm =
-    Boolean(cached) && cachedNewsArticleCount === 0
+    Boolean(cached) && visibleCachedNewsArticleCount === 0
       ? await isRecentSearchTerm(normalizedTerm)
       : false;
   const isRecentTermWithEmptyNews = shouldBypassEmptyNewsCache(
-    cachedNewsArticleCount,
+    visibleCachedNewsArticleCount,
     recentSearchTerm,
   );
   console.log('[RecallNews] cache check completed', {
@@ -367,13 +370,14 @@ export async function searchFoodRecalls(
       console.log('[RecallSearch] bypassing empty news cache for recent term', {
         term: normalizedTerm,
         cachedNewsArticleCount,
+        visibleCachedNewsArticleCount,
       });
     }
     if (
       isRecentTermWithEmptyNews ||
       shouldRefreshRecallNews(
         cached.newsUnavailable,
-        cachedNewsArticleCount,
+        visibleCachedNewsArticleCount,
         cached.newsCheckedAt,
       )
     ) {

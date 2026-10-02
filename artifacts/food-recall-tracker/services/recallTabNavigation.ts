@@ -4,6 +4,14 @@ export function getRecallResultTabIndex(tab: RecallResultTab): 0 | 1 {
   return tab === 'fda' ? 0 : 1;
 }
 
+export function shouldRefetchNewsOnTab(
+  tab: RecallResultTab,
+  articleCount: number,
+  isFetching: boolean,
+): boolean {
+  return tab === 'news' && articleCount === 0 && !isFetching;
+}
+
 export function getRecallResultPanelContent<T>(
   activeTab: RecallResultTab,
   fdaContent: T,

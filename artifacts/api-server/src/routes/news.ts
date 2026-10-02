@@ -67,6 +67,8 @@ async function fetchNewsApiResponse(requestUrl: string, apiKey: string) {
 }
 
 router.get("/recalls/news", async (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+
   const parsed = GetRecallNewsQueryParams.safeParse(req.query);
   if (!parsed.success) {
     res.status(400).json({ message: "A product search term is required." });

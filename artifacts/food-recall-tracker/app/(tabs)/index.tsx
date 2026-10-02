@@ -31,6 +31,7 @@ import {
 } from '@/components/RecallResultTabBar';
 import { useColors } from '@/hooks/useColors';
 import { searchFoodRecalls } from '@/services/recallApi';
+import { shouldRefetchNewsOnTab } from '@/services/recallTabNavigation';
 import type { RecallSearchResult } from '@/types/recall';
 
 const FSIS_RECALLS_URL = 'https://www.fsis.usda.gov/recalls';
@@ -250,12 +251,35 @@ export default function HomeScreen() {
                 <RecallResultTabBar
                   activeTab={activeResultTab}
                   onChangeTab={(tab) => {
+                    const shouldRetryNews = shouldRefetchNewsOnTab(
+                      tab,
+                      recentNews.length,
+                      isFetching,
+                    );
                     console.log('[RecallNews] result tab changed', {
                       tab,
                       submittedTerm,
-                      fetchTriggeredByTabChange: false,
+                      articleCount: recentNews.length,
+                      isFetching,
+                      fetchTriggeredByTabChange: shouldRetryNews,
                     });
                     setActiveResultTab(tab);
+                    if (shouldRetryNews && submittedTerm) {
+                      console.log('[RecallNews] News tab retry started', {
+                        term: submittedTerm,
+                        cachedArticleCount: recentNews.length,
+                        newsUnavailable,
+                      });
+                      void refetch().then((result) => {
+                        console.log('[RecallNews] News tab retry completed', {
+                          term: submittedTerm,
+                          status: result.status,
+                          articleCount: result.data?.recentNews?.length ?? 0,
+                          newsUnavailable: result.data?.newsUnavailable,
+                          error: result.error?.message ?? null,
+                        });
+                      });
+                    }
                   }}
                 />
                 <RecallResultPanels

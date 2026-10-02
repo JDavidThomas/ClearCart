@@ -344,9 +344,14 @@ export async function customFetch<T = unknown>(
 
   const method = resolveMethod(input, init.method);
   if (isRecallNews) {
+    const debugComparisonUrl = resolvedUrlBeforeAuth.replace(
+      /\/api\/recalls\/news(?=\?|$)/,
+      "/api/recalls/news/debug",
+    );
     console.log("[RecallNews] API URL built", {
       method,
       url: resolvedUrlBeforeAuth,
+      debugComparisonUrl,
     });
   }
 
