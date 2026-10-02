@@ -9,6 +9,7 @@
 - [Supabase storage bucket casing](supabase-storage-bucket-casing.md) — storage bucket IDs must match byte-for-byte in client paths and storage.objects policies.
 - [Supabase publishable keys](supabase-publishable-key.md) — current supabase-js accepts sb_publishable keys; profile failures should be diagnosed separately from key format.
 - [Native TypeScript tests](native-ts-tests.md) — pure Expo service tests can use Node’s native TypeScript runner without adding a test framework or runtime dependency.
+- [API route test runtime](api-route-test-runtime.md) — bundle route modules when Node’s TypeScript stripping cannot resolve local imports and workspace source aliases.
 - [Expo static build port conflict](expo-static-build-port.md) — the static build script can collide with the mockup server on port 8081; use the managed workflow for runtime verification.
 - [Expo tunnel startup failures](expo-tunnel-startup.md) — Ngrok can fail before `Tunnel ready`; never reuse the prior `exp.direct` URL as if a fresh tunnel started.
 - [FSIS manual-source boundary](fsis-egress.md) — the app uses openFDA for official recall records and points meat, poultry, and egg searches to FSIS.gov.
