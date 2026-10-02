@@ -132,12 +132,18 @@ async function searchRecentRecallNews(term: string): Promise<{
   articles: RecallNewsArticle[];
   unavailable: boolean;
 }> {
+  console.log(`[RecallNews] NEWS FETCH PATH ENTERED term=${term}`);
   try {
     const response = await getRecallNews({ term });
     const rawArticles = Array.isArray(response.articles) ? response.articles : [];
+    console.log('[RecallNews] response returned to search service', {
+      term,
+      rawArticleCount: rawArticles.length,
+      rawUnavailable: response.unavailable,
+    });
     const articles = filterRecentNews(rawArticles);
     const unavailable = response.unavailable === true;
-    console.info('[RecallNews] client fetch pipeline', {
+    console.log('[RecallNews] response normalized', {
       term,
       apiBaseUrl: getCurrentApiBaseUrl(),
       endpointPath: '/api/recalls/news',
@@ -309,27 +315,56 @@ export async function searchFoodRecalls(
   term: string,
   options: FdaRecallSearchOptions = {},
 ): Promise<RecallSearchResult> {
+  console.log(`[RecallNews] SEARCH FOOD RECALLS ENTERED term=${term}`);
   const normalizedTerm = cleanRecallSearchTerm(term);
   if (!normalizedTerm) {
+    console.log('[RecallNews] search stopped after empty-term guard', { term });
     return { recalls: [], lastUpdated: new Date().toISOString(), fromCache: false };
   }
   const key = cacheKey(normalizedTerm, options);
   const cached = await readCachedSearch(key);
+  const cachedNewsArticleCount = cached?.recentNews?.length ?? 0;
+  const recentSearchTerm =
+    Boolean(cached) && cachedNewsArticleCount === 0
+      ? await isRecentSearchTerm(normalizedTerm)
+      : false;
+  const isRecentTermWithEmptyNews = shouldBypassEmptyNewsCache(
+    cachedNewsArticleCount,
+    recentSearchTerm,
+  );
+  console.log('[RecallNews] cache check completed', {
+    term,
+    normalizedTerm,
+    cacheHit: Boolean(cached),
+    cacheValue: cached
+      ? {
+          lastUpdated: cached.lastUpdated,
+          recentNewsArticleCount: cachedNewsArticleCount,
+          recentNews: (cached.recentNews ?? [])
+            .slice(0, 3)
+            .map((article) => ({
+              title: article.title,
+              publishedAt: article.publishedAt,
+            })),
+          visibleRecentNewsArticleCount: filterRecentNews(
+            cached.recentNews ?? [],
+          ).length,
+          newsUnavailable: cached.newsUnavailable,
+          newsCheckedAt: cached.newsCheckedAt,
+          newsQueryVersion: cached.newsQueryVersion,
+        }
+      : null,
+    isRecentSearchTerm: recentSearchTerm,
+    bypassEmptyNewsCache: isRecentTermWithEmptyNews,
+  });
   if (cached) {
-    console.info('[RecallSearch] fresh cache hit', {
+    console.log('[RecallSearch] fresh cache hit', {
       term: normalizedTerm,
       ageMs: Math.max(0, Date.now() - Date.parse(cached.lastUpdated)),
       ttlMs: RECALL_SEARCH_CACHE_TTL_MS,
     });
-    const cachedNewsArticleCount = cached.recentNews?.length ?? 0;
-    const isRecentTermWithEmptyNews =
-      cachedNewsArticleCount === 0 &&
-      shouldBypassEmptyNewsCache(
-        cachedNewsArticleCount,
-        await isRecentSearchTerm(normalizedTerm),
-      );
     if (isRecentTermWithEmptyNews) {
-      console.info('[RecallSearch] bypassing empty news cache for recent term', {
+      console.log('[RecallSearch] bypassing empty news cache for recent term', {
         term: normalizedTerm,
         cachedNewsArticleCount,
       });
@@ -359,6 +394,9 @@ export async function searchFoodRecalls(
   }
 
   try {
+    console.log('[RecallNews] no cached search; starting live FDA and news requests', {
+      term: normalizedTerm,
+    });
     let recalls: FoodRecall[];
     let recentNews: RecallNewsArticle[] = [];
     let newsUnavailable = true;

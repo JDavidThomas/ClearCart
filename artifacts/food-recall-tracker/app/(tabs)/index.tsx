@@ -58,7 +58,10 @@ export default function HomeScreen() {
 
   const { data, error, isFetching, isError, refetch } = useQuery<RecallSearchResult, Error>({
     queryKey: ['food-recalls', submittedTerm],
-    queryFn: () => searchFoodRecalls(submittedTerm),
+    queryFn: () => {
+      console.log(`[RecallNews] React Query queryFn entered term=${submittedTerm}`);
+      return searchFoodRecalls(submittedTerm);
+    },
     enabled: submittedTerm.length > 0,
     staleTime: 5 * 60 * 1000,
     retry: false,
@@ -71,8 +74,16 @@ export default function HomeScreen() {
   const newsUnavailable = data?.newsUnavailable === true;
 
   const handleSearch = async () => {
+    console.log(`[RecallNews] search submit handler entered term=${term}`);
     const nextTerm = term.trim();
-    if (!nextTerm) return;
+    if (!nextTerm) {
+      console.log('[RecallNews] search submit skipped: empty term');
+      return;
+    }
+    console.log('[RecallNews] search submit accepted', {
+      term: nextTerm,
+      sameAsSubmittedTerm: nextTerm === submittedTerm,
+    });
     await Haptics.selectionAsync();
     setActiveResultTab('fda');
     if (nextTerm === submittedTerm) {
@@ -238,7 +249,14 @@ export default function HomeScreen() {
                 />
                 <RecallResultTabBar
                   activeTab={activeResultTab}
-                  onChangeTab={setActiveResultTab}
+                  onChangeTab={(tab) => {
+                    console.log('[RecallNews] result tab changed', {
+                      tab,
+                      submittedTerm,
+                      fetchTriggeredByTabChange: false,
+                    });
+                    setActiveResultTab(tab);
+                  }}
                 />
                 <RecallResultPanels
                   activeTab={activeResultTab}

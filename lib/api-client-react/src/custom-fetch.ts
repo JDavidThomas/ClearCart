@@ -322,14 +322,33 @@ async function parseSuccessBody(
   }
 }
 
+function isRecallNewsRequest(url: string) {
+  const path = url.split("?", 1)[0].replace(/\/+$/, "");
+  return path.endsWith("/api/recalls/news");
+}
+
+function getRecallNewsArticleCount(value: unknown) {
+  if (!value || typeof value !== "object") return 0;
+  const articles = (value as Record<string, unknown>).articles;
+  return Array.isArray(articles) ? articles.length : 0;
+}
+
 export async function customFetch<T = unknown>(
   input: RequestInfo | URL,
   options: CustomFetchOptions = {},
 ): Promise<T> {
   input = applyBaseUrl(input);
+  const resolvedUrlBeforeAuth = resolveUrl(input);
+  const isRecallNews = isRecallNewsRequest(resolvedUrlBeforeAuth);
   const { responseType = "auto", headers: headersInit, ...init } = options;
 
   const method = resolveMethod(input, init.method);
+  if (isRecallNews) {
+    console.log("[RecallNews] API URL built", {
+      method,
+      url: resolvedUrlBeforeAuth,
+    });
+  }
 
   if (init.body != null && (method === "GET" || method === "HEAD")) {
     throw new TypeError(`customFetch: ${method} requests cannot have a body.`);
@@ -352,7 +371,18 @@ export async function customFetch<T = unknown>(
   // Attach bearer token when an auth getter is configured and no
   // Authorization header has been explicitly provided.
   if (_authTokenGetter && !headers.has("authorization")) {
+    if (isRecallNews) {
+      console.log("[RecallNews] auth token lookup started", {
+        url: resolvedUrlBeforeAuth,
+      });
+    }
     const token = await _authTokenGetter();
+    if (isRecallNews) {
+      console.log("[RecallNews] auth token lookup completed", {
+        url: resolvedUrlBeforeAuth,
+        tokenAvailable: Boolean(token),
+      });
+    }
     if (token) {
       headers.set("authorization", `Bearer ${token}`);
     }
@@ -360,12 +390,63 @@ export async function customFetch<T = unknown>(
 
   const requestInfo = { method, url: resolveUrl(input) };
 
-  const response = await fetch(input, { ...init, method, headers });
+  if (isRecallNews) {
+    console.log("[RecallNews] before fetch", { url: requestInfo.url });
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(input, { ...init, method, headers });
+  } catch (error) {
+    if (isRecallNews) {
+      console.log("[RecallNews] fetch rejected", {
+        url: requestInfo.url,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    throw error;
+  }
+
+  if (isRecallNews) {
+    console.log("[RecallNews] fetch resolved", {
+      url: requestInfo.url,
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok,
+    });
+  }
 
   if (!response.ok) {
     const errorData = await parseErrorBody(response, method);
+    if (isRecallNews) {
+      console.log("[RecallNews] error response parsed", {
+        url: requestInfo.url,
+        status: response.status,
+        errorData,
+      });
+    }
     throw new ApiError(response, errorData, requestInfo);
   }
 
-  return (await parseSuccessBody(response, responseType, requestInfo)) as T;
+  let data: unknown;
+  try {
+    data = await parseSuccessBody(response, responseType, requestInfo);
+  } catch (error) {
+    if (isRecallNews) {
+      console.log("[RecallNews] response parsing failed", {
+        url: requestInfo.url,
+        status: response.status,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    throw error;
+  }
+  if (isRecallNews) {
+    console.log("[RecallNews] API response parsed", {
+      url: requestInfo.url,
+      status: response.status,
+      rawArticleCount: getRecallNewsArticleCount(data),
+    });
+  }
+  return data as T;
 }

@@ -31,7 +31,7 @@ export function RecentNewsSection({
   const panelState = getRecentNewsPanelState(visibleArticles.length, isUnavailable);
 
   useEffect(() => {
-    console.info('[RecallNewsPanel] content render', {
+    console.log('[RecallNews] panel rendered', {
       unavailable: isUnavailable,
       articleCount: visibleArticles.length,
       renderedState: panelState,
