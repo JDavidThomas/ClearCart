@@ -13,6 +13,7 @@ import {
   splitRecallGroups,
 } from './recallRelevance';
 import {
+  shouldBypassEmptyNewsCache,
   isRecallNewsQueryCacheCurrent,
   isRecallSearchCacheFresh,
   shouldRefreshRecallNews,
@@ -20,6 +21,7 @@ import {
   RECALL_SEARCH_CACHE_TTL_MS,
 } from './recallCache';
 import { filterRecentNews } from './recallNewsFilters';
+import { getCurrentApiBaseUrl } from './apiConnection';
 export {
   lookupOpenFoodFactsProduct,
   searchOpenFoodFactsProduct,
@@ -132,15 +134,23 @@ async function searchRecentRecallNews(term: string): Promise<{
 }> {
   try {
     const response = await getRecallNews({ term });
-    const articles = filterRecentNews(response.articles ?? []);
-    console.info('[RecallNews] search completed', {
+    const rawArticles = Array.isArray(response.articles) ? response.articles : [];
+    const articles = filterRecentNews(rawArticles);
+    const unavailable = response.unavailable === true;
+    console.info('[RecallNews] client fetch pipeline', {
       term,
+      apiBaseUrl: getCurrentApiBaseUrl(),
+      endpointPath: '/api/recalls/news',
       from: response.dateRange?.from,
       to: response.dateRange?.to,
-      articleCount: articles.length,
-      unavailable: response.unavailable,
+      rawArticleCount: rawArticles.length,
+      filteredArticleCount: articles.length,
+      firstRawArticleTitle: rawArticles[0]?.title ?? null,
+      firstFilteredArticleTitle: articles[0]?.title ?? null,
+      rawUnavailable: response.unavailable,
+      computedUnavailable: unavailable,
     });
-    return { articles, unavailable: response.unavailable };
+    return { articles, unavailable };
   } catch (error) {
     const errorDetails =
       error && typeof error === 'object'
@@ -162,6 +172,21 @@ async function searchRecentRecallNews(term: string): Promise<{
       message,
     });
     return { articles: [], unavailable: true };
+  }
+}
+
+async function isRecentSearchTerm(term: string) {
+  try {
+    const indexValue = await AsyncStorage.getItem(CACHE_INDEX_KEY);
+    const parsedIndex: unknown = indexValue ? JSON.parse(indexValue) : [];
+    return (
+      Array.isArray(parsedIndex) &&
+      parsedIndex.some(
+        (item) => typeof item === 'string' && item === term.toLowerCase(),
+      )
+    );
+  } catch {
+    return false;
   }
 }
 
@@ -296,10 +321,24 @@ export async function searchFoodRecalls(
       ageMs: Math.max(0, Date.now() - Date.parse(cached.lastUpdated)),
       ttlMs: RECALL_SEARCH_CACHE_TTL_MS,
     });
+    const cachedNewsArticleCount = cached.recentNews?.length ?? 0;
+    const isRecentTermWithEmptyNews =
+      cachedNewsArticleCount === 0 &&
+      shouldBypassEmptyNewsCache(
+        cachedNewsArticleCount,
+        await isRecentSearchTerm(normalizedTerm),
+      );
+    if (isRecentTermWithEmptyNews) {
+      console.info('[RecallSearch] bypassing empty news cache for recent term', {
+        term: normalizedTerm,
+        cachedNewsArticleCount,
+      });
+    }
     if (
+      isRecentTermWithEmptyNews ||
       shouldRefreshRecallNews(
         cached.newsUnavailable,
-        cached.recentNews?.length ?? 0,
+        cachedNewsArticleCount,
         cached.newsCheckedAt,
       )
     ) {

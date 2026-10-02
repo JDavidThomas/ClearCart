@@ -27,6 +27,45 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+function createNewsApiRequest(
+  term: string,
+  dateRange: ReturnType<typeof getNewsDateRange>,
+) {
+  const query = buildNewsQuery(term);
+  const params = new URLSearchParams({
+    q: query,
+    searchIn: "title,description",
+    from: dateRange.from,
+    to: dateRange.to,
+    language: "en",
+    sortBy: "publishedAt",
+    pageSize: String(NEWS_API_RESULT_LIMIT),
+  });
+
+  return {
+    query,
+    requestUrl: `${NEWS_API_SEARCH_URL}?${params.toString()}`,
+  };
+}
+
+async function fetchNewsApiResponse(requestUrl: string, apiKey: string) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(
+    () => controller.abort(),
+    NEWS_API_REQUEST_TIMEOUT_MS,
+  );
+
+  try {
+    const response = await fetch(requestUrl, {
+      headers: { accept: "application/json", "X-Api-Key": apiKey },
+      signal: controller.signal,
+    });
+    return { response, responseBody: await response.text() };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 router.get("/recalls/news", async (req, res) => {
   const parsed = GetRecallNewsQueryParams.safeParse(req.query);
   if (!parsed.success) {
@@ -72,33 +111,17 @@ router.get("/recalls/news", async (req, res) => {
     return;
   }
 
-  const query = buildNewsQuery(term);
-  const params = new URLSearchParams({
-    q: query,
-    searchIn: "title,description",
-    from: dateRange.from,
-    to: dateRange.to,
-    language: "en",
-    sortBy: "publishedAt",
-    pageSize: String(NEWS_API_RESULT_LIMIT),
-  });
-  const requestUrl = `${NEWS_API_SEARCH_URL}?${params.toString()}`;
-  const controller = new AbortController();
-  const timeoutId = setTimeout(
-    () => controller.abort(),
-    NEWS_API_REQUEST_TIMEOUT_MS,
-  );
+  const { query, requestUrl } = createNewsApiRequest(term, dateRange);
 
   try {
     logger.info(
       { term, query, requestUrl, dateRange },
       "NewsAPI request started",
     );
-    const response = await fetch(requestUrl, {
-      headers: { accept: "application/json", "X-Api-Key": apiKey },
-      signal: controller.signal,
-    });
-    const responseBody = await response.text();
+    const { response, responseBody } = await fetchNewsApiResponse(
+      requestUrl,
+      apiKey,
+    );
     if (!response.ok) {
       logger.warn(
         {
@@ -206,8 +229,125 @@ router.get("/recalls/news", async (req, res) => {
       "NewsAPI request failed; continuing without news mentions",
     );
     res.json(emptyResponse(true));
-  } finally {
-    clearTimeout(timeoutId);
+  }
+});
+
+router.get("/recalls/news/debug", async (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+
+  if (process.env.NODE_ENV !== "development" && process.env.NODE_ENV !== "test") {
+    res.status(404).json({ message: "This debug endpoint is only available in development." });
+    return;
+  }
+
+  const parsed = GetRecallNewsQueryParams.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ message: "A product search term is required." });
+    return;
+  }
+
+  const term = normalizeNewsSearchTerm(parsed.data.term);
+  if (!term) {
+    res.status(400).json({ message: "A product search term is required." });
+    return;
+  }
+
+  if (
+    !isNewsApiAllowed(
+      process.env.NODE_ENV,
+      process.env.NEWSAPI_ALLOW_NON_DEVELOPMENT,
+    )
+  ) {
+    res.status(404).json({ message: "NewsAPI is not enabled in this environment." });
+    return;
+  }
+
+  const apiKey = process.env.NEWSAPI_API_KEY?.trim();
+  if (!apiKey) {
+    res.status(503).json({ message: "NewsAPI is not configured on the server." });
+    return;
+  }
+
+  const dateRange = getNewsDateRange();
+  const { query, requestUrl } = createNewsApiRequest(term, dateRange);
+
+  try {
+    const { response, responseBody } = await fetchNewsApiResponse(
+      requestUrl,
+      apiKey,
+    );
+    let payload: NewsApiResponse;
+
+    try {
+      payload = JSON.parse(responseBody) as NewsApiResponse;
+    } catch {
+      res.status(502).json({
+        term,
+        query,
+        upstreamStatus: response.status,
+        message: "NewsAPI returned an unreadable response.",
+        rawResponsePreview: responseBody.slice(0, 2_000),
+      });
+      return;
+    }
+
+    if (!response.ok) {
+      res.status(502).json({
+        term,
+        query,
+        upstreamStatus: response.status,
+        rawNewsApiResponse: payload,
+      });
+      return;
+    }
+
+    if (!isRecord(payload) || !Array.isArray(payload.articles)) {
+      res.status(502).json({
+        term,
+        query,
+        upstreamStatus: response.status,
+        message: "NewsAPI returned an invalid payload.",
+        rawNewsApiResponse: payload,
+      });
+      return;
+    }
+
+    const rawArticles = payload.articles;
+    const normalizedArticles = normalizeNewsArticles(
+      rawArticles,
+      dateRange.from,
+      dateRange.to,
+      term,
+    );
+
+    res.json({
+      term,
+      query,
+      endpointPath: "/api/recalls/news/debug",
+      dateRange,
+      upstreamStatus: response.status,
+      rawTotalResults:
+        typeof payload.totalResults === "number" ? payload.totalResults : null,
+      rawArticleCount: rawArticles.length,
+      normalizedArticleCount: normalizedArticles.length,
+      rawNewsApiResponse: payload,
+      normalizedArticles,
+    });
+  } catch (error) {
+    logger.warn(
+      {
+        term,
+        query,
+        upstreamError:
+          error instanceof Error ? error.message : "Unknown upstream error",
+      },
+      "NewsAPI debug request failed",
+    );
+    res.status(502).json({
+      term,
+      query,
+      message: "NewsAPI debug request failed.",
+    });
   }
 });
 

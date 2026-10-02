@@ -29,3 +29,10 @@ export function shouldRefreshRecallNews(
     age >= RECALL_EMPTY_NEWS_CACHE_TTL_MS
   );
 }
+
+export function shouldBypassEmptyNewsCache(
+  articleCount: number,
+  isRecentSearch: boolean,
+) {
+  return articleCount === 0 && isRecentSearch;
+}

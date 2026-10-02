@@ -13,4 +13,4 @@
 - [Expo tunnel startup failures](expo-tunnel-startup.md) — Ngrok can fail before `Tunnel ready`; never reuse the prior `exp.direct` URL as if a fresh tunnel started.
 - [FSIS manual-source boundary](fsis-egress.md) — the app uses openFDA for official recall records and points meat, poultry, and egg searches to FSIS.gov.
 - [NewsAPI developer plan](newsapi-developer-plan.md) — free NewsAPI keys are development/testing only, with a 24-hour article delay and 100 requests/day.
-- [NewsAPI recall mentions](newsapi-search-relevance.md) — filter false matches locally, place news after FDA results, and retry empty searches after five minutes.
+- [NewsAPI recall mentions](newsapi-search-relevance.md) — filter false matches locally, keep news after FDA results, and refresh empty recent-term cache hits.

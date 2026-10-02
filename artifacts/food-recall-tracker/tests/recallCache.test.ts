@@ -6,6 +6,7 @@ import {
   RECALL_NEWS_QUERY_CACHE_VERSION,
   RECALL_EMPTY_NEWS_CACHE_TTL_MS,
   RECALL_SEARCH_CACHE_TTL_MS,
+  shouldBypassEmptyNewsCache,
   shouldRefreshRecallNews,
 } from '../services/recallCache.ts';
 
@@ -57,4 +58,10 @@ test('empty news is cached for five minutes while non-empty news stays cached', 
   assert.equal(shouldRefreshRecallNews(false, 2, checkedAt, now), false);
   assert.equal(shouldRefreshRecallNews(true, 0, checkedAt, now), true);
   assert.equal(shouldRefreshRecallNews(false, 0, undefined, now), true);
+});
+
+test('a cached empty result is bypassed for a term in recent searches', () => {
+  assert.equal(shouldBypassEmptyNewsCache(0, true), true);
+  assert.equal(shouldBypassEmptyNewsCache(0, false), false);
+  assert.equal(shouldBypassEmptyNewsCache(1, true), false);
 });
