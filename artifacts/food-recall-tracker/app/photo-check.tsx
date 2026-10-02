@@ -623,8 +623,8 @@ function PhotoVerdictView({
   const relatedRecalls = verdict.recallResult?.relatedRecalls ?? [];
   const produceItem = verdict.recallResult?.produceItem ?? verdict.productName;
   const recentNews = verdict.recallResult?.recentNews ?? [];
-  const newsUnavailable =
-    !verdict.recallResult || verdict.recallResult.newsUnavailable !== false;
+  const newsUnavailableRaw = verdict.recallResult?.newsUnavailable;
+  const newsUnavailable = newsUnavailableRaw === true;
 
   return (
     <View style={styles.verdictStack}>
@@ -645,6 +645,7 @@ function PhotoVerdictView({
         source="photo"
         swipeHandlers={swipeHandlers}
         newsArticleCount={recentNews.length}
+        newsUnavailableRaw={newsUnavailableRaw}
         newsUnavailable={newsUnavailable}
         fdaSummary={
           recalls.length > 0

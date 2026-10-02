@@ -7,10 +7,10 @@ export type RecentNewsPanelState = 'articles' | 'empty' | 'unavailable';
 
 export function getRecentNewsPanelState(
   articleCount: number,
-  unavailable: boolean,
+  unavailable?: boolean,
 ): RecentNewsPanelState {
   if (articleCount > 0) return 'articles';
-  return unavailable ? 'unavailable' : 'empty';
+  return unavailable === true ? 'unavailable' : 'empty';
 }
 
 export function filterRecentNews(articles: RecallNewsArticle[], now = Date.now()) {

@@ -17,10 +17,12 @@ function article(title: string, publishedAt: string): RecallNewsArticle {
   };
 }
 
-test('news panel displays available articles even when refresh is unavailable', () => {
+test('news panel only treats an explicit true flag as unavailable', () => {
   assert.equal(getRecentNewsPanelState(1, true), 'articles');
+  assert.equal(getRecentNewsPanelState(1, undefined), 'articles');
   assert.equal(getRecentNewsPanelState(0, true), 'unavailable');
   assert.equal(getRecentNewsPanelState(0, false), 'empty');
+  assert.equal(getRecentNewsPanelState(0, undefined), 'empty');
 });
 
 test('recent news uses a 30-day window, sorts newest first, and caps at three', () => {

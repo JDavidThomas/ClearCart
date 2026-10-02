@@ -67,6 +67,8 @@ export default function HomeScreen() {
   const relatedRecalls = Array.isArray(data?.relatedRecalls) ? data.relatedRecalls : [];
   const recallCount = recalls.length;
   const lastUpdated = data?.lastUpdated ?? new Date().toISOString();
+  const recentNews = data?.recentNews ?? [];
+  const newsUnavailable = data?.newsUnavailable === true;
 
   const handleSearch = async () => {
     const nextTerm = term.trim();
@@ -242,8 +244,9 @@ export default function HomeScreen() {
                   activeTab={activeResultTab}
                   source="search"
                   swipeHandlers={swipeHandlers}
-                  newsArticleCount={data.recentNews?.length ?? 0}
-                  newsUnavailable={data.newsUnavailable !== false}
+                  newsArticleCount={recentNews.length}
+                  newsUnavailableRaw={data.newsUnavailable}
+                  newsUnavailable={newsUnavailable}
                   fdaSummary={
                     data.isProduceSearch
                       ? `Produce verdict with ${recallCount} direct FDA recall(s)`
@@ -254,9 +257,9 @@ export default function HomeScreen() {
                           : 'empty state: No active FDA recalls found'
                   }
                   newsSummary={
-                    data.recentNews?.length
-                      ? `${data.recentNews.length} article(s): ${data.recentNews.map((article) => article.title).join(' | ')}${data.newsUnavailable !== false ? ' (news source unavailable)' : ''}`
-                      : data.newsUnavailable !== false
+                    recentNews.length
+                      ? `${recentNews.length} article(s): ${recentNews.map((article) => article.title).join(' | ')}${newsUnavailable ? ' (news source unavailable)' : ''}`
+                      : newsUnavailable
                         ? 'unavailable state: no news articles received'
                         : 'empty state: No recent news found for this product'
                   }
@@ -305,8 +308,8 @@ export default function HomeScreen() {
                   }
                   newsContent={
                     <RecentNewsSection
-                      articles={data.recentNews ?? []}
-                      unavailable={data.newsUnavailable !== false}
+                      articles={recentNews}
+                      unavailable={newsUnavailable}
                     />
                   }
                 />

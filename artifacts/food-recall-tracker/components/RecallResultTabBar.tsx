@@ -118,6 +118,7 @@ export function RecallResultPanels({
   fdaSummary,
   newsSummary,
   newsArticleCount,
+  newsUnavailableRaw,
   newsUnavailable,
   fdaContent,
   newsContent,
@@ -128,6 +129,7 @@ export function RecallResultPanels({
   fdaSummary: string;
   newsSummary: string;
   newsArticleCount: number;
+  newsUnavailableRaw: boolean | undefined;
   newsUnavailable: boolean;
   fdaContent: ReactNode;
   newsContent: ReactNode;
@@ -146,8 +148,9 @@ export function RecallResultPanels({
       activeTab,
       isFdaPanelRendering,
       isNewsPanelRendering,
-      newsArticleCount,
-      newsUnavailable,
+      dataRecentNewsLength: newsArticleCount,
+      dataNewsUnavailableRaw: newsUnavailableRaw,
+      computedNewsUnavailable: newsUnavailable,
       fdaPanelContent: fdaSummary,
       newsPanelContent: newsSummary,
       renderedPanel: activeTab === 'fda' ? 'FDA Recalls' : 'News & Updates',
@@ -160,6 +163,7 @@ export function RecallResultPanels({
     isFdaPanelRendering,
     isNewsPanelRendering,
     newsArticleCount,
+    newsUnavailableRaw,
     newsSummary,
     newsUnavailable,
     renderedSummary,

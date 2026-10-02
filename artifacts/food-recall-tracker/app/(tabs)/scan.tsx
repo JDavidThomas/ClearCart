@@ -450,7 +450,8 @@ function VerdictView({
   const relatedRecalls = recallResult?.relatedRecalls ?? [];
   const produceItem = recallResult?.produceItem ?? productLabel;
   const recentNews = recallResult?.recentNews ?? [];
-  const newsUnavailable = recallResult?.newsUnavailable !== false;
+  const newsUnavailableRaw = recallResult?.newsUnavailable;
+  const newsUnavailable = newsUnavailableRaw === true;
 
   if (recallResult?.isProduceSearch) {
     return (
@@ -476,6 +477,7 @@ function VerdictView({
           source="barcode"
           swipeHandlers={swipeHandlers}
           newsArticleCount={recentNews.length}
+          newsUnavailableRaw={newsUnavailableRaw}
           newsUnavailable={newsUnavailable}
           fdaSummary={
             recallCards.length > 0
@@ -544,6 +546,7 @@ function VerdictView({
         source="barcode"
         swipeHandlers={swipeHandlers}
         newsArticleCount={recentNews.length}
+        newsUnavailableRaw={newsUnavailableRaw}
         newsUnavailable={newsUnavailable}
         fdaSummary={
           recallCheckStatus === 'checking'

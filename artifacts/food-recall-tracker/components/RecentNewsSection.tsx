@@ -23,20 +23,21 @@ export function RecentNewsSection({
   unavailable,
 }: {
   articles: RecallNewsArticle[];
-  unavailable: boolean;
+  unavailable?: boolean;
 }) {
   const colors = useColors();
   const visibleArticles = articles.slice(0, MAX_RECENT_NEWS_ARTICLES);
-  const panelState = getRecentNewsPanelState(visibleArticles.length, unavailable);
+  const isUnavailable = unavailable === true;
+  const panelState = getRecentNewsPanelState(visibleArticles.length, isUnavailable);
 
   useEffect(() => {
     console.info('[RecallNewsPanel] content render', {
-      unavailable,
+      unavailable: isUnavailable,
       articleCount: visibleArticles.length,
       renderedState: panelState,
       articles: visibleArticles.map(({ title, source }) => ({ title, source })),
     });
-  }, [articles, panelState, unavailable]);
+  }, [articles, isUnavailable, panelState, visibleArticles.length]);
 
   return (
     <View
@@ -58,7 +59,7 @@ export function RecentNewsSection({
         </View>
       </View>
 
-      {unavailable && panelState === 'articles' ? (
+      {isUnavailable && panelState === 'articles' ? (
         <Text
           style={[styles.emptyMessage, { color: colors.mutedForeground }]}
           testID="recent-news-refresh-warning"
