@@ -68,6 +68,15 @@ async function fetchNewsApiResponse(requestUrl: string, apiKey: string) {
 
 router.get("/recalls/news", async (req, res) => {
   res.setHeader("Cache-Control", "no-store");
+  const authorizationHeader = req.get("authorization");
+  logger.info(
+    {
+      searchTerm: typeof req.query.term === "string" ? req.query.term : null,
+      authorizationHeaderPresent: Boolean(authorizationHeader),
+      authorizationHeaderPrefix: authorizationHeader?.slice(0, 8) ?? null,
+    },
+    "Recall news route request received",
+  );
 
   const parsed = GetRecallNewsQueryParams.safeParse(req.query);
   if (!parsed.success) {
@@ -218,16 +227,30 @@ router.get("/recalls/news", async (req, res) => {
       },
       "NewsAPI response received and normalized",
     );
-    res.json(
-      GetRecallNewsResponse.parse({
-        articles,
-        unavailable: false,
-        dateRange,
-      }),
+    const normalizedResponse = GetRecallNewsResponse.parse({
+      articles,
+      unavailable: false,
+      dateRange,
+    });
+    logger.info(
+      {
+        term,
+        endpointPath: "/api/recalls/news",
+        normalizedResponse,
+      },
+      "Normalized recall news response returned",
     );
-  } catch {
+    res.json(normalizedResponse);
+  } catch (error) {
     logger.warn(
-      { term, query, requestUrl, dateRange, unavailable: true },
+      {
+        term,
+        query,
+        requestUrl,
+        dateRange,
+        error: error instanceof Error ? error.message : String(error),
+        unavailable: true,
+      },
       "NewsAPI request failed; continuing without news mentions",
     );
     res.json(emptyResponse(true));

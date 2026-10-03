@@ -19,7 +19,11 @@ interface HttpResponse {
   body: string;
 }
 
-function get(server: http.Server, requestPath: string) {
+function get(
+  server: http.Server,
+  requestPath: string,
+  headers?: Record<string, string>,
+) {
   const address = server.address();
   assert.ok(address && typeof address !== "string");
 
@@ -29,6 +33,7 @@ function get(server: http.Server, requestPath: string) {
         hostname: "127.0.0.1",
         port: address.port,
         path: requestPath,
+        headers,
       },
       (response) => {
         let body = "";
@@ -49,7 +54,7 @@ function get(server: http.Server, requestPath: string) {
   });
 }
 
-test("production and debug news routes return matching normalized results without caching", async (t) => {
+test("news route returns the same articles with browser and app-style headers without caching", async (t) => {
   const temporaryDirectory = await mkdtemp(
     path.join(artifactDirectory, ".news-route-test-"),
   );
@@ -135,11 +140,19 @@ test("production and debug news routes return matching normalized results withou
     server,
     `/api/recalls/news?term=${encodedTerm}`,
   );
+  const appStyleResponse = await get(
+    server,
+    `/api/recalls/news?term=${encodedTerm}`,
+    {
+      authorization: "Bearer ExpoGoHeaderTestOnly",
+    },
+  );
   const debugResponse = await get(
     server,
     `/api/recalls/news/debug?term=${encodedTerm}`,
   );
   const productionBody = JSON.parse(productionResponse.body);
+  const appStyleBody = JSON.parse(appStyleResponse.body);
   const debugBody = JSON.parse(debugResponse.body);
 
   assert.equal(productionResponse.statusCode, 200);
@@ -158,6 +171,13 @@ test("production and debug news routes return matching normalized results withou
     source: mockArticle.source.name,
   });
 
+  assert.equal(appStyleResponse.statusCode, 200);
+  assert.equal(appStyleResponse.headers["cache-control"], "no-store");
+  assert.equal(appStyleBody.unavailable, false);
+  assert.equal(typeof appStyleBody.dateRange.from, "string");
+  assert.equal(typeof appStyleBody.dateRange.to, "string");
+  assert.deepEqual(appStyleBody.articles, productionBody.articles);
+
   assert.equal(debugResponse.statusCode, 200);
   assert.equal(debugResponse.headers["cache-control"], "no-store");
   assert.deepEqual(debugBody.normalizedArticles, productionBody.articles);
@@ -168,5 +188,5 @@ test("production and debug news routes return matching normalized results withou
   assert.equal(debugBody.rawArticleCount, 1);
   assert.equal(debugBody.normalizedArticleCount, 1);
   assert.deepEqual(debugBody.rawNewsApiResponse, mockNewsApiResponse);
-  assert.equal(upstreamRequests.length, 2);
+  assert.equal(upstreamRequests.length, 3);
 });
