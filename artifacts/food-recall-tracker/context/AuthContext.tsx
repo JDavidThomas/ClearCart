@@ -4,7 +4,14 @@ import { Blob as ExpoBlob } from 'expo-blob';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Image as NativeImage } from 'react-native';
-import { AVATAR_BUCKET, getAuthRedirectUrl, getSupabaseErrorDetails, logSupabaseDiagnostic, supabase } from '@/lib/supabase';
+import {
+  AVATAR_BUCKET,
+  getAuthRedirectUrl,
+  getSupabaseErrorDetails,
+  logSupabaseDiagnostic,
+  refreshSupabaseSessionOnAppStart,
+  supabase,
+} from '@/lib/supabase';
 
 export type AllergySeverity = 'mild' | 'moderate' | 'severe' | null;
 
@@ -108,6 +115,7 @@ function authErrorMessage(error: unknown, fallback: string) {
 }
 
 export async function getStoredAccessToken() {
+  await refreshSupabaseSessionOnAppStart();
   const { data } = await supabase.auth.getSession();
   return data.session?.access_token ?? null;
 }
@@ -166,16 +174,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
+    let restoringSession = true;
 
     const restoreSession = async () => {
       try {
-        const { data } = await supabase.auth.getSession();
+        const session = await refreshSupabaseSessionOnAppStart();
         if (!mounted) return;
-        if (!data.session?.user) {
+        if (!session?.user) {
           setStatus('guest');
           return;
         }
-        await loadProfile(data.session.user);
+        await loadProfile(session.user);
         if (mounted) {
           setAuthNotice(null);
           setStatus('authenticated');
@@ -186,12 +195,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await supabase.auth.signOut().catch(() => undefined);
           enterGuestMode('Profile sync is unavailable, so recall checks are continuing as a guest.');
         }
+      } finally {
+        restoringSession = false;
       }
     };
 
     void restoreSession();
     const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
-      if (!mounted || event === 'INITIAL_SESSION') return;
+      if (
+        !mounted ||
+        event === 'INITIAL_SESSION' ||
+        (restoringSession && event === 'TOKEN_REFRESHED')
+      ) {
+        return;
+      }
       if (!session?.user) {
         enterGuestMode();
         return;

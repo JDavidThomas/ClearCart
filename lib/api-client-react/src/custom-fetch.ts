@@ -7,6 +7,7 @@ export interface RecallNewsTransportDiagnostics {
 
 export type CustomFetchOptions = RequestInit & {
   responseType?: "json" | "text" | "blob" | "auto";
+  skipAuthToken?: boolean;
   onRecallNewsDiagnostics?: (diagnostics: RecallNewsTransportDiagnostics) => void;
 };
 
@@ -351,6 +352,7 @@ export async function customFetch<T = unknown>(
   const {
     responseType = "auto",
     headers: headersInit,
+    skipAuthToken = false,
     onRecallNewsDiagnostics,
     ...init
   } = options;
@@ -409,7 +411,7 @@ export async function customFetch<T = unknown>(
 
   // Attach bearer token when an auth getter is configured and no
   // Authorization header has been explicitly provided.
-  if (_authTokenGetter && !headers.has("authorization")) {
+  if ( !skipAuthToken && _authTokenGetter && !headers.has("authorization")) {
     if (isRecallNews) {
       console.log("[RecallNews] auth token lookup started", {
         url: resolvedUrlBeforeAuth,

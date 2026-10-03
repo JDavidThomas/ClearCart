@@ -15,7 +15,12 @@ import {
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { AuthProvider, getStoredAccessToken } from '@/context/AuthContext';
-import { getSupabaseConfigDiagnostics, getSupabaseErrorDetails, supabase } from '@/lib/supabase';
+import {
+  getSupabaseConfigDiagnostics,
+  getSupabaseErrorDetails,
+  refreshSupabaseSessionOnAppStart,
+  supabase,
+} from '@/lib/supabase';
 import { setAuthTokenGetter, setBaseUrl } from '@workspace/api-client-react';
 import { getCurrentApiBaseUrl } from '@/services/apiConnection';
 import { initializeApiBaseUrl } from '@/services/apiConnectionRuntime';
@@ -58,20 +63,24 @@ function SupabaseDebugBanner() {
   useEffect(() => {
     let mounted = true;
 
-    const runDiagnostics = async () => {
+    const runDiagnostics = async (refreshAtStartup = false) => {
       try {
-        const { data: sessionData, error: sessionError } = await withTimeout(supabase.auth.getSession(), 8_000);
-        if (sessionError) {
-          const details = getSupabaseErrorDetails(sessionError);
-          console.error('[Supabase] auth.getSession failed', details);
-          if (mounted) {
-            setStatus('getSession failed');
-            setErrorMessage(details.message);
-          }
+        const session = await withTimeout(
+          refreshAtStartup
+            ? refreshSupabaseSessionOnAppStart()
+            : supabase.auth.getSession().then(({ data }) => data.session),
+          8_000,
+        );
+
+        if (!session) {
+          if (mounted) setStatus('connected · no session');
           return;
         }
 
-        const { error: profilesError } = await withTimeout(supabase.from('profiles').select('id').limit(1), 8_000);
+        const { error: profilesError } = await withTimeout(
+          supabase.from('profiles').select('id').limit(1),
+          8_000,
+        );
         if (profilesError) {
           const details = getSupabaseErrorDetails(profilesError);
           console.error('[Supabase] profiles probe failed', details);
@@ -83,10 +92,10 @@ function SupabaseDebugBanner() {
         }
 
         console.log('[Supabase] diagnostics passed', {
-          hasSession: Boolean(sessionData.session),
+          hasSession: true,
           profilesReachable: true,
         });
-        if (mounted) setStatus(sessionData.session ? 'connected · session found' : 'connected · no session');
+        if (mounted) setStatus('connected · session found');
       } catch (error) {
         const details = getSupabaseErrorDetails(error);
         console.error('[Supabase] diagnostics failed', details);
@@ -97,7 +106,7 @@ function SupabaseDebugBanner() {
       }
     };
 
-    void runDiagnostics();
+    void runDiagnostics(true);
     const { data: authSubscription } = supabase.auth.onAuthStateChange(() => {
       setTimeout(() => {
         void runDiagnostics();

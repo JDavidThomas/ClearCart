@@ -164,13 +164,16 @@ async function searchRecentRecallNews(
   unavailable: boolean;
   diagnostics: RecallNewsDiagnostics;
 }> {
-  console.log(`[RecallNews] NEWS FETCH PATH ENTERED term=${term}`);
+  console.log('[RecallNews] NEWS FETCH FUNCTION INVOKED before request guards', {
+    term,
+  });
   const diagnostics = emptyNewsDiagnostics();
   const publishDiagnostics = () => onDiagnostics?.({ ...diagnostics });
   try {
     const response = await getRecallNews(
       { term },
       {
+        skipAuthToken: true,
         onRecallNewsDiagnostics: (transportDiagnostics) => {
           diagnostics.requestUrl = transportDiagnostics.url;
           diagnostics.httpStatus = transportDiagnostics.status;
