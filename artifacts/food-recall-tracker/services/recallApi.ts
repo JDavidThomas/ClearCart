@@ -15,6 +15,7 @@ import {
 } from './recallRelevance';
 import {
   shouldBypassEmptyNewsCache,
+  shouldFetchCachedRecallNews,
   isRecallNewsQueryCacheCurrent,
   isRecallSearchCacheFresh,
   shouldRefreshRecallNews,
@@ -97,6 +98,17 @@ function emptyNewsDiagnostics(): RecallNewsDiagnostics {
 
 type NewsDiagnosticsListener = (diagnostics: RecallNewsDiagnostics) => void;
 
+type NewsFetchContext = {
+  reason: string;
+  cacheHit: boolean;
+  cachedNewsArticleCount?: number;
+  visibleCachedNewsArticleCount?: number;
+  isRecentSearchTerm?: boolean;
+  bypassEmptyNewsCache?: boolean;
+  shouldRefreshCachedNews?: boolean;
+  cachedDiagnosticsAvailable?: boolean;
+};
+
 function normalizeCachedSearch(value: unknown): CachedSearch | null {
   let candidate: unknown = value;
 
@@ -159,13 +171,17 @@ function buildSearchResult(term: string, cached: CachedSearch, fromCache: boolea
 async function searchRecentRecallNews(
   term: string,
   onDiagnostics?: NewsDiagnosticsListener,
+  context: NewsFetchContext = { reason: 'unspecified', cacheHit: false },
 ): Promise<{
   articles: RecallNewsArticle[];
   unavailable: boolean;
   diagnostics: RecallNewsDiagnostics;
 }> {
-  console.log('[RecallNews] NEWS FETCH FUNCTION INVOKED before request guards', {
+  console.log('[RecallNews] NEWS FETCH FUNCTION CALLED', {
+    called: true,
     term,
+    hasDiagnosticsListener: Boolean(onDiagnostics),
+    ...context,
   });
   const diagnostics = emptyNewsDiagnostics();
   const publishDiagnostics = () => onDiagnostics?.({ ...diagnostics });
@@ -392,6 +408,27 @@ export async function searchFoodRecalls(
     visibleCachedNewsArticleCount,
     recentSearchTerm,
   );
+  const shouldRefreshCachedNews = cached
+    ? shouldRefreshRecallNews(
+        cached.newsUnavailable,
+        visibleCachedNewsArticleCount,
+        cached.newsCheckedAt,
+      )
+    : false;
+  const cachedDiagnosticsAvailable = Boolean(
+    cached?.newsDiagnostics?.requestUrl &&
+      typeof cached.newsDiagnostics.httpStatus === 'number' &&
+      typeof cached.newsDiagnostics.rawArticleCount === 'number',
+  );
+  const shouldFetchCachedNews = cached
+    ? shouldFetchCachedRecallNews(
+        cached.newsUnavailable,
+        visibleCachedNewsArticleCount,
+        cached.newsCheckedAt,
+        recentSearchTerm,
+        cachedDiagnosticsAvailable,
+      )
+    : false;
   console.log('[RecallNews] cache check completed', {
     term,
     normalizedTerm,
@@ -416,6 +453,9 @@ export async function searchFoodRecalls(
       : null,
     isRecentSearchTerm: recentSearchTerm,
     bypassEmptyNewsCache: isRecentTermWithEmptyNews,
+    shouldRefreshCachedNews,
+    cachedDiagnosticsAvailable,
+    shouldFetchCachedNews,
   });
   if (cached) {
     console.log('[RecallSearch] fresh cache hit', {
@@ -430,15 +470,22 @@ export async function searchFoodRecalls(
         visibleCachedNewsArticleCount,
       });
     }
-    if (
-      isRecentTermWithEmptyNews ||
-      shouldRefreshRecallNews(
-        cached.newsUnavailable,
+    if (shouldFetchCachedNews) {
+      const reason = isRecentTermWithEmptyNews
+        ? 'recent-empty-cache-bypass'
+        : shouldRefreshCachedNews
+          ? 'cached-news-refresh'
+          : 'missing-cached-diagnostics';
+      const news = await searchRecentRecallNews(normalizedTerm, onNewsDiagnostics, {
+        reason,
+        cacheHit: true,
+        cachedNewsArticleCount,
         visibleCachedNewsArticleCount,
-        cached.newsCheckedAt,
-      )
-    ) {
-      const news = await searchRecentRecallNews(normalizedTerm);
+        isRecentSearchTerm: recentSearchTerm,
+        bypassEmptyNewsCache: isRecentTermWithEmptyNews,
+        shouldRefreshCachedNews,
+        cachedDiagnosticsAvailable,
+      });
       const refreshedCache = {
         ...cached,
         recentNews: news.articles,
@@ -468,7 +515,10 @@ export async function searchFoodRecalls(
 
     const [fdaResult, newsResult] = await Promise.allSettled([
       searchFdaRecalls(normalizedTerm, options),
-      searchRecentRecallNews(normalizedTerm, onNewsDiagnostics),
+      searchRecentRecallNews(normalizedTerm, onNewsDiagnostics, {
+        reason: 'cache-miss',
+        cacheHit: false,
+      }),
     ]);
     if (newsResult.status === 'fulfilled') {
       recentNews = newsResult.value.articles;

@@ -36,3 +36,18 @@ export function shouldBypassEmptyNewsCache(
 ) {
   return articleCount === 0 && isRecentSearch;
 }
+
+export function shouldFetchCachedRecallNews(
+  newsUnavailable: boolean | undefined,
+  articleCount: number,
+  newsCheckedAt: string | undefined,
+  isRecentSearch: boolean,
+  hasDiagnostics: boolean,
+  now = Date.now(),
+) {
+  return (
+    shouldBypassEmptyNewsCache(articleCount, isRecentSearch) ||
+    shouldRefreshRecallNews(newsUnavailable, articleCount, newsCheckedAt, now) ||
+    !hasDiagnostics
+  );
+}

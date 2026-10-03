@@ -1,6 +1,6 @@
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
@@ -60,6 +60,7 @@ export default function HomeScreen() {
   const colors = useColors();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
   const [term, setTerm] = useState<string>('');
   const [submittedTerm, setSubmittedTerm] = useState<string>('');
   const [activeResultTab, setActiveResultTab] = useState<RecallResultTab>('fda');
@@ -68,14 +69,24 @@ export default function HomeScreen() {
   const swipeHandlers = useRecallResultSwipe(activeResultTab, setActiveResultTab);
   const topPadding = Platform.OS === 'web' ? Math.max(insets.top, 67) : insets.top;
 
+  const recallQueryKey = ['food-recalls', submittedTerm] as const;
   const { data, error, isFetching, isError, refetch } = useQuery<RecallSearchResult, Error>({
-    queryKey: ['food-recalls', submittedTerm],
-    queryFn: () => {
-      console.log(`[RecallNews] React Query queryFn entered term=${submittedTerm}`);
-      return searchFoodRecalls(submittedTerm, {}, setNewsDiagnostics);
+    queryKey: recallQueryKey,
+    queryFn: async () => {
+      const queryState = queryClient.getQueryState(recallQueryKey);
+      console.log('[RecallNews] React Query queryFn entered', {
+        term: submittedTerm,
+        queryStatus: queryState?.status ?? null,
+        fetchStatus: queryState?.fetchStatus ?? null,
+        hasCachedData: queryState?.data !== undefined,
+        staleTimeMs: 0,
+      });
+      const result = await searchFoodRecalls(submittedTerm, {}, setNewsDiagnostics);
+      setNewsDiagnostics(result.newsDiagnostics ?? EMPTY_NEWS_DIAGNOSTICS);
+      return result;
     },
     enabled: submittedTerm.length > 0,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
     retry: false,
   });
   const recalls = Array.isArray(data?.recalls) ? data.recalls : [];
@@ -92,9 +103,15 @@ export default function HomeScreen() {
       console.log('[RecallNews] search submit skipped: empty term');
       return;
     }
+    const cachedQueryState = queryClient.getQueryState(['food-recalls', nextTerm]);
     console.log('[RecallNews] search submit accepted', {
       term: nextTerm,
       sameAsSubmittedTerm: nextTerm === submittedTerm,
+      reactQueryHasCachedData: cachedQueryState?.data !== undefined,
+      reactQueryCacheAgeMs: cachedQueryState?.dataUpdatedAt
+        ? Math.max(0, Date.now() - cachedQueryState.dataUpdatedAt)
+        : null,
+      reactQueryStaleTimeMs: 0,
     });
     await Haptics.selectionAsync();
     setActiveResultTab('fda');

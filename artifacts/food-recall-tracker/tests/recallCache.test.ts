@@ -7,6 +7,7 @@ import {
   RECALL_EMPTY_NEWS_CACHE_TTL_MS,
   RECALL_SEARCH_CACHE_TTL_MS,
   shouldBypassEmptyNewsCache,
+  shouldFetchCachedRecallNews,
   shouldRefreshRecallNews,
 } from '../services/recallCache.ts';
 
@@ -64,4 +65,28 @@ test('a cached empty result is bypassed for a term in recent searches', () => {
   assert.equal(shouldBypassEmptyNewsCache(0, true), true);
   assert.equal(shouldBypassEmptyNewsCache(0, false), false);
   assert.equal(shouldBypassEmptyNewsCache(1, true), false);
+});
+
+test('cached news fetches when diagnostic details are missing', () => {
+  const now = Date.parse('2026-10-03T12:00:00.000Z');
+  const checkedAt = new Date(now - 60_000).toISOString();
+
+  assert.equal(
+    shouldFetchCachedRecallNews(false, 2, checkedAt, false, false, now),
+    true,
+  );
+});
+
+test('fresh cached news with diagnostics stays cached unless an empty recent result needs retry', () => {
+  const now = Date.parse('2026-10-03T12:00:00.000Z');
+  const checkedAt = new Date(now - 60_000).toISOString();
+
+  assert.equal(
+    shouldFetchCachedRecallNews(false, 2, checkedAt, false, true, now),
+    false,
+  );
+  assert.equal(
+    shouldFetchCachedRecallNews(false, 0, checkedAt, true, true, now),
+    true,
+  );
 });
