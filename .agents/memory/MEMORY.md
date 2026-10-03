@@ -12,6 +12,7 @@
 - [API route test runtime](api-route-test-runtime.md) — bundle route modules when Node’s TypeScript stripping cannot resolve local imports and workspace source aliases.
 - [Expo static build port conflict](expo-static-build-port.md) — the static build script can collide with the mockup server on port 8081; use the managed workflow for runtime verification.
 - [Expo tunnel startup failures](expo-tunnel-startup.md) — Ngrok can fail before `Tunnel ready`; never reuse the prior `exp.direct` URL as if a fresh tunnel started.
+- [Expo DevTools launcher warning](expo-devtools-libglib.md) — Metro can serve Expo Go even when the optional React Native DevTools launcher fails to load libglib.
 - [FSIS manual-source boundary](fsis-egress.md) — the app uses openFDA for official recall records and points meat, poultry, and egg searches to FSIS.gov.
 - [NewsAPI developer plan](newsapi-developer-plan.md) — free NewsAPI keys are development/testing only, with a 24-hour article delay and 100 requests/day.
 - [NewsAPI recall mentions](newsapi-search-relevance.md) — filter false matches locally, keep news after FDA results, and refresh empty recent-term cache hits.

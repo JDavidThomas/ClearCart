@@ -3,10 +3,20 @@ type FetchFunction = (
   init?: RequestInit,
 ) => Promise<Response>;
 
+type RefreshReason = 'before-request' | 'jwt-future';
+
 function requestUrl(input: RequestInfo | URL) {
   if (typeof input === 'string') return input;
   if (input instanceof URL) return input.href;
   return input.url;
+}
+
+function requestPath(input: RequestInfo | URL) {
+  try {
+    return new URL(requestUrl(input)).pathname;
+  } catch {
+    return null;
+  }
 }
 
 function isRequest(input: RequestInfo | URL): input is Request {
@@ -14,11 +24,7 @@ function isRequest(input: RequestInfo | URL): input is Request {
 }
 
 function isRestRequest(input: RequestInfo | URL) {
-  try {
-    return new URL(requestUrl(input)).pathname.includes('/rest/v1/');
-  } catch {
-    return false;
-  }
+  return requestPath(input)?.includes('/rest/v1/') ?? false;
 }
 
 async function isFutureIssuedJwtResponse(response: Response) {
@@ -37,7 +43,7 @@ async function isFutureIssuedJwtResponse(response: Response) {
   }
 }
 
-function mergeRetryHeaders(
+function mergeRequestHeaders(
   input: RequestInfo | URL,
   init?: RequestInit,
 ) {
@@ -46,13 +52,75 @@ function mergeRetryHeaders(
   return headers;
 }
 
+function withRequestHeaders(
+  input: RequestInfo | URL,
+  init: RequestInit | undefined,
+  headers: Headers,
+) {
+  if (isRequest(input)) {
+    return {
+      input: new Request(input, { ...init, headers }),
+      init: undefined,
+    };
+  }
+  return {
+    input,
+    init: { ...init, headers },
+  };
+}
+
 export function createSupabaseJwtRecoveryFetch(
-  refreshAccessToken: () => Promise<string | null>,
+  refreshAccessToken: (reason: RefreshReason) => Promise<string | null>,
   fetchImpl: FetchFunction = globalThis.fetch.bind(globalThis),
 ): FetchFunction {
   return async (input, init) => {
     const replayableInput = isRequest(input) ? input.clone() : input;
-    const response = await fetchImpl(input, init);
+    let requestInput = input;
+    let requestInit = init;
+    let preRequestRefreshStatus = 'not-a-rest-request';
+
+    if (isRestRequest(input)) {
+      const headers = mergeRequestHeaders(input, init);
+      const authorizationHeaderPresent = headers.has('authorization');
+      preRequestRefreshStatus = authorizationHeaderPresent
+        ? 'pending'
+        : 'skipped-no-authorization-header';
+
+      if (authorizationHeaderPresent) {
+        try {
+          const accessToken = await refreshAccessToken('before-request');
+          if (accessToken) {
+            headers.set('authorization', `Bearer ${accessToken}`);
+            preRequestRefreshStatus = 'refreshed';
+            const request = withRequestHeaders(input, init, headers);
+            requestInput = request.input;
+            requestInit = request.init;
+          } else {
+            preRequestRefreshStatus = 'no-fresh-session-token';
+            console.warn(
+              '[Supabase] Pre-request refresh returned no session token; sending with the existing authorization header.',
+            );
+          }
+        } catch (error) {
+          preRequestRefreshStatus = 'failed';
+          console.warn(
+            '[Supabase] Pre-request session refresh failed; sending with the existing authorization header.',
+            error instanceof Error ? error.name : typeof error,
+          );
+        }
+      }
+
+      console.info('[Supabase] REST request authentication before fetch', {
+        path: requestPath(input),
+        authorizationHeaderPresent,
+        authorizationHeader: authorizationHeaderPresent
+          ? 'Bearer [REDACTED]'
+          : null,
+        preRequestRefreshStatus,
+      });
+    }
+
+    const response = await fetchImpl(requestInput, requestInit);
 
     if (
       !isRestRequest(input) ||
@@ -64,26 +132,41 @@ export function createSupabaseJwtRecoveryFetch(
     }
 
     console.warn(
-      '[Supabase] JWT issued at future; refreshing the session and retrying the request once.',
+      '[Supabase] REST request was rejected because the JWT was issued in the future; attempting one recovery refresh.',
+      {
+        path: requestPath(input),
+        preRequestRefreshStatus,
+      },
     );
 
     let accessToken: string | null;
     try {
-      accessToken = await refreshAccessToken();
+      accessToken = await refreshAccessToken('jwt-future');
     } catch (error) {
-      console.warn('[Supabase] JWT recovery refresh failed.', error);
+      console.warn(
+        '[Supabase] JWT recovery refresh failed; returning the original response.',
+        error instanceof Error ? error.name : typeof error,
+      );
       return response;
     }
-    if (!accessToken) return response;
+    if (!accessToken) {
+      console.warn(
+        '[Supabase] JWT recovery refresh returned no token; returning the original response.',
+        { path: requestPath(input) },
+      );
+      return response;
+    }
 
-    const headers = mergeRetryHeaders(replayableInput, init);
+    const headers = mergeRequestHeaders(replayableInput, init);
     headers.set('authorization', `Bearer ${accessToken}`);
-
-    if (isRequest(replayableInput)) {
-      return fetchImpl(
-        new Request(replayableInput, { ...init, headers }),
+    const retry = withRequestHeaders(replayableInput, init, headers);
+    const retryResponse = await fetchImpl(retry.input, retry.init);
+    if (await isFutureIssuedJwtResponse(retryResponse)) {
+      console.warn(
+        '[Supabase] JWT was still rejected after a refreshed retry; returning the retry response.',
+        { path: requestPath(input) },
       );
     }
-    return fetchImpl(replayableInput, { ...init, headers });
+    return retryResponse;
   };
 }

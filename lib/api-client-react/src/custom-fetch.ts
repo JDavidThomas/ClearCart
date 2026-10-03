@@ -100,6 +100,18 @@ function mergeHeaders(...sources: Array<HeadersInit | undefined>): Headers {
   return headers;
 }
 
+function getSafeRequestHeaderDiagnostics(headers: Headers) {
+  const authorization = headers.get("authorization");
+  const authorizationScheme = authorization?.trim().split(/\s+/, 1)[0] ?? null;
+  return {
+    accept: headers.get("accept"),
+    contentType: headers.get("content-type"),
+    authorization: authorization
+      ? { present: true, scheme: authorizationScheme, value: "[REDACTED]" }
+      : { present: false, scheme: null, value: null },
+  };
+}
+
 function getMediaType(headers: Headers): string | null {
   const value = headers.get("content-type");
   return value ? value.split(";", 1)[0].trim().toLowerCase() : null;
@@ -440,7 +452,11 @@ export async function customFetch<T = unknown>(
   const requestInfo = { method, url: resolveUrl(input) };
 
   if (isRecallNews) {
-    console.log("[RecallNews] before fetch", { url: requestInfo.url });
+    console.log("[RecallNews] before fetch", {
+      method: requestInfo.method,
+      url: requestInfo.url,
+      headers: getSafeRequestHeaderDiagnostics(headers),
+    });
   }
 
   let response: Response;

@@ -69,23 +69,59 @@ async function fetchNewsApiResponse(requestUrl: string, apiKey: string) {
 router.get("/recalls/news", async (req, res) => {
   res.setHeader("Cache-Control", "no-store");
   const authorizationHeader = req.get("authorization");
+  const authorizationScheme =
+    authorizationHeader?.trim().split(/\s+/, 1)[0] ?? null;
   logger.info(
     {
+      method: req.method,
+      requestPath: req.originalUrl,
       searchTerm: typeof req.query.term === "string" ? req.query.term : null,
-      authorizationHeaderPresent: Boolean(authorizationHeader),
-      authorizationHeaderPrefix: authorizationHeader?.slice(0, 8) ?? null,
+      headers: {
+        host: req.get("host") ?? null,
+        userAgent: req.get("user-agent") ?? null,
+        accept: req.get("accept") ?? null,
+        contentType: req.get("content-type") ?? null,
+        authorization: authorizationHeader
+          ? {
+              present: true,
+              scheme: authorizationScheme,
+              value: "[REDACTED]",
+            }
+          : { present: false, scheme: null, value: null },
+      },
     },
     "Recall news route request received",
   );
+  const logResponseSummary = (
+    statusCode: number,
+    summary: {
+      articleCount?: number;
+      rawArticleCount?: number;
+      unavailable?: boolean;
+      dateRange?: ReturnType<typeof getNewsDateRange>;
+    } = {},
+  ) => {
+    logger.info(
+      {
+        method: req.method,
+        endpointPath: req.path,
+        statusCode,
+        ...summary,
+      },
+      "Recall news route response sent",
+    );
+  };
 
   const parsed = GetRecallNewsQueryParams.safeParse(req.query);
   if (!parsed.success) {
+    logResponseSummary(400);
     res.status(400).json({ message: "A product search term is required." });
     return;
   }
 
   const term = normalizeNewsSearchTerm(parsed.data.term);
   if (!term) {
+    logResponseSummary(400);
     res.status(400).json({ message: "A product search term is required." });
     return;
   }
@@ -98,6 +134,16 @@ router.get("/recalls/news", async (req, res) => {
       unavailable,
       dateRange,
     });
+  const sendEmptyResponse = (unavailable: boolean) => {
+    const payload = emptyResponse(unavailable);
+    logResponseSummary(200, {
+      articleCount: payload.articles.length,
+      rawArticleCount: 0,
+      unavailable,
+      dateRange,
+    });
+    res.json(payload);
+  };
 
   if (
     !isNewsApiAllowed(
@@ -109,7 +155,7 @@ router.get("/recalls/news", async (req, res) => {
       { term, dateRange, unavailable: true },
       "NewsAPI disabled outside development until eligible access is configured",
     );
-    res.json(emptyResponse(true));
+    sendEmptyResponse(true);
     return;
   }
 
@@ -118,7 +164,7 @@ router.get("/recalls/news", async (req, res) => {
       { term, dateRange, unavailable: true },
       "NewsAPI skipped because its server-side API key is not configured",
     );
-    res.json(emptyResponse(true));
+    sendEmptyResponse(true);
     return;
   }
 
@@ -141,12 +187,13 @@ router.get("/recalls/news", async (req, res) => {
           requestUrl,
           dateRange,
           upstreamStatus: response.status,
-          rawResponsePreview: responseBody.slice(0, 2_000),
+          upstreamContentType: response.headers.get("content-type"),
+          responseBodyLength: responseBody.length,
           unavailable: true,
         },
         "NewsAPI search was unavailable",
       );
-      res.json(emptyResponse(true));
+      sendEmptyResponse(true);
       return;
     }
 
@@ -161,12 +208,13 @@ router.get("/recalls/news", async (req, res) => {
           requestUrl,
           dateRange,
           upstreamStatus: response.status,
-          rawResponsePreview: responseBody.slice(0, 2_000),
+          upstreamContentType: response.headers.get("content-type"),
+          responseBodyLength: responseBody.length,
           unavailable: true,
         },
         "NewsAPI returned an unreadable response",
       );
-      res.json(emptyResponse(true));
+      sendEmptyResponse(true);
       return;
     }
     if (
@@ -181,12 +229,13 @@ router.get("/recalls/news", async (req, res) => {
           requestUrl,
           dateRange,
           upstreamStatus: response.status,
-          rawResponsePreview: responseBody.slice(0, 2_000),
+          upstreamContentType: response.headers.get("content-type"),
+          responseBodyLength: responseBody.length,
           unavailable: true,
         },
         "NewsAPI returned an invalid search payload",
       );
-      res.json(emptyResponse(true));
+      sendEmptyResponse(true);
       return;
     }
     const rawArticles = payload.articles;
@@ -209,20 +258,6 @@ router.get("/recalls/news", async (req, res) => {
             : undefined,
         rawArticleCount: rawArticles.length,
         normalizedArticleCount: articles.length,
-        rawArticleSample: rawArticles.slice(0, 5).flatMap((article) => {
-          if (!isRecord(article)) return [];
-          const source = isRecord(article.source) ? article.source.name : undefined;
-          return [{
-            title: typeof article.title === "string" ? article.title : undefined,
-            source: typeof source === "string" ? source : undefined,
-            publishedAt:
-              typeof article.publishedAt === "string"
-                ? article.publishedAt
-                : undefined,
-            url: typeof article.url === "string" ? article.url : undefined,
-          }];
-        }),
-        rawResponsePreview: responseBody.slice(0, 2_000),
         unavailable: false,
       },
       "NewsAPI response received and normalized",
@@ -232,14 +267,12 @@ router.get("/recalls/news", async (req, res) => {
       unavailable: false,
       dateRange,
     });
-    logger.info(
-      {
-        term,
-        endpointPath: "/api/recalls/news",
-        normalizedResponse,
-      },
-      "Normalized recall news response returned",
-    );
+    logResponseSummary(200, {
+      articleCount: normalizedResponse.articles.length,
+      rawArticleCount: rawArticles.length,
+      unavailable: normalizedResponse.unavailable,
+      dateRange,
+    });
     res.json(normalizedResponse);
   } catch (error) {
     logger.warn(
@@ -248,12 +281,12 @@ router.get("/recalls/news", async (req, res) => {
         query,
         requestUrl,
         dateRange,
-        error: error instanceof Error ? error.message : String(error),
+        errorType: error instanceof Error ? error.name : typeof error,
         unavailable: true,
       },
       "NewsAPI request failed; continuing without news mentions",
     );
-    res.json(emptyResponse(true));
+    sendEmptyResponse(true);
   }
 });
 

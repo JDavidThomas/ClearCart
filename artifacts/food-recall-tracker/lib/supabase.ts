@@ -56,10 +56,20 @@ export function getSupabaseErrorDetails(error: unknown) {
 const configDiagnostics = getSupabaseConfigDiagnostics();
 
 export function logSupabaseDiagnostic(operation: string, error?: unknown) {
+  const errorDetails = error ? getSupabaseErrorDetails(error) : null;
   const payload = {
     operation,
     config: getSupabaseConfigDiagnostics(),
-    ...(error ? { error: getSupabaseErrorDetails(error) } : {}),
+    ...(errorDetails
+      ? {
+          error: {
+            ...Object.fromEntries(
+              Object.entries(errorDetails).filter(([key]) => key !== 'message'),
+            ),
+            message: '[REDACTED]',
+          },
+        }
+      : {}),
   };
   if (error) {
     console.warn('[Supabase diagnostic]', payload);
@@ -82,11 +92,23 @@ type SessionRefreshResult = {
   error: unknown | null;
 };
 
+type SessionRefreshReason = 'app-start' | 'before-rest-request' | 'jwt-future';
+
+const PRE_REQUEST_REFRESH_REUSE_MS = 30_000;
+
 let supabaseClient: SupabaseClient | null = null;
 let sessionRefreshPromise: Promise<SessionRefreshResult> | null = null;
 let startupSessionPromise: Promise<Session | null> | null = null;
+let preRequestRefreshPromise: Promise<string | null> | null = null;
+let recentPreRequestRefresh: { accessToken: string; refreshedAt: number } | null = null;
 
-function refreshCurrentSession(reason: 'app-start' | 'jwt-future') {
+function getRefreshDiagnosticPrefix(reason: SessionRefreshReason) {
+  if (reason === 'app-start') return 'auth.session.startup-refresh';
+  if (reason === 'before-rest-request') return 'auth.rest.pre-request-refresh';
+  return 'auth.jwt-future.refresh';
+}
+
+function refreshCurrentSession(reason: SessionRefreshReason) {
   if (sessionRefreshPromise) return sessionRefreshPromise;
 
   const operation = (async (): Promise<SessionRefreshResult> => {
@@ -100,22 +122,14 @@ function refreshCurrentSession(reason: 'app-start' | 'jwt-future') {
 
     try {
       const { data, error } = await supabaseClient.auth.refreshSession();
+      const diagnosticPrefix = getRefreshDiagnosticPrefix(reason);
       if (error) {
-        logSupabaseDiagnostic(
-          reason === 'app-start'
-            ? 'auth.session.startup-refresh.failed'
-            : 'auth.jwt-future.refresh.failed',
-          error,
-        );
+        logSupabaseDiagnostic(`${diagnosticPrefix}.failed`, error);
         return { accessToken: null, session: null, error };
       }
 
       const session = data.session ?? null;
-      logSupabaseDiagnostic(
-        reason === 'app-start'
-          ? 'auth.session.startup-refresh.succeeded'
-          : 'auth.jwt-future.refresh.succeeded',
-      );
+      logSupabaseDiagnostic(`${diagnosticPrefix}.succeeded`);
       return {
         accessToken: session?.access_token ?? null,
         session,
@@ -123,9 +137,7 @@ function refreshCurrentSession(reason: 'app-start' | 'jwt-future') {
       };
     } catch (error) {
       logSupabaseDiagnostic(
-        reason === 'app-start'
-          ? 'auth.session.startup-refresh.exception'
-          : 'auth.jwt-future.refresh.exception',
+        `${getRefreshDiagnosticPrefix(reason)}.exception`,
         error,
       );
       return { accessToken: null, session: null, error };
@@ -138,8 +150,70 @@ function refreshCurrentSession(reason: 'app-start' | 'jwt-future') {
   return sessionRefreshPromise;
 }
 
-const supabaseFetch = createSupabaseJwtRecoveryFetch(async () => {
+async function refreshSessionBeforeRestRequest() {
+  const now = Date.now();
+  if (
+    recentPreRequestRefresh &&
+    now >= recentPreRequestRefresh.refreshedAt &&
+    now - recentPreRequestRefresh.refreshedAt < PRE_REQUEST_REFRESH_REUSE_MS
+  ) {
+    logSupabaseDiagnostic('auth.rest.pre-request-refresh.reused-recent-token');
+    return recentPreRequestRefresh.accessToken;
+  }
+  if (preRequestRefreshPromise) return preRequestRefreshPromise;
+
+  const operation = (async () => {
+    if (!supabaseClient) {
+      throw new Error('Supabase client is not initialized.');
+    }
+
+    const { data, error } = await supabaseClient.auth.getSession();
+    if (error) {
+      logSupabaseDiagnostic('auth.rest.pre-request-session-read.failed', error);
+      throw error;
+    }
+    if (!data.session) {
+      recentPreRequestRefresh = null;
+      logSupabaseDiagnostic('auth.rest.pre-request-refresh.skipped.no-session');
+      return null;
+    }
+
+    logSupabaseDiagnostic('auth.rest.pre-request-refresh.started');
+    const refreshed = await refreshCurrentSession('before-rest-request');
+    if (refreshed.error) return null;
+    if (!refreshed.accessToken) {
+      logSupabaseDiagnostic('auth.rest.pre-request-refresh.no-access-token');
+      return null;
+    }
+
+    recentPreRequestRefresh = {
+      accessToken: refreshed.accessToken,
+      refreshedAt: Date.now(),
+    };
+    return refreshed.accessToken;
+  })();
+
+  preRequestRefreshPromise = operation;
+  try {
+    return await operation;
+  } finally {
+    preRequestRefreshPromise = null;
+  }
+}
+
+const supabaseFetch = createSupabaseJwtRecoveryFetch(async (reason) => {
+  if (reason === 'before-request') {
+    return refreshSessionBeforeRestRequest();
+  }
+
+  recentPreRequestRefresh = null;
   const result = await refreshCurrentSession('jwt-future');
+  if (result.accessToken) {
+    recentPreRequestRefresh = {
+      accessToken: result.accessToken,
+      refreshedAt: Date.now(),
+    };
+  }
   return result.accessToken;
 });
 
@@ -154,6 +228,19 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   global: { fetch: supabaseFetch },
 });
 supabaseClient = supabase;
+supabase.auth.onAuthStateChange((event, session) => {
+  if (event === 'SIGNED_OUT') {
+    recentPreRequestRefresh = null;
+  } else if (
+    (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') &&
+    session?.access_token
+  ) {
+    recentPreRequestRefresh = {
+      accessToken: session.access_token,
+      refreshedAt: Date.now(),
+    };
+  }
+});
 
 export function refreshSupabaseSessionOnAppStart(): Promise<Session | null> {
   if (!startupSessionPromise) {
