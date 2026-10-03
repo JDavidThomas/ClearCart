@@ -15,3 +15,4 @@
 - [FSIS manual-source boundary](fsis-egress.md) — the app uses openFDA for official recall records and points meat, poultry, and egg searches to FSIS.gov.
 - [NewsAPI developer plan](newsapi-developer-plan.md) — free NewsAPI keys are development/testing only, with a 24-hour article delay and 100 requests/day.
 - [NewsAPI recall mentions](newsapi-search-relevance.md) — filter false matches locally, keep news after FDA results, and refresh empty recent-term cache hits.
+- [News client verification gate](news-client-verification.md) — server-only checks are insufficient; verify the target search in client state and the News render before claiming success or issuing a fresh tunnel.

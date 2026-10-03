@@ -28,11 +28,20 @@ export interface RecallNewsArticle {
   source: string;
 }
 
+export interface RecallNewsDiagnostics {
+  requestUrl: string | null;
+  httpStatus: number | null;
+  rawArticleCount: number | null;
+  filteredArticleCount: number | null;
+  error: string | null;
+}
+
 export interface RecallSearchResult {
   recalls: FoodRecall[];
   relatedRecalls?: FoodRecall[];
   recentNews?: RecallNewsArticle[];
   newsUnavailable?: boolean;
+  newsDiagnostics?: RecallNewsDiagnostics;
   lastUpdated: string;
   fromCache: boolean;
   relevanceNotice?: string;

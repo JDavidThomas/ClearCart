@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type {
   FoodRecall,
+  RecallNewsDiagnostics,
   RecallNewsArticle,
   RecallSearchResult,
 } from '@/types/recall';
@@ -37,6 +38,7 @@ interface CachedSearch {
   recalls: FoodRecall[];
   recentNews?: RecallNewsArticle[];
   newsUnavailable?: boolean;
+  newsDiagnostics?: RecallNewsDiagnostics;
   newsCheckedAt?: string;
   newsQueryVersion: number;
   lastUpdated: string;
@@ -71,6 +73,30 @@ function normalizeNewsArticles(value: unknown): RecallNewsArticle[] {
   });
 }
 
+function normalizeNewsDiagnostics(value: unknown): RecallNewsDiagnostics | undefined {
+  if (!isRecord(value)) return undefined;
+  return {
+    requestUrl: typeof value.requestUrl === 'string' ? value.requestUrl : null,
+    httpStatus: typeof value.httpStatus === 'number' ? value.httpStatus : null,
+    rawArticleCount: typeof value.rawArticleCount === 'number' ? value.rawArticleCount : null,
+    filteredArticleCount:
+      typeof value.filteredArticleCount === 'number' ? value.filteredArticleCount : null,
+    error: typeof value.error === 'string' ? value.error : null,
+  };
+}
+
+function emptyNewsDiagnostics(): RecallNewsDiagnostics {
+  return {
+    requestUrl: null,
+    httpStatus: null,
+    rawArticleCount: null,
+    filteredArticleCount: null,
+    error: null,
+  };
+}
+
+type NewsDiagnosticsListener = (diagnostics: RecallNewsDiagnostics) => void;
+
 function normalizeCachedSearch(value: unknown): CachedSearch | null {
   let candidate: unknown = value;
 
@@ -94,6 +120,7 @@ function normalizeCachedSearch(value: unknown): CachedSearch | null {
         newsUnavailable:
           candidate.newsUnavailable === true ||
           !isRecallNewsQueryCacheCurrent(candidate.newsQueryVersion),
+        newsDiagnostics: normalizeNewsDiagnostics(candidate.newsDiagnostics),
         newsCheckedAt:
           typeof candidate.newsCheckedAt === 'string' ? candidate.newsCheckedAt : undefined,
         newsQueryVersion: RECALL_NEWS_QUERY_CACHE_VERSION,
@@ -119,6 +146,7 @@ function buildSearchResult(term: string, cached: CachedSearch, fromCache: boolea
     relatedRecalls: groups.relatedRecalls,
     recentNews: filterRecentNews(cached.recentNews ?? []),
     newsUnavailable: cached.newsUnavailable,
+    newsDiagnostics: cached.newsDiagnostics,
     lastUpdated: cached.lastUpdated,
     fromCache,
     relevanceNotice: getRecallRelevanceNotice(term, rankedRecalls),
@@ -128,13 +156,30 @@ function buildSearchResult(term: string, cached: CachedSearch, fromCache: boolea
   };
 }
 
-async function searchRecentRecallNews(term: string): Promise<{
+async function searchRecentRecallNews(
+  term: string,
+  onDiagnostics?: NewsDiagnosticsListener,
+): Promise<{
   articles: RecallNewsArticle[];
   unavailable: boolean;
+  diagnostics: RecallNewsDiagnostics;
 }> {
   console.log(`[RecallNews] NEWS FETCH PATH ENTERED term=${term}`);
+  const diagnostics = emptyNewsDiagnostics();
+  const publishDiagnostics = () => onDiagnostics?.({ ...diagnostics });
   try {
-    const response = await getRecallNews({ term });
+    const response = await getRecallNews(
+      { term },
+      {
+        onRecallNewsDiagnostics: (transportDiagnostics) => {
+          diagnostics.requestUrl = transportDiagnostics.url;
+          diagnostics.httpStatus = transportDiagnostics.status;
+          diagnostics.rawArticleCount = transportDiagnostics.rawArticleCount;
+          diagnostics.error = transportDiagnostics.error;
+          publishDiagnostics();
+        },
+      },
+    );
     const rawArticles = Array.isArray(response.articles) ? response.articles : [];
     console.log('[RecallNews] response returned to search service', {
       term,
@@ -143,6 +188,10 @@ async function searchRecentRecallNews(term: string): Promise<{
     });
     const articles = filterRecentNews(rawArticles);
     const unavailable = response.unavailable === true;
+    diagnostics.rawArticleCount = rawArticles.length;
+    diagnostics.filteredArticleCount = articles.length;
+    diagnostics.error = null;
+    publishDiagnostics();
     console.log('[RecallNews] response normalized', {
       term,
       apiBaseUrl: getCurrentApiBaseUrl(),
@@ -156,7 +205,7 @@ async function searchRecentRecallNews(term: string): Promise<{
       rawUnavailable: response.unavailable,
       computedUnavailable: unavailable,
     });
-    return { articles, unavailable };
+    return { articles, unavailable, diagnostics };
   } catch (error) {
     const errorDetails =
       error && typeof error === 'object'
@@ -171,13 +220,16 @@ async function searchRecentRecallNews(term: string): Promise<{
     const message = rawMessage
       .replace(/([?&]api_key=)[^&\s]*/gi, '$1[REDACTED]')
       .replace(/("api_key"\s*:\s*")[^"]+(")/gi, '$1[REDACTED]$2');
+    diagnostics.error = message;
+    diagnostics.filteredArticleCount = null;
+    publishDiagnostics();
     console.warn('[RecallNews] request failed; continuing without news', {
       term,
       errorName: typeof errorDetails?.name === 'string' ? errorDetails.name : 'UnknownError',
       status: errorDetails?.status ?? errorDetails?.statusCode ?? null,
       message,
     });
-    return { articles: [], unavailable: true };
+    return { articles: [], unavailable: true, diagnostics };
   }
 }
 
@@ -314,8 +366,10 @@ async function saveSearch(key: string, term: string, value: CachedSearch) {
 export async function searchFoodRecalls(
   term: string,
   options: FdaRecallSearchOptions = {},
+  onNewsDiagnostics?: NewsDiagnosticsListener,
 ): Promise<RecallSearchResult> {
   console.log(`[RecallNews] SEARCH FOOD RECALLS ENTERED term=${term}`);
+  onNewsDiagnostics?.(emptyNewsDiagnostics());
   const normalizedTerm = cleanRecallSearchTerm(term);
   if (!normalizedTerm) {
     console.log('[RecallNews] search stopped after empty-term guard', { term });
@@ -386,6 +440,7 @@ export async function searchFoodRecalls(
         ...cached,
         recentNews: news.articles,
         newsUnavailable: news.unavailable,
+        newsDiagnostics: news.diagnostics,
         newsCheckedAt: new Date().toISOString(),
         newsQueryVersion: RECALL_NEWS_QUERY_CACHE_VERSION,
       };
@@ -394,6 +449,7 @@ export async function searchFoodRecalls(
       }
       return buildSearchResult(normalizedTerm, refreshedCache, true);
     }
+    onNewsDiagnostics?.(cached.newsDiagnostics ?? emptyNewsDiagnostics());
     return buildSearchResult(normalizedTerm, cached, true);
   }
 
@@ -404,15 +460,17 @@ export async function searchFoodRecalls(
     let recalls: FoodRecall[];
     let recentNews: RecallNewsArticle[] = [];
     let newsUnavailable = true;
+    let newsDiagnostics = emptyNewsDiagnostics();
     let fdaUnavailable: boolean | undefined;
 
     const [fdaResult, newsResult] = await Promise.allSettled([
       searchFdaRecalls(normalizedTerm, options),
-      searchRecentRecallNews(normalizedTerm),
+      searchRecentRecallNews(normalizedTerm, onNewsDiagnostics),
     ]);
     if (newsResult.status === 'fulfilled') {
       recentNews = newsResult.value.articles;
       newsUnavailable = newsResult.value.unavailable;
+      newsDiagnostics = newsResult.value.diagnostics;
     }
 
     if (fdaResult.status === 'rejected') {
@@ -431,6 +489,7 @@ export async function searchFoodRecalls(
       recalls,
       recentNews,
       newsUnavailable,
+      newsDiagnostics,
       newsCheckedAt: new Date().toISOString(),
       newsQueryVersion: RECALL_NEWS_QUERY_CACHE_VERSION,
       lastUpdated: new Date().toISOString(),

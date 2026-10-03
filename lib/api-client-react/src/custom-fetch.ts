@@ -1,5 +1,13 @@
+export interface RecallNewsTransportDiagnostics {
+  url: string;
+  status: number | null;
+  rawArticleCount: number | null;
+  error: string | null;
+}
+
 export type CustomFetchOptions = RequestInit & {
   responseType?: "json" | "text" | "blob" | "auto";
+  onRecallNewsDiagnostics?: (diagnostics: RecallNewsTransportDiagnostics) => void;
 };
 
 export type ErrorType<T = unknown> = ApiError<T>;
@@ -340,9 +348,35 @@ export async function customFetch<T = unknown>(
   input = applyBaseUrl(input);
   const resolvedUrlBeforeAuth = resolveUrl(input);
   const isRecallNews = isRecallNewsRequest(resolvedUrlBeforeAuth);
-  const { responseType = "auto", headers: headersInit, ...init } = options;
+  const {
+    responseType = "auto",
+    headers: headersInit,
+    onRecallNewsDiagnostics,
+    ...init
+  } = options;
 
   const method = resolveMethod(input, init.method);
+  let newsDiagnostics: RecallNewsTransportDiagnostics | null = isRecallNews
+    ? {
+        url: resolvedUrlBeforeAuth,
+        status: null,
+        rawArticleCount: null,
+        error: null,
+      }
+    : null;
+  const publishNewsDiagnostics = (
+    patch: Partial<Omit<RecallNewsTransportDiagnostics, "url">> = {},
+  ) => {
+    if (!newsDiagnostics || !onRecallNewsDiagnostics) return;
+    newsDiagnostics = { ...newsDiagnostics, ...patch };
+    try {
+      onRecallNewsDiagnostics({ ...newsDiagnostics });
+    } catch {
+      // Diagnostics must never prevent the request from completing.
+    }
+  };
+
+  publishNewsDiagnostics();
   if (isRecallNews) {
     const debugComparisonUrl = resolvedUrlBeforeAuth.replace(
       /\/api\/recalls\/news(?=\?|$)/,
@@ -381,7 +415,15 @@ export async function customFetch<T = unknown>(
         url: resolvedUrlBeforeAuth,
       });
     }
-    const token = await _authTokenGetter();
+    let token: string | null;
+    try {
+      token = await _authTokenGetter();
+    } catch (error) {
+      publishNewsDiagnostics({
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
     if (isRecallNews) {
       console.log("[RecallNews] auth token lookup completed", {
         url: resolvedUrlBeforeAuth,
@@ -403,6 +445,9 @@ export async function customFetch<T = unknown>(
   try {
     response = await fetch(input, { ...init, method, headers });
   } catch (error) {
+    publishNewsDiagnostics({
+      error: error instanceof Error ? error.message : String(error),
+    });
     if (isRecallNews) {
       console.log("[RecallNews] fetch rejected", {
         url: requestInfo.url,
@@ -412,6 +457,7 @@ export async function customFetch<T = unknown>(
     throw error;
   }
 
+  publishNewsDiagnostics({ status: response.status });
   if (isRecallNews) {
     console.log("[RecallNews] fetch resolved", {
       url: requestInfo.url,
@@ -423,6 +469,9 @@ export async function customFetch<T = unknown>(
 
   if (!response.ok) {
     const errorData = await parseErrorBody(response, method);
+    publishNewsDiagnostics({
+      error: buildErrorMessage(response, errorData),
+    });
     if (isRecallNews) {
       console.log("[RecallNews] error response parsed", {
         url: requestInfo.url,
@@ -437,6 +486,9 @@ export async function customFetch<T = unknown>(
   try {
     data = await parseSuccessBody(response, responseType, requestInfo);
   } catch (error) {
+    publishNewsDiagnostics({
+      error: error instanceof Error ? error.message : String(error),
+    });
     if (isRecallNews) {
       console.log("[RecallNews] response parsing failed", {
         url: requestInfo.url,
@@ -446,6 +498,11 @@ export async function customFetch<T = unknown>(
     }
     throw error;
   }
+  publishNewsDiagnostics({
+    status: response.status,
+    rawArticleCount: getRecallNewsArticleCount(data),
+    error: null,
+  });
   if (isRecallNews) {
     console.log("[RecallNews] API response parsed", {
       url: requestInfo.url,

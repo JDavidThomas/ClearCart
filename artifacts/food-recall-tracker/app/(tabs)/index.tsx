@@ -23,6 +23,7 @@ import { ProduceRecallVerdict } from '@/components/ProduceRecallVerdict';
 import { RecallCard } from '@/components/RecallCard';
 import { RecallRelevanceNotice } from '@/components/RecallRelevanceNotice';
 import { RecentNewsSection } from '@/components/RecentNewsSection';
+import { RecallNewsDebug } from '@/components/RecallNewsDebug';
 import {
   RecallResultPanels,
   RecallResultTabBar,
@@ -32,9 +33,17 @@ import {
 import { useColors } from '@/hooks/useColors';
 import { searchFoodRecalls } from '@/services/recallApi';
 import { shouldRefetchNewsOnTab } from '@/services/recallTabNavigation';
-import type { RecallSearchResult } from '@/types/recall';
+import type { RecallNewsDiagnostics, RecallSearchResult } from '@/types/recall';
 
 const FSIS_RECALLS_URL = 'https://www.fsis.usda.gov/recalls';
+
+const EMPTY_NEWS_DIAGNOSTICS: RecallNewsDiagnostics = {
+  requestUrl: null,
+  httpStatus: null,
+  rawArticleCount: null,
+  filteredArticleCount: null,
+  error: null,
+};
 
 function formatUpdatedAt(date: string) {
   const parsedDate = new Date(date);
@@ -54,6 +63,8 @@ export default function HomeScreen() {
   const [term, setTerm] = useState<string>('');
   const [submittedTerm, setSubmittedTerm] = useState<string>('');
   const [activeResultTab, setActiveResultTab] = useState<RecallResultTab>('fda');
+  const [newsDiagnostics, setNewsDiagnostics] =
+    useState<RecallNewsDiagnostics>(EMPTY_NEWS_DIAGNOSTICS);
   const swipeHandlers = useRecallResultSwipe(activeResultTab, setActiveResultTab);
   const topPadding = Platform.OS === 'web' ? Math.max(insets.top, 67) : insets.top;
 
@@ -61,7 +72,7 @@ export default function HomeScreen() {
     queryKey: ['food-recalls', submittedTerm],
     queryFn: () => {
       console.log(`[RecallNews] React Query queryFn entered term=${submittedTerm}`);
-      return searchFoodRecalls(submittedTerm);
+      return searchFoodRecalls(submittedTerm, {}, setNewsDiagnostics);
     },
     enabled: submittedTerm.length > 0,
     staleTime: 5 * 60 * 1000,
@@ -87,6 +98,7 @@ export default function HomeScreen() {
     });
     await Haptics.selectionAsync();
     setActiveResultTab('fda');
+    setNewsDiagnostics(EMPTY_NEWS_DIAGNOSTICS);
     if (nextTerm === submittedTerm) {
       await refetch();
       return;
@@ -238,6 +250,10 @@ export default function HomeScreen() {
                 <Feather name="chevron-right" size={18} color={colors.primary} />
               </Pressable>
             </View>
+
+            {submittedTerm.length > 0 ? (
+              <RecallNewsDebug diagnostics={newsDiagnostics} />
+            ) : null}
 
             {submittedTerm.length > 0 && data && !isFetching && !isError ? (
               <>
