@@ -14,18 +14,21 @@ test('news transport diagnostics report the exact URL, successful status, and ra
     rawArticleCount: number | null;
     error: string | null;
   }> = [];
+  let requestCache: RequestCache | undefined;
   const requestUrl =
     'https://news.example/api/recalls/news?term=Sierra+Nevada+Graziers';
 
   setBaseUrl('https://news.example');
-  globalThis.fetch = async () =>
-    new Response(
+  globalThis.fetch = async (_input, init) => {
+    requestCache = init?.cache;
+    return new Response(
       JSON.stringify({
         articles: [{ title: 'One' }, { title: 'Two' }],
         unavailable: false,
       }),
       { status: 200, headers: { 'content-type': 'application/json' } },
     );
+  };
 
   try {
     const response = await customFetch<{ articles: unknown[] }>(
@@ -41,6 +44,7 @@ test('news transport diagnostics report the exact URL, successful status, and ra
       rawArticleCount: 2,
       error: null,
     });
+    assert.equal(requestCache, 'no-store');
   } finally {
     globalThis.fetch = originalFetch;
     setBaseUrl(null);

@@ -461,7 +461,12 @@ export async function customFetch<T = unknown>(
 
   let response: Response;
   try {
-    response = await fetch(input, { ...init, method, headers });
+    response = await fetch(input, {
+      ...init,
+      method,
+      headers,
+      ...(isRecallNews ? { cache: "no-store" } : {}),
+    });
   } catch (error) {
     publishNewsDiagnostics({
       error: error instanceof Error ? error.message : String(error),
@@ -482,6 +487,13 @@ export async function customFetch<T = unknown>(
       status: response.status,
       statusText: response.statusText,
       ok: response.ok,
+      responseHeaders: {
+        contentType: response.headers.get("content-type"),
+        cacheControl: response.headers.get("cache-control"),
+        age: response.headers.get("age"),
+        date: response.headers.get("date"),
+        via: response.headers.get("via"),
+      },
     });
   }
 
@@ -526,6 +538,8 @@ export async function customFetch<T = unknown>(
       url: requestInfo.url,
       status: response.status,
       rawArticleCount: getRecallNewsArticleCount(data),
+      responseFields:
+        data && typeof data === "object" ? Object.keys(data) : [],
     });
   }
   return data as T;
