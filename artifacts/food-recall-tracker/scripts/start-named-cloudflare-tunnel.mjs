@@ -10,9 +10,11 @@ const {
   EXPO_PACKAGER_PROXY_URL: proxyUrl,
   EXPO_TUNNEL_HOSTNAME: hostname,
   PORT: rawPort,
+  API_PORT: rawApiPort = "8080",
 } = process.env;
 
 const port = Number(rawPort);
+const apiPort = Number(rawApiPort);
 
 for (const [name, value] of Object.entries({
   CLOUDFLARE_ACCOUNT_ID: accountId,
@@ -27,6 +29,9 @@ for (const [name, value] of Object.entries({
 
 if (!Number.isInteger(port) || port < 1 || port > 65535) {
   throw new Error("PORT must be a valid TCP port.");
+}
+if (!Number.isInteger(apiPort) || apiPort < 1 || apiPort > 65535) {
+  throw new Error("API_PORT must be a valid TCP port.");
 }
 
 const parsedProxyUrl = new URL(proxyUrl);
@@ -62,6 +67,12 @@ const tunnelPath = `/accounts/${accountId}/cfd_tunnel/${tunnelId}`;
 await cloudflareRequest("PUT", `${tunnelPath}/configurations`, {
   config: {
     ingress: [
+      {
+        hostname,
+        path: "^/api(/.*)?$",
+        service: `http://127.0.0.1:${apiPort}`,
+        originRequest: {},
+      },
       {
         hostname,
         service: `http://127.0.0.1:${port}`,
