@@ -21,3 +21,12 @@ timeoutMs = 20000
 
 [nix]
 channel = "stable-25_05"
+packages = ["cloudflared"]
+
+[userenv]
+
+[userenv.development]
+CLOUDFLARE_ACCOUNT_ID = "c70a168a85cea0244952f3742a38a42f"
+CLOUDFLARE_TUNNEL_ID = "d9c46cb7-7c48-41cb-a0c1-6f73a6d83c00"
+EXPO_PACKAGER_PROXY_URL = "https://expo.clearcart.net"
+EXPO_TUNNEL_HOSTNAME = "expo.clearcart.net"
