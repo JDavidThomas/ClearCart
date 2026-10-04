@@ -1,8 +1,8 @@
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
 import { Feather } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useFocusEffect, useIsFocused, useRouter } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Linking,
@@ -44,6 +44,7 @@ type VerdictKind = 'safe' | 'recalled' | 'not-found';
 type RecallCheckStatus = 'checking' | 'available' | 'unavailable';
 
 interface ScanVerdict {
+  attemptId: number;
   kind: VerdictKind;
   barcode: string;
   product?: OpenFoodFactsProduct;
@@ -62,14 +63,45 @@ function triggerScanSuccessHaptic() {
 export default function ScanScreen() {
   const colors = useColors();
   const router = useRouter();
+  const isFocused = useIsFocused();
   const insets = useSafeAreaInsets();
   const [permission, requestPermission] = useCameraPermissions();
-  const [scanState, setScanState] = useState<ScanState>('ready');
+  const [scanState, setScanState] = useState<ScanState>('checking');
+  const [scanAttemptId, setScanAttemptId] = useState(0);
   const [cameraReady, setCameraReady] = useState(false);
   const [verdict, setVerdict] = useState<ScanVerdict | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const scanAttemptCounter = useRef(0);
+  const cameraReadyAtRef = useRef<number | null>(null);
   const scanLocked = useRef(false);
   const topPadding = Platform.OS === 'web' ? Math.max(insets.top, 67) : insets.top;
+
+  const startNewScanAttempt = useCallback(() => {
+    const attemptId = scanAttemptCounter.current + 1;
+    scanAttemptCounter.current = attemptId;
+    scanLocked.current = false;
+    cameraReadyAtRef.current = null;
+    setScanAttemptId(attemptId);
+    setCameraReady(false);
+    setScanState('ready');
+    setVerdict(null);
+    setErrorMessage(null);
+    console.info('[Barcode] Scan attempt started', { attemptId });
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      startNewScanAttempt();
+      return () => {
+        const endedAttemptId = scanAttemptCounter.current;
+        scanAttemptCounter.current = endedAttemptId + 1;
+        scanLocked.current = false;
+        cameraReadyAtRef.current = null;
+        setCameraReady(false);
+        console.info('[Barcode] Scan attempt left', { attemptId: endedAttemptId });
+      };
+    }, [startNewScanAttempt]),
+  );
 
   useEffect(() => {
     if (!permission) return;
@@ -81,73 +113,116 @@ export default function ScanScreen() {
   }, [permission?.granted, permission?.status, permission?.canAskAgain]);
 
   useEffect(() => {
-    if (!permission?.granted || scanState !== 'ready') return;
+    if (!isFocused || !permission?.granted || scanState !== 'ready') return;
     console.info('[Barcode] Camera view mounted; waiting for barcode', {
-      barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e'],
+      attemptId: scanAttemptId,
+      barcodeTypes: ['upc_a', 'upc_e', 'ean13', 'ean8'],
     });
-  }, [permission?.granted, scanState]);
+  }, [isFocused, permission?.granted, scanAttemptId, scanState]);
 
   useEffect(() => {
-    if (!permission?.granted || scanState !== 'ready' || !cameraReady) return;
+    if (!isFocused || !permission?.granted || scanState !== 'ready' || !cameraReady) return;
     const timeout = setTimeout(() => {
       console.warn('[Barcode] No barcode detected after waiting', {
+        attemptId: scanAttemptId,
         waitMs: 10_000,
-        barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e'],
+        barcodeTypes: ['upc_a', 'upc_e', 'ean13', 'ean8'],
       });
     }, 10_000);
     return () => clearTimeout(timeout);
-  }, [cameraReady, permission?.granted, scanState]);
+  }, [cameraReady, isFocused, permission?.granted, scanAttemptId, scanState]);
 
   useEffect(() => {
-    if (scanState !== 'verdict' || !verdict) return;
+    if (
+      !isFocused ||
+      scanState !== 'verdict' ||
+      !verdict ||
+      verdict.attemptId !== scanAttemptId ||
+      verdict.attemptId !== scanAttemptCounter.current
+    ) {
+      return;
+    }
     console.info('[Barcode] Result displayed', {
+      attemptId: verdict.attemptId,
       barcode: verdict.barcode,
       productName: verdict.product?.name ?? null,
       recallCheckStatus: verdict.recallCheckStatus ?? 'available',
       result: verdict.kind,
     });
-  }, [scanState, verdict]);
+  }, [isFocused, scanAttemptId, scanState, verdict]);
 
-  const resetScan = () => {
-    scanLocked.current = false;
-    setCameraReady(false);
-    setScanState('ready');
-    setVerdict(null);
-    setErrorMessage(null);
-  };
+  const resetScan = startNewScanAttempt;
 
-  const handleBarcodeScanned = async ({ data, type }: BarcodeScanningResult) => {
+  const handleBarcodeScanned = async (result: BarcodeScanningResult) => {
+    const { data, raw, type } = result;
+    const cameraReadyAt = cameraReadyAtRef.current;
     console.info('[Barcode] Barcode detection callback', {
+      attemptId: scanAttemptId,
       rawBarcode: data,
+      rawPayload: raw ?? null,
       format: type,
+      elapsedSinceCameraReadyMs:
+        cameraReadyAt === null ? null : Date.now() - cameraReadyAt,
     });
+    if (scanAttemptId !== scanAttemptCounter.current) {
+      console.info('[Barcode] Detection from inactive scan attempt ignored', {
+        eventAttemptId: scanAttemptId,
+        activeAttemptId: scanAttemptCounter.current,
+        rawBarcode: data,
+        format: type,
+      });
+      return;
+    }
     if (typeof data !== 'string' || !data.trim()) {
       console.error('[Barcode] Empty barcode detected', {
+        attemptId: scanAttemptId,
         rawBarcode: data,
+        rawPayload: raw ?? null,
         format: type,
       });
       return;
     }
     if (scanLocked.current) {
       console.info('[Barcode] Duplicate barcode detection ignored', {
+        attemptId: scanAttemptId,
         rawBarcode: data,
+        rawPayload: raw ?? null,
         format: type,
       });
       return;
     }
     scanLocked.current = true;
     const barcode = data.trim();
-    console.info('[Barcode] Barcode detected', { rawBarcode: data, barcode, format: type });
+    console.info('[Barcode] Barcode detected', {
+      attemptId: scanAttemptId,
+      rawBarcode: data,
+      rawPayload: raw ?? null,
+      barcode,
+      format: type,
+    });
     triggerScanSuccessHaptic();
     setCameraReady(false);
     setScanState('checking');
+    setVerdict(null);
     setErrorMessage(null);
 
     try {
       const lookupStartedAt = Date.now();
-      console.info('[Barcode] Open Food Facts lookup started', { barcode });
+      console.info('[Barcode] Open Food Facts lookup started', {
+        attemptId: scanAttemptId,
+        barcode,
+      });
       const product = await lookupOpenFoodFactsProduct(barcode);
+      if (scanAttemptId !== scanAttemptCounter.current) {
+        console.info('[Barcode] Stale product lookup result ignored', {
+          attemptId: scanAttemptId,
+          activeAttemptId: scanAttemptCounter.current,
+          barcode,
+        });
+        return;
+      }
       console.info('[Barcode] Open Food Facts lookup completed', {
+        attemptId: scanAttemptId,
         barcode,
         found: Boolean(product),
         elapsedMs: Date.now() - lookupStartedAt,
@@ -158,18 +233,20 @@ export default function ScanScreen() {
       });
       if (!product) {
         console.info('[Barcode] Result displayed', {
+          attemptId: scanAttemptId,
           barcode,
           productName: null,
           recallCheckStatus: 'not-run',
           result: 'not-found',
         });
-        setVerdict({ kind: 'not-found', barcode });
+        setVerdict({ attemptId: scanAttemptId, kind: 'not-found', barcode });
         triggerScanSuccessHaptic();
         setScanState('verdict');
         return;
       }
 
       setVerdict({
+        attemptId: scanAttemptId,
         kind: 'safe',
         barcode,
         product,
@@ -179,13 +256,23 @@ export default function ScanScreen() {
 
       try {
         console.info('[Barcode] FDA search started', {
+          attemptId: scanAttemptId,
           barcode,
           productName: product.name,
           brand: product.brand,
         });
         const recallStartedAt = Date.now();
         const recallResult = await searchFoodRecalls(product.name, { brand: product.brand });
+        if (scanAttemptId !== scanAttemptCounter.current) {
+          console.info('[Barcode] Stale FDA lookup result ignored', {
+            attemptId: scanAttemptId,
+            activeAttemptId: scanAttemptCounter.current,
+            barcode,
+          });
+          return;
+        }
         console.info('[Barcode] FDA search completed', {
+          attemptId: scanAttemptId,
           barcode,
           productName: product.name,
           recallCount: recallResult.recalls.length,
@@ -193,6 +280,7 @@ export default function ScanScreen() {
           fromCache: recallResult.fromCache,
         });
         setVerdict({
+          attemptId: scanAttemptId,
           kind: recallResult.recalls.length > 0 ? 'recalled' : 'safe',
           barcode,
           product,
@@ -200,13 +288,23 @@ export default function ScanScreen() {
           recallCheckStatus: 'available',
         });
       } catch (error) {
+        if (scanAttemptId !== scanAttemptCounter.current) {
+          console.info('[Barcode] Stale FDA lookup error ignored', {
+            attemptId: scanAttemptId,
+            activeAttemptId: scanAttemptCounter.current,
+            barcode,
+          });
+          return;
+        }
         console.info('[Barcode] FDA recall lookup failed', {
+          attemptId: scanAttemptId,
           barcode,
           productName: product.name,
           brand: product.brand,
           error: error instanceof Error ? error.message : String(error),
         });
         setVerdict({
+          attemptId: scanAttemptId,
           kind: 'safe',
           barcode,
           product,
@@ -215,12 +313,22 @@ export default function ScanScreen() {
       }
       triggerScanSuccessHaptic();
     } catch (error) {
+      if (scanAttemptId !== scanAttemptCounter.current) {
+        console.info('[Barcode] Stale scan error ignored', {
+          attemptId: scanAttemptId,
+          activeAttemptId: scanAttemptCounter.current,
+          barcode,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return;
+      }
       setErrorMessage(
         error instanceof Error
           ? error.message
           : 'We could not look up this barcode. Please try again.',
       );
       console.error('[Barcode] Scan flow failed', {
+        attemptId: scanAttemptId,
         barcode,
         stage: 'Open Food Facts lookup',
         error: error instanceof Error ? error.message : String(error),
@@ -314,18 +422,37 @@ export default function ScanScreen() {
           Hold the barcode inside the frame. We’ll check Open Food Facts, then search active FDA recalls.
         </Text>
 
-        {scanState === 'ready' ? (
+        {scanState === 'ready' && isFocused ? (
           <View style={styles.cameraShell}>
             <CameraView
+              key={scanAttemptId}
               barcodeScannerSettings={{
-                barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e'],
+                barcodeTypes: ['upc_a', 'upc_e', 'ean13', 'ean8'],
               }}
+              autofocus="on"
               facing="back"
               onCameraReady={() => {
+                if (scanAttemptId !== scanAttemptCounter.current) {
+                  console.info('[Barcode] Camera ready event from inactive attempt ignored', {
+                    eventAttemptId: scanAttemptId,
+                    activeAttemptId: scanAttemptCounter.current,
+                  });
+                  return;
+                }
+                const cameraReadyAt = Date.now();
+                cameraReadyAtRef.current = cameraReadyAt;
                 setCameraReady(true);
                 console.info('[Barcode] Camera opened; barcode scanning started', {
+                  attemptId: scanAttemptId,
+                  cameraReadyAt,
                   scannerEnabled: true,
-                  barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e'],
+                  barcodeTypes: ['upc_a', 'upc_e', 'ean13', 'ean8'],
+                });
+              }}
+              onMountError={({ message }) => {
+                console.error('[Barcode] Camera mount failed', {
+                  attemptId: scanAttemptId,
+                  error: message,
                 });
               }}
               onBarcodeScanned={handleBarcodeScanned}
@@ -353,7 +480,9 @@ export default function ScanScreen() {
             message={errorMessage ?? 'We could not look up this barcode. Please try again.'}
             onRetry={resetScan}
           />
-        ) : verdict ? (
+        ) : verdict &&
+          verdict.attemptId === scanAttemptId &&
+          verdict.attemptId === scanAttemptCounter.current ? (
           <VerdictView verdict={verdict} colors={colors} onScanAgain={resetScan} />
         ) : null}
 
