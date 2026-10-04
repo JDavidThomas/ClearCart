@@ -23,7 +23,7 @@ export default function AboutScreen() {
       <View style={[styles.iconCircle, { backgroundColor: colors.successSoft }]}>
         <Feather name="shield" size={28} color={colors.success} />
       </View>
-      <Text style={[styles.title, { color: colors.foreground }]}>About Food Recall Tracker</Text>
+      <Text style={[styles.title, { color: colors.foreground }]}>About ClearCart</Text>
       <Text style={[styles.body, { color: colors.mutedForeground }]}>
         Search public recall records before you buy, cook, or serve packaged food.
       </Text>

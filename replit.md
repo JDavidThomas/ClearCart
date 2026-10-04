@@ -1,4 +1,4 @@
-# Food Recall Tracker
+# ClearCart
 
 A cross-platform Expo app for searching current food recall records before buying, cooking, or serving packaged food.
 

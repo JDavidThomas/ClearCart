@@ -1,6 +1,6 @@
 kind = "mobile"
 previewPath = "/food-recall-tracker/"
-title = "Food Recall Tracker"
+title = "ClearCart"
 description = "A cross-platform Expo app that helps shoppers search live government food recall data, understand recall details, and verify products with clear safety guidance."
 version = "1.0.0"
 id = "artifacts/food-recall-tracker"

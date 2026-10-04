@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Food Recall Tracker",
-    "slug": "food-recall-tracker",
+    "name": "ClearCart",
+    "slug": "clearcart",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -19,20 +19,20 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Food Recall Tracker uses your camera to scan product barcodes."
+          "cameraPermission": "ClearCart uses your camera to scan product barcodes."
         }
       ],
       [
         "expo-image-picker",
         {
-          "cameraPermission": "Food Recall Tracker uses your camera to identify food products.",
-          "photosPermission": "Food Recall Tracker uses your photos to identify food products."
+          "cameraPermission": "ClearCart uses your camera to identify food products.",
+          "photosPermission": "ClearCart uses your photos to identify food products."
         }
       ],
       [
         "expo-local-authentication",
         {
-          "faceIDPermission": "Food Recall Tracker uses Face ID to sign you in securely."
+          "faceIDPermission": "ClearCart uses Face ID to sign you in securely."
         }
       ]
     ],

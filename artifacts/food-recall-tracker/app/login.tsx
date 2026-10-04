@@ -77,7 +77,7 @@ export default function LoginScreen() {
     setBiometricBusy(true);
     setBiometricPromptVisible(true);
     try {
-      const result = await authenticateWithBiometrics('Sign in to Food Recall Tracker');
+      const result = await authenticateWithBiometrics('Sign in to ClearCart');
       if (!result.success) {
         if (!isBiometricCancellation(result.error)) {
           setError('Biometric authentication failed. Please log in with your password.');

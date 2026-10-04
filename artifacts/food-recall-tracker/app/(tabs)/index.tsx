@@ -143,7 +143,7 @@ export default function HomeScreen() {
               <View style={[styles.brandMark, { backgroundColor: colors.primary }]}>
                 <Feather name="shield" size={16} color={colors.primaryForeground} />
               </View>
-              <Text style={[styles.eyebrow, { color: colors.primary }]}>FOOD SAFETY CHECK</Text>
+              <Text style={[styles.eyebrow, { color: colors.primary }]}>CLEARCART</Text>
             </View>
             <Text style={[styles.title, { color: colors.foreground }]}>Check a product before you eat it.</Text>
             <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
