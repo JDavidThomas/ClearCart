@@ -11,10 +11,11 @@ import {
   shouldRefreshRecallNews,
 } from '../services/recallCache.ts';
 
-test('recall news cache versions invalidate older empty news searches once', () => {
+test('recall news cache versions invalidate older results so news is refreshed', () => {
   assert.equal(isRecallNewsQueryCacheCurrent(undefined), false);
   assert.equal(isRecallNewsQueryCacheCurrent(1), false);
   assert.equal(isRecallNewsQueryCacheCurrent(2), false);
+  assert.equal(isRecallNewsQueryCacheCurrent(3), false);
   assert.equal(isRecallNewsQueryCacheCurrent(RECALL_NEWS_QUERY_CACHE_VERSION), true);
 });
 
