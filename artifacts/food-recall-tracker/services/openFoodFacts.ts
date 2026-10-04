@@ -9,16 +9,12 @@ const OPEN_FOOD_FACTS_PRODUCT_URL = 'https://world.openfoodfacts.org/api/v2/prod
 const OPEN_FOOD_FACTS_SEARCH_URL = 'https://world.openfoodfacts.org/cgi/search.pl';
 const CACHE_PREFIX = '@food-recall-tracker/open-food-facts/';
 const OPEN_FOOD_FACTS_USER_AGENT = 'Safe Cart/1.0 (contact@safecart.app)';
+const OPEN_FOOD_FACTS_RESPONSE_LOG_LIMIT = 4_000;
 const OPEN_FOOD_FACTS_HEADERS = {
   'User-Agent': OPEN_FOOD_FACTS_USER_AGENT,
   'X-User-Agent': OPEN_FOOD_FACTS_USER_AGENT,
   Accept: 'application/json',
 };
-
-interface OpenFoodFactsPayload {
-  status?: number;
-  product?: Record<string, unknown>;
-}
 
 interface OpenFoodFactsSearchPayload {
   products?: Record<string, unknown>[];
@@ -125,13 +121,113 @@ function parseProduct(product: Record<string, unknown>, fallbackBarcode: string)
   } satisfies OpenFoodFactsProduct;
 }
 
+export function buildOpenFoodFactsBarcodeUrl(barcode: string) {
+  return `${OPEN_FOOD_FACTS_PRODUCT_URL}${encodeURIComponent(barcode.trim())}.json`;
+}
+
+export function parseOpenFoodFactsBarcodeResponse(
+  httpStatus: number,
+  responseBody: string,
+  barcode: string,
+): OpenFoodFactsProduct | null {
+  let payload: unknown;
+  try {
+    payload = JSON.parse(responseBody);
+  } catch {
+    throw new Error(`Open Food Facts returned invalid JSON (HTTP ${httpStatus}).`);
+  }
+
+  if (!isRecord(payload)) {
+    throw new Error(`Open Food Facts returned an unexpected response (HTTP ${httpStatus}).`);
+  }
+
+  const isSuccessfulHttpStatus = httpStatus >= 200 && httpStatus < 300;
+  if (
+    payload.status === 0 &&
+    (httpStatus === 404 || isSuccessfulHttpStatus)
+  ) {
+    return null;
+  }
+
+  if (!isSuccessfulHttpStatus) {
+    throw new Error('The product database is unavailable right now.');
+  }
+  if (payload.status !== 1 || !isRecord(payload.product)) {
+    throw new Error('Open Food Facts returned an unexpected product response.');
+  }
+
+  const product = parseProduct(payload.product, barcode);
+  if (!product) {
+    throw new Error('Open Food Facts returned a product record without a usable name.');
+  }
+  return product;
+}
+
 async function fetchProductByBarcode(barcode: string) {
-  const response = await fetch(`${OPEN_FOOD_FACTS_PRODUCT_URL}${encodeURIComponent(barcode)}.json`, {
-    headers: OPEN_FOOD_FACTS_HEADERS,
+  const url = buildOpenFoodFactsBarcodeUrl(barcode);
+  console.info('[OpenFoodFacts] Barcode request started', { barcode, url });
+
+  let response: Response;
+  try {
+    response = await fetch(url, { headers: OPEN_FOOD_FACTS_HEADERS });
+  } catch (error) {
+    console.error('[OpenFoodFacts] Barcode network request failed', {
+      barcode,
+      url,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw new Error('The product database is unavailable right now.');
+  }
+
+  let responseBody: string;
+  try {
+    responseBody = await response.text();
+  } catch (error) {
+    console.error('[OpenFoodFacts] Barcode response body read failed', {
+      barcode,
+      url,
+      httpStatus: response.status,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw new Error('The product database response could not be read.');
+  }
+
+  const isDevelopment = typeof __DEV__ !== 'undefined' && __DEV__;
+  const responseBodyForLog = isDevelopment
+    ? responseBody.slice(0, OPEN_FOOD_FACTS_RESPONSE_LOG_LIMIT)
+    : undefined;
+  const responseBodyTruncated =
+    isDevelopment && responseBody.length > OPEN_FOOD_FACTS_RESPONSE_LOG_LIMIT;
+  console.info('[OpenFoodFacts] Barcode HTTP response', {
+    barcode,
+    url,
+    httpStatus: response.status,
+    ok: response.ok,
+    contentType: response.headers.get('content-type'),
+    responseBody: responseBodyForLog,
+    responseBodyLength: responseBody.length,
+    responseBodyTruncated,
   });
-  if (!response.ok) throw new Error('The product database is unavailable right now.');
-  const payload = (await response.json()) as OpenFoodFactsPayload;
-  return payload.status === 1 && payload.product ? parseProduct(payload.product, barcode) : null;
+
+  try {
+    const product = parseOpenFoodFactsBarcodeResponse(response.status, responseBody, barcode);
+    console.info('[OpenFoodFacts] Barcode response parsed', {
+      barcode,
+      url,
+      httpStatus: response.status,
+      found: Boolean(product),
+      productName: product?.name ?? null,
+    });
+    return product;
+  } catch (error) {
+    console.error('[OpenFoodFacts] Barcode response parse failed', {
+      barcode,
+      url,
+      httpStatus: response.status,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
 }
 
 async function fetchProductsBySearchTerm(name: string) {
@@ -181,10 +277,22 @@ function selectClosestProduct(products: OpenFoodFactsProduct[], targetName: stri
 
 export async function lookupOpenFoodFactsProduct(barcode: string): Promise<OpenFoodFactsProduct | null> {
   const normalizedBarcode = barcode.trim();
-  if (!normalizedBarcode) return null;
+  if (!normalizedBarcode) {
+    console.error('[OpenFoodFacts] Barcode lookup skipped because the barcode is empty', {
+      rawBarcode: barcode,
+    });
+    return null;
+  }
   const key = cacheKey('barcode', normalizedBarcode);
   const cached = await readCachedProduct(key);
-  if (cached.hit) return cached.product;
+  if (cached.hit) {
+    console.info('[OpenFoodFacts] Barcode cache hit', {
+      barcode: normalizedBarcode,
+      found: Boolean(cached.product),
+    });
+    return cached.product;
+  }
+  console.info('[OpenFoodFacts] Barcode cache miss', { barcode: normalizedBarcode });
   const product = await fetchProductByBarcode(normalizedBarcode);
   await saveCachedProduct(key, product);
   return product;

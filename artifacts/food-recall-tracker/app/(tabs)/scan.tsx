@@ -51,12 +51,21 @@ interface ScanVerdict {
   recallCheckStatus?: RecallCheckStatus;
 }
 
+function triggerScanSuccessHaptic() {
+  void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch((error) => {
+    console.warn('[Barcode] Haptic feedback failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  });
+}
+
 export default function ScanScreen() {
   const colors = useColors();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanState, setScanState] = useState<ScanState>('ready');
+  const [cameraReady, setCameraReady] = useState(false);
   const [verdict, setVerdict] = useState<ScanVerdict | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const scanLocked = useRef(false);
@@ -72,6 +81,24 @@ export default function ScanScreen() {
   }, [permission?.granted, permission?.status, permission?.canAskAgain]);
 
   useEffect(() => {
+    if (!permission?.granted || scanState !== 'ready') return;
+    console.info('[Barcode] Camera view mounted; waiting for barcode', {
+      barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e'],
+    });
+  }, [permission?.granted, scanState]);
+
+  useEffect(() => {
+    if (!permission?.granted || scanState !== 'ready' || !cameraReady) return;
+    const timeout = setTimeout(() => {
+      console.warn('[Barcode] No barcode detected after waiting', {
+        waitMs: 10_000,
+        barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e'],
+      });
+    }, 10_000);
+    return () => clearTimeout(timeout);
+  }, [cameraReady, permission?.granted, scanState]);
+
+  useEffect(() => {
     if (scanState !== 'verdict' || !verdict) return;
     console.info('[Barcode] Result displayed', {
       barcode: verdict.barcode,
@@ -83,25 +110,45 @@ export default function ScanScreen() {
 
   const resetScan = () => {
     scanLocked.current = false;
+    setCameraReady(false);
     setScanState('ready');
     setVerdict(null);
     setErrorMessage(null);
   };
 
   const handleBarcodeScanned = async ({ data, type }: BarcodeScanningResult) => {
-    if (!data || scanLocked.current) return;
+    console.info('[Barcode] Barcode detection callback', {
+      rawBarcode: data,
+      format: type,
+    });
+    if (typeof data !== 'string' || !data.trim()) {
+      console.error('[Barcode] Empty barcode detected', {
+        rawBarcode: data,
+        format: type,
+      });
+      return;
+    }
+    if (scanLocked.current) {
+      console.info('[Barcode] Duplicate barcode detection ignored', {
+        rawBarcode: data,
+        format: type,
+      });
+      return;
+    }
     scanLocked.current = true;
-    console.info('[Barcode] Barcode detected', { barcode: data, format: type });
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    const barcode = data.trim();
+    console.info('[Barcode] Barcode detected', { rawBarcode: data, barcode, format: type });
+    triggerScanSuccessHaptic();
+    setCameraReady(false);
     setScanState('checking');
     setErrorMessage(null);
 
     try {
       const lookupStartedAt = Date.now();
-      console.info('[Barcode] Open Food Facts lookup started', { barcode: data });
-      const product = await lookupOpenFoodFactsProduct(data);
+      console.info('[Barcode] Open Food Facts lookup started', { barcode });
+      const product = await lookupOpenFoodFactsProduct(barcode);
       console.info('[Barcode] Open Food Facts lookup completed', {
-        barcode: data,
+        barcode,
         found: Boolean(product),
         elapsedMs: Date.now() - lookupStartedAt,
         productName: product?.name ?? null,
@@ -111,20 +158,20 @@ export default function ScanScreen() {
       });
       if (!product) {
         console.info('[Barcode] Result displayed', {
-          barcode: data,
+          barcode,
           productName: null,
           recallCheckStatus: 'not-run',
           result: 'not-found',
         });
-        setVerdict({ kind: 'not-found', barcode: data });
-        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setVerdict({ kind: 'not-found', barcode });
+        triggerScanSuccessHaptic();
         setScanState('verdict');
         return;
       }
 
       setVerdict({
         kind: 'safe',
-        barcode: data,
+        barcode,
         product,
         recallCheckStatus: 'checking',
       });
@@ -132,14 +179,14 @@ export default function ScanScreen() {
 
       try {
         console.info('[Barcode] FDA search started', {
-          barcode: data,
+          barcode,
           productName: product.name,
           brand: product.brand,
         });
         const recallStartedAt = Date.now();
         const recallResult = await searchFoodRecalls(product.name, { brand: product.brand });
         console.info('[Barcode] FDA search completed', {
-          barcode: data,
+          barcode,
           productName: product.name,
           recallCount: recallResult.recalls.length,
           elapsedMs: Date.now() - recallStartedAt,
@@ -147,34 +194,34 @@ export default function ScanScreen() {
         });
         setVerdict({
           kind: recallResult.recalls.length > 0 ? 'recalled' : 'safe',
-          barcode: data,
+          barcode,
           product,
           recallResult,
           recallCheckStatus: 'available',
         });
       } catch (error) {
         console.info('[Barcode] FDA recall lookup failed', {
-          barcode: data,
+          barcode,
           productName: product.name,
           brand: product.brand,
           error: error instanceof Error ? error.message : String(error),
         });
         setVerdict({
           kind: 'safe',
-          barcode: data,
+          barcode,
           product,
           recallCheckStatus: 'unavailable',
         });
       }
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      triggerScanSuccessHaptic();
     } catch (error) {
       setErrorMessage(
         error instanceof Error
           ? error.message
           : 'We could not look up this barcode. Please try again.',
       );
-      console.info('[Barcode] Scan flow failed', {
-        barcode: data,
+      console.error('[Barcode] Scan flow failed', {
+        barcode,
         stage: 'Open Food Facts lookup',
         error: error instanceof Error ? error.message : String(error),
       });
@@ -275,7 +322,8 @@ export default function ScanScreen() {
               }}
               facing="back"
               onCameraReady={() => {
-                console.info('[Barcode] Camera opened', {
+                setCameraReady(true);
+                console.info('[Barcode] Camera opened; barcode scanning started', {
                   scannerEnabled: true,
                   barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e'],
                 });
