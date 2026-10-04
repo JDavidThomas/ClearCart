@@ -1,5 +1,7 @@
 export const NEWS_API_RESULT_LIMIT = 10;
 const RECENT_NEWS_WINDOW_MS = 30 * 24 * 60 * 60 * 1_000;
+const NON_DIRECT_NEWS_HOSTS = ["biztoc.com", "alltoc.com"] as const;
+const NON_DIRECT_NEWS_SOURCE_PREFIXES = ["biztoc", "alltoc"] as const;
 
 export function isNewsApiAllowed(
   nodeEnvironment: string | undefined,
@@ -98,6 +100,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+function isKnownNonDirectNewsSource(url: URL, source: string) {
+  const hostname = url.hostname.toLowerCase().replace(/\.$/, "");
+  const normalizedSource = source.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+  return (
+    NON_DIRECT_NEWS_HOSTS.some(
+      (host) => hostname === host || hostname.endsWith(`.${host}`),
+    ) ||
+    NON_DIRECT_NEWS_SOURCE_PREFIXES.some((prefix) =>
+      normalizedSource.startsWith(prefix),
+    )
+  );
+}
+
 export function normalizeNewsArticles(
   value: unknown,
   from: string,
@@ -141,6 +157,7 @@ export function normalizeNewsArticles(
 
       const source = isRecord(article.source) ? article.source.name : undefined;
       if (typeof source !== "string" || !source.trim()) return [];
+      if (isKnownNonDirectNewsSource(url, source)) return [];
 
       return [{
         title: article.title.trim(),

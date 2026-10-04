@@ -89,6 +89,51 @@ test("news normalization filters out-of-range or unsafe articles and sorts newes
   assert.equal(articles[1].description, "A recent report.");
 });
 
+test("news normalization excludes Biztoc and Alltoc aggregator links but keeps direct publishers", () => {
+  const from = "2026-09-03T12:00:00.000Z";
+  const to = "2026-10-03T12:00:00.000Z";
+  const articles = normalizeNewsArticles(
+    [
+      {
+        title: "E. coli outbreak linked to raw milk cheese",
+        description: "The recall includes Sierra Nevada Graziers cheeses.",
+        url: "https://www.biztoc.com/article/raw-milk-cheese",
+        publishedAt: "2026-10-02T08:00:00.000Z",
+        source: { name: "Biztoc.com" },
+      },
+      {
+        title: "Raw milk cheese outbreak update",
+        description: "A recall affects Sierra Nevada Graziers cheeses.",
+        url: "https://news.alltoc.com/article/raw-milk-cheese",
+        publishedAt: "2026-10-02T09:00:00.000Z",
+        source: { name: "Alltoc" },
+      },
+      {
+        title: "Raw milk cheese recall update",
+        description: "A recall affects Sierra Nevada Graziers cheeses.",
+        url: "https://links.example/redirect/123",
+        publishedAt: "2026-10-02T10:00:00.000Z",
+        source: { name: "BizToc News" },
+      },
+      {
+        title: "E. coli outbreak linked to raw milk cheese",
+        description: "The recall includes Sierra Nevada Graziers cheeses.",
+        url: "https://www.ibtimes.com.au/raw-milk-cheese-recall",
+        publishedAt: "2026-10-02T11:00:00.000Z",
+        source: { name: "International Business Times" },
+      },
+    ],
+    from,
+    to,
+    "Sierra Nevada Graziers Raw Milk Cheeses",
+  );
+
+  assert.deepEqual(
+    articles.map((article) => article.source),
+    ["International Business Times"],
+  );
+});
+
 test("NewsAPI results must match the product and recall or outbreak context", () => {
   const from = "2026-08-31T12:00:00.000Z";
   const to = "2026-09-30T12:00:00.000Z";

@@ -77,10 +77,17 @@ test("news route returns the same articles with browser and app-style headers wi
     publishedAt: new Date().toISOString(),
     source: { name: "Food News" },
   };
+  const mockAggregatorArticle = {
+    title: "E. coli outbreak linked to raw milk cheese",
+    description: "The recall includes Sierra Nevada Graziers cheeses.",
+    url: "https://www.biztoc.com/article/raw-milk-cheese",
+    publishedAt: new Date().toISOString(),
+    source: { name: "Biztoc.com" },
+  };
   const mockNewsApiResponse = {
     status: "ok",
-    totalResults: 1,
-    articles: [mockArticle],
+    totalResults: 2,
+    articles: [mockArticle, mockAggregatorArticle],
   };
   const upstreamRequests: string[] = [];
 
@@ -184,8 +191,8 @@ test("news route returns the same articles with browser and app-style headers wi
   assert.equal(debugBody.term, term);
   assert.equal(debugBody.endpointPath, "/api/recalls/news/debug");
   assert.equal(debugBody.upstreamStatus, 200);
-  assert.equal(debugBody.rawTotalResults, 1);
-  assert.equal(debugBody.rawArticleCount, 1);
+  assert.equal(debugBody.rawTotalResults, 2);
+  assert.equal(debugBody.rawArticleCount, 2);
   assert.equal(debugBody.normalizedArticleCount, 1);
   assert.deepEqual(debugBody.rawNewsApiResponse, mockNewsApiResponse);
   assert.equal(upstreamRequests.length, 3);
