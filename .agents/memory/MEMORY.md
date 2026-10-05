@@ -1,6 +1,7 @@
 - [openFDA mobile search](openfda-key.md) — direct Expo searches intentionally bundle the public openFDA key to avoid API-server URL failures.
 - [OpenFDA query encoding](openfda-query-encoding.md) — encode OR as spaces, use compact `YYYYMMDD` date bounds, and keep a quoted single-term search before alternations.
 - [Expo Camera SDK alignment](expo-camera-sdk.md) — use the workspace-compatible Expo SDK 57 camera package line for native scanning.
+- [Barcode scanner field validation](barcode-scanner-field-validation.md) — device scans decode reliably; Open Food Facts misses are catalog coverage, not scanner failures.
 - [Gemini model availability](gemini-model-availability.md) — verify the configured Gemini model against the live API; older model IDs can be retired without code changes.
 - [Gemini response schema compatibility](gemini-response-schema.md) — direct Gemini JSON mode rejects `additionalProperties`; use prompt-enforced JSON without that schema field.
 - [Supabase profile sync](local-profile-fallback.md) — direct Expo Supabase Auth persists profiles locally, with guest access preserved during outages.

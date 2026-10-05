@@ -38,6 +38,7 @@ import {
   SCAN_NO_DETECTION_LOG_DELAY_MS,
   SCAN_STEADY_HINT_DELAY_MS,
   SCANNER_BARCODE_TYPES,
+  shouldLogNoDetectionWarning,
 } from '@/services/barcodeScanner';
 import type {
   FoodRecall,
@@ -82,9 +83,17 @@ export default function ScanScreen() {
   const cameraReadyAtRef = useRef<number | null>(null);
   const scanLocked = useRef(false);
   const detectionCallbackCountRef = useRef(0);
+  const noDetectionWarningTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const topPadding = Platform.OS === 'web' ? Math.max(insets.top, 67) : insets.top;
 
+  const clearNoDetectionWarningTimeout = useCallback(() => {
+    if (noDetectionWarningTimeoutRef.current === null) return;
+    clearTimeout(noDetectionWarningTimeoutRef.current);
+    noDetectionWarningTimeoutRef.current = null;
+  }, []);
+
   const startNewScanAttempt = useCallback(() => {
+    clearNoDetectionWarningTimeout();
     const attemptId = scanAttemptCounter.current + 1;
     scanAttemptCounter.current = attemptId;
     scanLocked.current = false;
@@ -114,7 +123,7 @@ export default function ScanScreen() {
         });
         setScanState('ready');
       });
-  }, []);
+  }, [clearNoDetectionWarningTimeout]);
 
   useFocusEffect(
     useCallback(() => {
@@ -125,9 +134,10 @@ export default function ScanScreen() {
         scanLocked.current = false;
         cameraReadyAtRef.current = null;
         setCameraReady(false);
+        clearNoDetectionWarningTimeout();
         console.info('[Barcode] Scan attempt left', { attemptId: endedAttemptId });
       };
-    }, [startNewScanAttempt]),
+    }, [clearNoDetectionWarningTimeout, startNewScanAttempt]),
   );
 
   useEffect(() => {
@@ -158,7 +168,20 @@ export default function ScanScreen() {
         waitMs: SCAN_STEADY_HINT_DELAY_MS,
       });
     }, SCAN_STEADY_HINT_DELAY_MS);
-    const warningTimeout = setTimeout(() => {
+    noDetectionWarningTimeoutRef.current = setTimeout(() => {
+      noDetectionWarningTimeoutRef.current = null;
+      if (
+        !shouldLogNoDetectionWarning({
+          attemptId: scanAttemptId,
+          activeAttemptId: scanAttemptCounter.current,
+          cameraReady: cameraReadyAtRef.current !== null,
+          screenFocused: isFocused,
+          scanLocked: scanLocked.current,
+          scanState,
+        })
+      ) {
+        return;
+      }
       console.warn('[Barcode] No barcode detected after waiting', {
         attemptId: scanAttemptId,
         waitMs: SCAN_NO_DETECTION_LOG_DELAY_MS,
@@ -167,9 +190,16 @@ export default function ScanScreen() {
     }, SCAN_NO_DETECTION_LOG_DELAY_MS);
     return () => {
       clearTimeout(hintTimeout);
-      clearTimeout(warningTimeout);
+      clearNoDetectionWarningTimeout();
     };
-  }, [cameraReady, isFocused, permission?.granted, scanAttemptId, scanState]);
+  }, [
+    cameraReady,
+    clearNoDetectionWarningTimeout,
+    isFocused,
+    permission?.granted,
+    scanAttemptId,
+    scanState,
+  ]);
 
   useEffect(() => {
     if (
@@ -214,6 +244,7 @@ export default function ScanScreen() {
       });
       return;
     }
+    clearNoDetectionWarningTimeout();
     if (typeof data !== 'string' || !data.trim()) {
       console.error('[Barcode] Empty barcode detected', {
         attemptId: scanAttemptId,
@@ -484,6 +515,7 @@ export default function ScanScreen() {
                 }
                 const cameraReadyAt = Date.now();
                 cameraReadyAtRef.current = cameraReadyAt;
+                clearNoDetectionWarningTimeout();
                 setVerdict(null);
                 setErrorMessage(null);
                 setShowSteadyHint(false);
@@ -568,19 +600,23 @@ function StatusScreen({ icon, title, body, colors, topPadding, children }: Statu
 function ManualSearchButton({
   colors,
   onPress,
+  label = 'Search by product name',
+  testID = 'manual-search-button',
 }: {
   colors: ReturnType<typeof useColors>;
   onPress: () => void;
+  label?: string;
+  testID?: string;
 }) {
   return (
     <Pressable
       accessibilityRole="button"
       onPress={onPress}
       style={({ pressed }) => [styles.secondaryButton, { borderColor: colors.border, opacity: pressed ? 0.65 : 1 }]}
-      testID="manual-search-button"
+      testID={testID}
     >
       <Feather name="search" size={17} color={colors.primary} />
-      <Text style={[styles.secondaryButtonText, { color: colors.primary }]}>Search by product name</Text>
+      <Text style={[styles.secondaryButtonText, { color: colors.primary }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -648,9 +684,35 @@ function VerdictView({
           </View>
           <Text style={[styles.verdictTitle, { color: colors.foreground }]}>Product Not Found</Text>
           <Text style={[styles.verdictBody, { color: colors.mutedForeground }]}>
-            This barcode is not in the Open Food Facts database. Check the product label or search the official FDA notices before eating it.
+            We checked this barcode, but this product isn’t in our product database. Try searching by name or taking a photo of the product label.
           </Text>
           <Text style={[styles.barcodeText, { color: colors.mutedForeground }]}>Barcode: {verdict.barcode}</Text>
+          <ManualSearchButton
+            colors={colors}
+            label="Search manually instead"
+            onPress={() =>
+              void router.push({
+                pathname: '/',
+                params: { searchPrefill: verdict.barcode },
+              })
+            }
+            testID="search-manually-instead-button"
+          />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityHint="Open the camera or photo library to identify this product with a photo."
+            onPress={() => void router.push('/photo-check')}
+            style={({ pressed }) => [
+              styles.secondaryButton,
+              { borderColor: colors.border, opacity: pressed ? 0.65 : 1 },
+            ]}
+            testID="take-product-photo-instead-button"
+          >
+            <Feather name="camera" size={17} color={colors.primary} />
+            <Text style={[styles.secondaryButtonText, { color: colors.primary }]}>
+              Take a photo of the product instead
+            </Text>
+          </Pressable>
           <Pressable
             accessibilityRole="link"
             onPress={() => Linking.openURL(FDA_NOTICES_URL)}
@@ -664,7 +726,6 @@ function VerdictView({
         <AllergenInsights productName="" productText="" dataAvailable={false} source="barcode" colors={colors} />
         <HealthDietInsights productName="" productText="" source="barcode" colors={colors} />
         <ScanAgainButton colors={colors} onPress={onScanAgain} />
-        <SearchByNameButton colors={colors} onPress={() => void router.push('/')} />
       </View>
     );
   }

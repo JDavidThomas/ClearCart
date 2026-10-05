@@ -1,8 +1,8 @@
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Linking,
@@ -59,15 +59,31 @@ function formatUpdatedAt(date: string) {
 export default function HomeScreen() {
   const colors = useColors();
   const router = useRouter();
+  const { searchPrefill: searchPrefillParam } =
+    useLocalSearchParams<{ searchPrefill?: string | string[] }>();
+  const searchPrefill = Array.isArray(searchPrefillParam)
+    ? searchPrefillParam[0]
+    : searchPrefillParam;
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
-  const [term, setTerm] = useState<string>('');
+  const [term, setTerm] = useState<string>(searchPrefill ?? '');
   const [submittedTerm, setSubmittedTerm] = useState<string>('');
   const [activeResultTab, setActiveResultTab] = useState<RecallResultTab>('fda');
   const [newsDiagnostics, setNewsDiagnostics] =
     useState<RecallNewsDiagnostics>(EMPTY_NEWS_DIAGNOSTICS);
   const swipeHandlers = useRecallResultSwipe(activeResultTab, setActiveResultTab);
   const topPadding = Platform.OS === 'web' ? Math.max(insets.top, 67) : insets.top;
+
+  useEffect(() => {
+    const nextTerm = searchPrefill?.trim();
+    if (!nextTerm) return;
+
+    setTerm(nextTerm);
+    setSubmittedTerm('');
+    setActiveResultTab('fda');
+    setNewsDiagnostics(EMPTY_NEWS_DIAGNOSTICS);
+    router.setParams({ searchPrefill: undefined });
+  }, [router, searchPrefill]);
 
   const recallQueryKey = ['food-recalls', submittedTerm] as const;
   const { data, error, isFetching, isError, refetch } = useQuery<RecallSearchResult, Error>({

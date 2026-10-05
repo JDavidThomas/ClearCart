@@ -4,6 +4,7 @@ import {
   SCAN_NO_DETECTION_LOG_DELAY_MS,
   SCAN_STEADY_HINT_DELAY_MS,
   SCANNER_BARCODE_TYPES,
+  shouldLogNoDetectionWarning,
 } from '../services/barcodeScanner.ts';
 
 test('scanner enables all barcode formats supported by Expo Camera', () => {
@@ -30,5 +31,38 @@ test('scanner shows its steadying hint before logging a prolonged no-detection w
   assert.equal(
     SCAN_STEADY_HINT_DELAY_MS < SCAN_NO_DETECTION_LOG_DELAY_MS,
     true,
+  );
+});
+
+test('no-detection warning only logs for the active, focused, ready scan attempt', () => {
+  const activeScan = {
+    attemptId: 4,
+    activeAttemptId: 4,
+    cameraReady: true,
+    screenFocused: true,
+    scanLocked: false,
+    scanState: 'ready' as const,
+  };
+
+  assert.equal(shouldLogNoDetectionWarning(activeScan), true);
+  assert.equal(
+    shouldLogNoDetectionWarning({ ...activeScan, activeAttemptId: 5 }),
+    false,
+  );
+  assert.equal(
+    shouldLogNoDetectionWarning({ ...activeScan, scanLocked: true }),
+    false,
+  );
+  assert.equal(
+    shouldLogNoDetectionWarning({ ...activeScan, cameraReady: false }),
+    false,
+  );
+  assert.equal(
+    shouldLogNoDetectionWarning({ ...activeScan, screenFocused: false }),
+    false,
+  );
+  assert.equal(
+    shouldLogNoDetectionWarning({ ...activeScan, scanState: 'verdict' }),
+    false,
   );
 });
