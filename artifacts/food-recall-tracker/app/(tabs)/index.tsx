@@ -59,11 +59,19 @@ function formatUpdatedAt(date: string) {
 export default function HomeScreen() {
   const colors = useColors();
   const router = useRouter();
-  const { searchPrefill: searchPrefillParam } =
-    useLocalSearchParams<{ searchPrefill?: string | string[] }>();
+  const {
+    searchPrefill: searchPrefillParam,
+    autoSearch: autoSearchParam,
+  } = useLocalSearchParams<{
+    searchPrefill?: string | string[];
+    autoSearch?: string | string[];
+  }>();
   const searchPrefill = Array.isArray(searchPrefillParam)
     ? searchPrefillParam[0]
     : searchPrefillParam;
+  const autoSearch = Array.isArray(autoSearchParam)
+    ? autoSearchParam[0]
+    : autoSearchParam;
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const [term, setTerm] = useState<string>(searchPrefill ?? '');
@@ -79,11 +87,11 @@ export default function HomeScreen() {
     if (!nextTerm) return;
 
     setTerm(nextTerm);
-    setSubmittedTerm('');
+    setSubmittedTerm(autoSearch === 'true' ? nextTerm : '');
     setActiveResultTab('fda');
     setNewsDiagnostics(EMPTY_NEWS_DIAGNOSTICS);
-    router.setParams({ searchPrefill: undefined });
-  }, [router, searchPrefill]);
+    router.setParams({ searchPrefill: undefined, autoSearch: undefined });
+  }, [autoSearch, router, searchPrefill]);
 
   const recallQueryKey = ['food-recalls', submittedTerm] as const;
   const { data, error, isFetching, isError, refetch } = useQuery<RecallSearchResult, Error>({

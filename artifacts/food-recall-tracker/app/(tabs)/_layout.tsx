@@ -27,6 +27,12 @@ function NativeTabLayout() {
         />
         <NativeTabs.Trigger.Label>Scan</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="shopping-list">
+        <NativeTabs.Trigger.Icon
+          sf={{ default: 'cart', selected: 'cart.fill' }}
+        />
+        <NativeTabs.Trigger.Label>Shopping</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="profile">
         <NativeTabs.Trigger.Icon
           sf={{ default: 'person.crop.circle', selected: 'person.crop.circle.fill' }}
@@ -96,6 +102,18 @@ function ClassicTabLayout() {
               <SymbolView name="barcode.viewfinder" tintColor={color} size={24} />
             ) : (
               <Feather name="maximize" size={22} color={color} />
+            ),
+        }}
+      />
+      <Tabs.Screen
+        name="shopping-list"
+        options={{
+          title: 'Shopping',
+          tabBarIcon: ({ color }) =>
+            isIOS ? (
+              <SymbolView name="cart" tintColor={color} size={24} />
+            ) : (
+              <Feather name="shopping-cart" size={22} color={color} />
             ),
         }}
       />
