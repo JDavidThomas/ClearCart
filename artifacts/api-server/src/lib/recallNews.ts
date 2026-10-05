@@ -2,6 +2,34 @@ export const NEWS_API_RESULT_LIMIT = 10;
 const RECENT_NEWS_WINDOW_MS = 30 * 24 * 60 * 60 * 1_000;
 const NON_DIRECT_NEWS_HOSTS = ["biztoc.com", "alltoc.com"] as const;
 const NON_DIRECT_NEWS_SOURCE_PREFIXES = ["biztoc", "alltoc"] as const;
+const PRODUCT_DESCRIPTOR_WORDS = new Set([
+  "chopped",
+  "chunky",
+  "classic",
+  "creamy",
+  "diced",
+  "fat",
+  "frozen",
+  "fresh",
+  "grated",
+  "large",
+  "light",
+  "low",
+  "natural",
+  "organic",
+  "original",
+  "raw",
+  "reduced",
+  "ready",
+  "salted",
+  "shredded",
+  "sliced",
+  "small",
+  "smooth",
+  "style",
+  "unsalted",
+  "whole",
+]);
 
 export function isNewsApiAllowed(
   nodeEnvironment: string | undefined,
@@ -17,6 +45,11 @@ export function isNewsApiAllowed(
 export interface RecallNewsDateRange {
   from: string;
   to: string;
+}
+
+export interface RecallNewsProductContext {
+  brand?: string;
+  productName?: string;
 }
 
 interface NewsApiArticle {
@@ -51,9 +84,28 @@ function normalizeNewsWord(word: string) {
   return word;
 }
 
+function getSpecificProductTerms(productName: string, brand?: string) {
+  const brandWords = new Set(
+    normalizeNewsSearchTerm(brand ?? "").toLowerCase().split(" ").filter(Boolean),
+  );
+
+  return normalizeNewsSearchTerm(productName)
+    .toLowerCase()
+    .split(" ")
+    .filter(
+      (word) =>
+        word &&
+        !brandWords.has(word) &&
+        !PRODUCT_DESCRIPTOR_WORDS.has(word) &&
+        !/^(?:and|of|the|to)$/i.test(word),
+    )
+    .map(normalizeNewsWord);
+}
+
 function isRelevantNewsArticle(
   article: { title: string; description?: string },
   term: string,
+  productContext?: RecallNewsProductContext,
 ) {
   const text = normalizeNewsSearchTerm(
     `${article.title} ${article.description ?? ""}`,
@@ -61,6 +113,20 @@ function isRelevantNewsArticle(
   const hasRecallContext =
     /\b(?:recalls?|recalled|withdraw(?:al|n)?|warning|advisory|safety alert|outbreaks?|contaminat\w*|illness(?:es)?|sickened|hospitali[sz]\w*|foodborne|listeria|salmonella|e coli|botulism|foreign object|plastic|undeclared allergen|food poisoning)\b/i.test(text);
   if (!hasRecallContext) return false;
+
+  if (productContext?.productName) {
+    const productTerms = getSpecificProductTerms(
+      productContext.productName,
+      productContext.brand,
+    );
+    if (productTerms.length === 0) return false;
+
+    const articleWords = new Set(text.split(" ").map(normalizeNewsWord));
+    const matchingTerms = productTerms.filter((word) => articleWords.has(word)).length;
+    const minimumMatches =
+      productTerms.length === 1 ? 1 : Math.min(2, productTerms.length);
+    return matchingTerms >= minimumMatches;
+  }
 
   const terms = normalizeNewsSearchTerm(term)
     .toLowerCase()
@@ -81,7 +147,37 @@ function isRelevantNewsArticle(
   return matchingTerms >= minimumMatches;
 }
 
-export function buildNewsQuery(term: string) {
+export function buildNewsQuery(
+  term: string,
+  productContext?: RecallNewsProductContext,
+) {
+  const productName = normalizeNewsSearchTerm(productContext?.productName ?? "");
+  if (productName) {
+    const brand = normalizeNewsSearchTerm(productContext?.brand ?? "").toLowerCase();
+    const normalizedProductName = productName.toLowerCase();
+    const brandWords = new Set(brand.split(" ").filter(Boolean));
+    const productNameWithoutBrand = normalizedProductName
+      .split(" ")
+      .filter((word) => !brandWords.has(word))
+      .join(" ");
+    const productTerms = getSpecificProductTerms(productNameWithoutBrand, brand);
+    const productPhrase =
+      productTerms.length > 0
+        ? productTerms.join(" ")
+        : productNameWithoutBrand || normalizedProductName;
+    const fullProductIdentity = [brand, productNameWithoutBrand || normalizedProductName]
+      .filter(Boolean)
+      .join(" ");
+    const brandProductPhrase = [brand, productPhrase].filter(Boolean).join(" ");
+    const clauses = [
+      fullProductIdentity ? `"${fullProductIdentity}"` : "",
+      brandProductPhrase ? `"${brandProductPhrase}"` : "",
+      `(${productPhrase} AND recall)`,
+    ];
+
+    return [...new Set(clauses.filter(Boolean))].join(" OR ");
+  }
+
   const terms = normalizeNewsSearchTerm(term)
     .split(" ")
     .map((word) => word.toLowerCase())
@@ -119,6 +215,7 @@ export function normalizeNewsArticles(
   from: string,
   to: string,
   term?: string,
+  productContext?: RecallNewsProductContext,
 ) {
   if (!Array.isArray(value)) return [];
 
@@ -169,7 +266,9 @@ export function normalizeNewsArticles(
         source: source.trim(),
       }];
     })
-    .filter((article) => !term || isRelevantNewsArticle(article, term))
+    .filter((article) =>
+      !term || isRelevantNewsArticle(article, term, productContext),
+    )
     .sort(
       (left, right) =>
         Date.parse(right.publishedAt) - Date.parse(left.publishedAt),

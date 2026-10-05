@@ -1,6 +1,6 @@
 export const RECALL_SEARCH_CACHE_TTL_MS = 24 * 60 * 60 * 1_000;
 export const RECALL_EMPTY_NEWS_CACHE_TTL_MS = 5 * 60 * 1_000;
-export const RECALL_NEWS_QUERY_CACHE_VERSION = 4;
+export const RECALL_NEWS_QUERY_CACHE_VERSION = 5;
 
 export function isRecallNewsQueryCacheCurrent(version: unknown) {
   return version === RECALL_NEWS_QUERY_CACHE_VERSION;

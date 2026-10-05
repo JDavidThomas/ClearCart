@@ -84,10 +84,37 @@ test("news route returns the same articles with browser and app-style headers wi
     publishedAt: new Date().toISOString(),
     source: { name: "Biztoc.com" },
   };
+  const mockGreatValueBerryArticle = {
+    title: "Great Value frozen berry blend recalled",
+    description: "Walmart says the berry recall follows contamination concerns.",
+    url: "https://news.example/great-value-berries",
+    publishedAt: new Date().toISOString(),
+    source: { name: "Daily News" },
+  };
+  const mockWalmartBerryArticle = {
+    title: "Walmart berry recall affects frozen fruit",
+    description: "A recall of berry mix was announced this week.",
+    url: "https://news.example/walmart-berries",
+    publishedAt: new Date().toISOString(),
+    source: { name: "Market News" },
+  };
+  const mockPeanutButterArticle = {
+    title: "Peanut butter recall announced after salmonella concerns",
+    description: "The recall affects several peanut butter products.",
+    url: "https://news.example/peanut-butter",
+    publishedAt: new Date().toISOString(),
+    source: { name: "Food News" },
+  };
   const mockNewsApiResponse = {
     status: "ok",
-    totalResults: 2,
-    articles: [mockArticle, mockAggregatorArticle],
+    totalResults: 5,
+    articles: [
+      mockArticle,
+      mockAggregatorArticle,
+      mockGreatValueBerryArticle,
+      mockWalmartBerryArticle,
+      mockPeanutButterArticle,
+    ],
   };
   const upstreamRequests: string[] = [];
 
@@ -158,9 +185,24 @@ test("news route returns the same articles with browser and app-style headers wi
     server,
     `/api/recalls/news/debug?term=${encodedTerm}`,
   );
+  const productSearchParams = new URLSearchParams({
+    term: "Great Value Creamy Peanut Butter",
+    brand: "Great Value",
+    productName: "Great Value Creamy Peanut Butter",
+  });
+  const productResponse = await get(
+    server,
+    `/api/recalls/news?${productSearchParams.toString()}`,
+  );
+  const productDebugResponse = await get(
+    server,
+    `/api/recalls/news/debug?${productSearchParams.toString()}`,
+  );
   const productionBody = JSON.parse(productionResponse.body);
   const appStyleBody = JSON.parse(appStyleResponse.body);
   const debugBody = JSON.parse(debugResponse.body);
+  const productBody = JSON.parse(productResponse.body);
+  const productDebugBody = JSON.parse(productDebugResponse.body);
 
   assert.equal(productionResponse.statusCode, 200);
   assert.equal(productionResponse.headers["cache-control"], "no-store");
@@ -191,9 +233,24 @@ test("news route returns the same articles with browser and app-style headers wi
   assert.equal(debugBody.term, term);
   assert.equal(debugBody.endpointPath, "/api/recalls/news/debug");
   assert.equal(debugBody.upstreamStatus, 200);
-  assert.equal(debugBody.rawTotalResults, 2);
-  assert.equal(debugBody.rawArticleCount, 2);
+  assert.equal(debugBody.rawTotalResults, 5);
+  assert.equal(debugBody.rawArticleCount, 5);
   assert.equal(debugBody.normalizedArticleCount, 1);
   assert.deepEqual(debugBody.rawNewsApiResponse, mockNewsApiResponse);
-  assert.equal(upstreamRequests.length, 3);
+
+  assert.equal(productResponse.statusCode, 200);
+  assert.equal(productBody.articles.length, 1);
+  assert.equal(productBody.articles[0].title, mockPeanutButterArticle.title);
+  assert.equal(productDebugResponse.statusCode, 200);
+  assert.equal(
+    productDebugBody.query,
+    '"great value creamy peanut butter" OR "great value peanut butter" OR (peanut butter AND recall)',
+  );
+  assert.equal(productDebugBody.rawArticleCount, 5);
+  assert.equal(productDebugBody.normalizedArticleCount, 1);
+  assert.equal(
+    productDebugBody.normalizedArticles[0].title,
+    mockPeanutButterArticle.title,
+  );
+  assert.equal(upstreamRequests.length, 5);
 });

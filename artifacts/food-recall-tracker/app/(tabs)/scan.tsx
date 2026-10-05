@@ -34,6 +34,11 @@ import {
   lookupOpenFoodFactsProduct,
   searchBarcodeFoodRecalls,
 } from '@/services/recallApi';
+import {
+  SCAN_NO_DETECTION_LOG_DELAY_MS,
+  SCAN_STEADY_HINT_DELAY_MS,
+  SCANNER_BARCODE_TYPES,
+} from '@/services/barcodeScanner';
 import type {
   FoodRecall,
   OpenFoodFactsProduct,
@@ -70,20 +75,24 @@ export default function ScanScreen() {
   const [scanState, setScanState] = useState<ScanState>('checking');
   const [scanAttemptId, setScanAttemptId] = useState(0);
   const [cameraReady, setCameraReady] = useState(false);
+  const [showSteadyHint, setShowSteadyHint] = useState(false);
   const [verdict, setVerdict] = useState<ScanVerdict | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const scanAttemptCounter = useRef(0);
   const cameraReadyAtRef = useRef<number | null>(null);
   const scanLocked = useRef(false);
+  const detectionCallbackCountRef = useRef(0);
   const topPadding = Platform.OS === 'web' ? Math.max(insets.top, 67) : insets.top;
 
   const startNewScanAttempt = useCallback(() => {
     const attemptId = scanAttemptCounter.current + 1;
     scanAttemptCounter.current = attemptId;
     scanLocked.current = false;
+    detectionCallbackCountRef.current = 0;
     cameraReadyAtRef.current = null;
     setScanAttemptId(attemptId);
     setCameraReady(false);
+    setShowSteadyHint(false);
     setScanState('checking');
     setVerdict(null);
     setErrorMessage(null);
@@ -140,14 +149,26 @@ export default function ScanScreen() {
 
   useEffect(() => {
     if (!isFocused || !permission?.granted || scanState !== 'ready' || !cameraReady) return;
-    const timeout = setTimeout(() => {
+    setShowSteadyHint(false);
+    const hintTimeout = setTimeout(() => {
+      if (scanAttemptId !== scanAttemptCounter.current) return;
+      setShowSteadyHint(true);
+      console.info('[Barcode] Steadying hint displayed after no detection', {
+        attemptId: scanAttemptId,
+        waitMs: SCAN_STEADY_HINT_DELAY_MS,
+      });
+    }, SCAN_STEADY_HINT_DELAY_MS);
+    const warningTimeout = setTimeout(() => {
       console.warn('[Barcode] No barcode detected after waiting', {
         attemptId: scanAttemptId,
-        waitMs: 10_000,
-        barcodeTypes: ['upc_a', 'upc_e', 'ean13', 'ean8'],
+        waitMs: SCAN_NO_DETECTION_LOG_DELAY_MS,
+        barcodeTypes: SCANNER_BARCODE_TYPES,
       });
-    }, 10_000);
-    return () => clearTimeout(timeout);
+    }, SCAN_NO_DETECTION_LOG_DELAY_MS);
+    return () => {
+      clearTimeout(hintTimeout);
+      clearTimeout(warningTimeout);
+    };
   }, [cameraReady, isFocused, permission?.granted, scanAttemptId, scanState]);
 
   useEffect(() => {
@@ -173,9 +194,11 @@ export default function ScanScreen() {
 
   const handleBarcodeScanned = async (result: BarcodeScanningResult) => {
     const { data, raw, type } = result;
+    const callbackSequence = ++detectionCallbackCountRef.current;
     const cameraReadyAt = cameraReadyAtRef.current;
     console.info('[Barcode] Barcode detection callback', {
       attemptId: scanAttemptId,
+      callbackSequence,
       rawBarcode: data,
       rawPayload: raw ?? null,
       format: type,
@@ -220,6 +243,7 @@ export default function ScanScreen() {
     });
     triggerScanSuccessHaptic();
     setCameraReady(false);
+    setShowSteadyHint(false);
     setScanState('checking');
     setVerdict(null);
     setErrorMessage(null);
@@ -446,7 +470,7 @@ export default function ScanScreen() {
             <CameraView
               key={scanAttemptId}
               barcodeScannerSettings={{
-                barcodeTypes: ['upc_a', 'upc_e', 'ean13', 'ean8'],
+                barcodeTypes: SCANNER_BARCODE_TYPES,
               }}
               autofocus="on"
               facing="back"
@@ -460,12 +484,16 @@ export default function ScanScreen() {
                 }
                 const cameraReadyAt = Date.now();
                 cameraReadyAtRef.current = cameraReadyAt;
+                setVerdict(null);
+                setErrorMessage(null);
+                setShowSteadyHint(false);
                 setCameraReady(true);
                 console.info('[Barcode] Camera opened; barcode scanning started', {
                   attemptId: scanAttemptId,
                   cameraReadyAt,
                   scannerEnabled: true,
-                  barcodeTypes: ['upc_a', 'upc_e', 'ean13', 'ean8'],
+                  staleResultCleared: true,
+                  barcodeTypes: SCANNER_BARCODE_TYPES,
                 });
               }}
               onMountError={({ message }) => {
@@ -486,7 +514,9 @@ export default function ScanScreen() {
               </View>
               <View style={[styles.cameraHint, { backgroundColor: colors.foreground }]}>
                 <Text style={[styles.cameraHintText, { color: colors.primaryForeground }]}>
-                  Scan UPC or EAN barcode
+                  {showSteadyHint
+                    ? 'Hold steady and keep the barcode centered'
+                    : 'Point the camera at any barcode'}
                 </Text>
               </View>
             </View>

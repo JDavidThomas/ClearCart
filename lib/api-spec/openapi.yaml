@@ -90,11 +90,25 @@ paths:
       operationId: getRecallNews
       tags: [recalls]
       summary: Search recent recall news mentions
-      description: Searches NewsAPI for matching articles published during the previous 30 days. An unavailable news source returns an empty list.
+      description: Searches NewsAPI for matching articles published during the previous 30 days. Pass brand and productName for product-specific recall news. An unavailable news source returns an empty list.
       parameters:
         - name: term
           in: query
           required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 100
+        - name: brand
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 100
+        - name: productName
+          in: query
+          required: false
           schema:
             type: string
             minLength: 1

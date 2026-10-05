@@ -107,6 +107,8 @@ type NewsDiagnosticsListener = (diagnostics: RecallNewsDiagnostics) => void;
 type NewsFetchContext = {
   reason: string;
   cacheHit: boolean;
+  brand?: string;
+  productName?: string;
   cachedNewsArticleCount?: number;
   visibleCachedNewsArticleCount?: number;
   isRecentSearchTerm?: boolean;
@@ -193,7 +195,11 @@ async function searchRecentRecallNews(
   const publishDiagnostics = () => onDiagnostics?.({ ...diagnostics });
   try {
     const response = await getRecallNews(
-      { term },
+      {
+        term,
+        ...(context.brand ? { brand: context.brand } : {}),
+        ...(context.productName ? { productName: context.productName } : {}),
+      },
       {
         skipAuthToken: true,
         onRecallNewsDiagnostics: (transportDiagnostics) => {
@@ -575,7 +581,9 @@ export async function searchBarcodeFoodRecalls(
   barcode: string,
   onNewsDiagnostics?: NewsDiagnosticsListener,
 ): Promise<RecallSearchResult> {
-  const productIdentity = cleanRecallSearchTerm(`${product.brand} ${product.name}`);
+  const productBrand = cleanRecallSearchTerm(product.brand ?? '');
+  const productName = cleanRecallSearchTerm(product.name);
+  const productIdentity = cleanRecallSearchTerm([productBrand, productName].filter(Boolean).join(' '));
   onNewsDiagnostics?.(emptyNewsDiagnostics());
   if (!cleanRecallSearchTerm(barcode)) {
     return { recalls: [], relatedRecalls: [], lastUpdated: new Date().toISOString(), fromCache: false };
@@ -587,6 +595,8 @@ export async function searchBarcodeFoodRecalls(
       ? searchRecentRecallNews(productIdentity, onNewsDiagnostics, {
           reason: 'barcode-scan',
           cacheHit: false,
+            brand: productBrand,
+            productName,
         })
       : Promise.resolve({
           articles: [],

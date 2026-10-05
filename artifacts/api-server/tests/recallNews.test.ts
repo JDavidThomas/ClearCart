@@ -23,6 +23,16 @@ test("NewsAPI search broadens long product names instead of requiring one exact 
   assert.equal(normalizeNewsSearchTerm("  café—style  eggs! "), "cafe style eggs");
 });
 
+test("identified products query by brand and product terms rather than brand alone", () => {
+  assert.equal(
+    buildNewsQuery("Great Value Creamy Peanut Butter", {
+      brand: "Great Value",
+      productName: "Great Value Creamy Peanut Butter",
+    }),
+    '"great value creamy peanut butter" OR "great value peanut butter" OR (peanut butter AND recall)',
+  );
+});
+
 test("NewsAPI is limited to development and testing unless explicitly enabled elsewhere", () => {
   assert.equal(isNewsApiAllowed("development", undefined), true);
   assert.equal(isNewsApiAllowed("test", undefined), true);
@@ -170,4 +180,47 @@ test("NewsAPI results must match the product and recall or outbreak context", ()
     articles[1].title,
   );
   assert.deepEqual(normalizeNewsArticles(articles, from, to, "banana"), []);
+});
+
+test("product-specific recall news rejects unrelated berry stories from the same retailer", () => {
+  const from = "2026-09-03T12:00:00.000Z";
+  const to = "2026-10-03T12:00:00.000Z";
+  const productContext = {
+    brand: "Great Value",
+    productName: "Great Value Creamy Peanut Butter",
+  };
+  const articles = [
+    {
+      title: "Peanut butter recall announced after salmonella concerns",
+      description: "The recall affects several peanut butter products.",
+      url: "https://news.example/peanut-butter",
+      publishedAt: "2026-10-02T12:00:00.000Z",
+      source: { name: "Food News" },
+    },
+    {
+      title: "Great Value frozen berry blend recalled",
+      description: "Walmart says the berry recall follows contamination concerns.",
+      url: "https://news.example/great-value-berries",
+      publishedAt: "2026-10-02T11:00:00.000Z",
+      source: { name: "Daily News" },
+    },
+    {
+      title: "Walmart berry recall affects frozen fruit",
+      description: "A recall of berry mix was announced this week.",
+      url: "https://news.example/walmart-berries",
+      publishedAt: "2026-10-02T10:00:00.000Z",
+      source: { name: "Market News" },
+    },
+  ];
+
+  assert.deepEqual(
+    normalizeNewsArticles(
+      articles,
+      from,
+      to,
+      "Great Value Creamy Peanut Butter",
+      productContext,
+    ).map((article) => article.title),
+    ["Peanut butter recall announced after salmonella concerns"],
+  );
 });

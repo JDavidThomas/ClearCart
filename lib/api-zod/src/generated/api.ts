@@ -65,15 +65,21 @@ export const GetFdaRecallsResponse = zod.object({
 
 
 /**
- * Searches NewsAPI for matching articles published during the previous 30 days. An unavailable news source returns an empty list.
+ * Searches NewsAPI for matching articles published during the previous 30 days. Pass brand and productName for product-specific recall news. An unavailable news source returns an empty list.
  * @summary Search recent recall news mentions
  */
 export const getRecallNewsQueryTermMax = 100;
 
+export const getRecallNewsQueryBrandMax = 100;
+
+export const getRecallNewsQueryProductNameMax = 100;
+
 
 
 export const GetRecallNewsQueryParams = zod.object({
-  "term": zod.coerce.string().min(1).max(getRecallNewsQueryTermMax)
+  "term": zod.coerce.string().min(1).max(getRecallNewsQueryTermMax),
+  "brand": zod.coerce.string().min(1).max(getRecallNewsQueryBrandMax).optional(),
+  "productName": zod.coerce.string().min(1).max(getRecallNewsQueryProductNameMax).optional()
 })
 
 export const GetRecallNewsResponse = zod.object({

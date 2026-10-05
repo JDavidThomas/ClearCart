@@ -12,4 +12,14 @@ export type GetRecallNewsParams = {
  * @maxLength 100
  */
 term: string;
+/**
+ * @minLength 1
+ * @maxLength 100
+ */
+brand?: string;
+/**
+ * @minLength 1
+ * @maxLength 100
+ */
+productName?: string;
 };

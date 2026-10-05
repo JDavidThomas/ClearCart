@@ -11,6 +11,7 @@ import {
   NEWS_API_RESULT_LIMIT,
   normalizeNewsArticles,
   normalizeNewsSearchTerm,
+  type RecallNewsProductContext,
 } from "../lib/recallNews";
 
 const router: IRouter = Router();
@@ -30,8 +31,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function createNewsApiRequest(
   term: string,
   dateRange: ReturnType<typeof getNewsDateRange>,
+  productContext?: RecallNewsProductContext,
 ) {
-  const query = buildNewsQuery(term);
+  const query = buildNewsQuery(term, productContext);
   const params = new URLSearchParams({
     q: query,
     searchIn: "title,description",
@@ -76,6 +78,9 @@ router.get("/recalls/news", async (req, res) => {
       method: req.method,
       requestPath: req.originalUrl,
       searchTerm: typeof req.query.term === "string" ? req.query.term : null,
+      brand: typeof req.query.brand === "string" ? req.query.brand : null,
+      productName:
+        typeof req.query.productName === "string" ? req.query.productName : null,
       headers: {
         host: req.get("host") ?? null,
         userAgent: req.get("user-agent") ?? null,
@@ -126,6 +131,14 @@ router.get("/recalls/news", async (req, res) => {
     return;
   }
 
+  const productContext: RecallNewsProductContext = {
+    brand: parsed.data.brand
+      ? normalizeNewsSearchTerm(parsed.data.brand)
+      : undefined,
+    productName: parsed.data.productName
+      ? normalizeNewsSearchTerm(parsed.data.productName)
+      : undefined,
+  };
   const dateRange = getNewsDateRange();
   const apiKey = process.env.NEWSAPI_API_KEY?.trim();
   const emptyResponse = (unavailable: boolean) =>
@@ -168,7 +181,7 @@ router.get("/recalls/news", async (req, res) => {
     return;
   }
 
-  const { query, requestUrl } = createNewsApiRequest(term, dateRange);
+  const { query, requestUrl } = createNewsApiRequest(term, dateRange, productContext);
 
   try {
     logger.info(
@@ -244,6 +257,7 @@ router.get("/recalls/news", async (req, res) => {
       dateRange.from,
       dateRange.to,
       term,
+      productContext,
     );
     logger.info(
       {
@@ -310,6 +324,14 @@ router.get("/recalls/news/debug", async (req, res) => {
     return;
   }
 
+  const productContext: RecallNewsProductContext = {
+    brand: parsed.data.brand
+      ? normalizeNewsSearchTerm(parsed.data.brand)
+      : undefined,
+    productName: parsed.data.productName
+      ? normalizeNewsSearchTerm(parsed.data.productName)
+      : undefined,
+  };
   if (
     !isNewsApiAllowed(
       process.env.NODE_ENV,
@@ -327,7 +349,7 @@ router.get("/recalls/news/debug", async (req, res) => {
   }
 
   const dateRange = getNewsDateRange();
-  const { query, requestUrl } = createNewsApiRequest(term, dateRange);
+  const { query, requestUrl } = createNewsApiRequest(term, dateRange, productContext);
 
   try {
     const { response, responseBody } = await fetchNewsApiResponse(
@@ -376,6 +398,7 @@ router.get("/recalls/news/debug", async (req, res) => {
       dateRange.from,
       dateRange.to,
       term,
+      productContext,
     );
 
     res.json({
