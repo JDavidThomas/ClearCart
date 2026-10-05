@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   buildOpenFoodFactsBarcodeUrl,
+  getOpenFoodFactsBarcodeCacheKeys,
   parseOpenFoodFactsBarcodeResponse,
 } from '../services/openFoodFacts.ts';
 
@@ -26,6 +27,17 @@ test('builds the Open Food Facts product URL with the scanned barcode', () => {
   assert.equal(
     buildOpenFoodFactsBarcodeUrl('072486005220'),
     'https://world.openfoodfacts.org/api/v2/product/072486005220.json',
+  );
+});
+
+test('barcode cache clearing is scoped to barcode results, not name searches or auth data', () => {
+  assert.deepEqual(
+    getOpenFoodFactsBarcodeCacheKeys([
+      '@food-recall-tracker/open-food-facts/barcode/072486005220',
+      '@food-recall-tracker/open-food-facts/name/corn-muffin-mix',
+      '@supabase.auth.token',
+    ]),
+    ['@food-recall-tracker/open-food-facts/barcode/072486005220'],
   );
 });
 

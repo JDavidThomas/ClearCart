@@ -53,6 +53,18 @@ function cacheKey(kind: 'barcode' | 'name', value: string) {
   return `${CACHE_PREFIX}${kind}/${encodeURIComponent(value.trim().toLowerCase())}`;
 }
 
+export function getOpenFoodFactsBarcodeCacheKeys(keys: readonly string[]) {
+  const barcodePrefix = `${CACHE_PREFIX}barcode/`;
+  return keys.filter((key) => key.startsWith(barcodePrefix));
+}
+
+export async function clearOpenFoodFactsBarcodeCache() {
+  const keys = await AsyncStorage.getAllKeys();
+  const barcodeKeys = getOpenFoodFactsBarcodeCacheKeys(keys);
+  if (barcodeKeys.length > 0) await AsyncStorage.multiRemove(barcodeKeys);
+  return barcodeKeys.length;
+}
+
 async function readCachedProduct(key: string): Promise<{ hit: boolean; product: OpenFoodFactsProduct | null }> {
   try {
     const cached = await AsyncStorage.getItem(key);
@@ -275,7 +287,10 @@ function selectClosestProduct(products: OpenFoodFactsProduct[], targetName: stri
   )[0] ?? null;
 }
 
-export async function lookupOpenFoodFactsProduct(barcode: string): Promise<OpenFoodFactsProduct | null> {
+export async function lookupOpenFoodFactsProduct(
+  barcode: string,
+  options: { forceRefresh?: boolean } = {},
+): Promise<OpenFoodFactsProduct | null> {
   const normalizedBarcode = barcode.trim();
   if (!normalizedBarcode) {
     console.error('[OpenFoodFacts] Barcode lookup skipped because the barcode is empty', {
@@ -284,15 +299,21 @@ export async function lookupOpenFoodFactsProduct(barcode: string): Promise<OpenF
     return null;
   }
   const key = cacheKey('barcode', normalizedBarcode);
-  const cached = await readCachedProduct(key);
-  if (cached.hit) {
-    console.info('[OpenFoodFacts] Barcode cache hit', {
+  if (!options.forceRefresh) {
+    const cached = await readCachedProduct(key);
+    if (cached.hit) {
+      console.info('[OpenFoodFacts] Barcode cache hit', {
+        barcode: normalizedBarcode,
+        found: Boolean(cached.product),
+      });
+      return cached.product;
+    }
+    console.info('[OpenFoodFacts] Barcode cache miss', { barcode: normalizedBarcode });
+  } else {
+    console.info('[OpenFoodFacts] Barcode cache bypassed for a fresh scan', {
       barcode: normalizedBarcode,
-      found: Boolean(cached.product),
     });
-    return cached.product;
   }
-  console.info('[OpenFoodFacts] Barcode cache miss', { barcode: normalizedBarcode });
   const product = await fetchProductByBarcode(normalizedBarcode);
   await saveCachedProduct(key, product);
   return product;

@@ -30,8 +30,9 @@ import {
 } from '@/components/RecallResultTabBar';
 import { useColors } from '@/hooks/useColors';
 import {
+  clearOpenFoodFactsBarcodeCache,
   lookupOpenFoodFactsProduct,
-  searchFoodRecalls,
+  searchBarcodeFoodRecalls,
 } from '@/services/recallApi';
 import type {
   FoodRecall,
@@ -83,10 +84,27 @@ export default function ScanScreen() {
     cameraReadyAtRef.current = null;
     setScanAttemptId(attemptId);
     setCameraReady(false);
-    setScanState('ready');
+    setScanState('checking');
     setVerdict(null);
     setErrorMessage(null);
-    console.info('[Barcode] Scan attempt started', { attemptId });
+    console.info('[Barcode] Scan attempt started; clearing cached barcode results', { attemptId });
+    void clearOpenFoodFactsBarcodeCache()
+      .then((removedCount) => {
+        if (attemptId !== scanAttemptCounter.current) return;
+        console.info('[Barcode] Barcode cache cleared before camera opens', {
+          attemptId,
+          removedCount,
+        });
+        setScanState('ready');
+      })
+      .catch((error) => {
+        if (attemptId !== scanAttemptCounter.current) return;
+        console.error('[Barcode] Barcode cache clearing failed; fresh lookup will bypass cache', {
+          attemptId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        setScanState('ready');
+      });
   }, []);
 
   useFocusEffect(
@@ -212,7 +230,7 @@ export default function ScanScreen() {
         attemptId: scanAttemptId,
         barcode,
       });
-      const product = await lookupOpenFoodFactsProduct(barcode);
+      const product = await lookupOpenFoodFactsProduct(barcode, { forceRefresh: true });
       if (scanAttemptId !== scanAttemptCounter.current) {
         console.info('[Barcode] Stale product lookup result ignored', {
           attemptId: scanAttemptId,
@@ -262,7 +280,7 @@ export default function ScanScreen() {
           brand: product.brand,
         });
         const recallStartedAt = Date.now();
-        const recallResult = await searchFoodRecalls(product.name, { brand: product.brand });
+        const recallResult = await searchBarcodeFoodRecalls(product, barcode);
         if (scanAttemptId !== scanAttemptCounter.current) {
           console.info('[Barcode] Stale FDA lookup result ignored', {
             attemptId: scanAttemptId,
@@ -276,6 +294,7 @@ export default function ScanScreen() {
           barcode,
           productName: product.name,
           recallCount: recallResult.recalls.length,
+              possiblyRelatedCount: recallResult.relatedRecalls?.length ?? 0,
           elapsedMs: Date.now() - recallStartedAt,
           fromCache: recallResult.fromCache,
         });
@@ -732,7 +751,7 @@ function VerdictView({
               ? 'FDA recall check unavailable'
               : hasRecall
                 ? `${recallCards.length} FDA recall card(s)`
-                : 'empty state: No active FDA recalls found'
+                : 'empty state: No active recalls for this product'
         }
         newsSummary={
           recentNews.length > 0
@@ -801,7 +820,7 @@ function VerdictView({
                   ? 'FDA Recall Check Unavailable'
                   : hasRecall
                     ? 'Recall Found'
-                  : 'No Active FDA Recall Found'}
+                   : 'No Active Recalls for This Product'}
             </Text>
             <Text style={[styles.verdictBody, { color: colors.mutedForeground }]}>
               {recallCheckStatus === 'checking'
@@ -810,7 +829,7 @@ function VerdictView({
                   ? 'The product was found, but FDA recall records could not be checked. This is not confirmation that the product has no recall.'
                   : hasRecall
                     ? 'This product matches an active FDA recall. Review the details below and follow the official notice.'
-                    : 'No active FDA food recall matched this product name.'}
+                    : 'No active FDA recalls were found for this product. Possibly related recalls, if any, are listed below for review.'}
             </Text>
             {recallCheckStatus === 'available' && !hasRecall ? <FdaFreshnessNotice colors={colors} /> : null}
             {recallResult?.fromCache ? (
@@ -829,7 +848,7 @@ function VerdictView({
             />
           ))}
 
-          <PossiblyRelatedRecalls item={produceItem} recalls={relatedRecalls} />
+          <PossiblyRelatedRecalls item={productLabel} recalls={relatedRecalls} />
           </>
         }
         newsContent={

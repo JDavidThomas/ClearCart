@@ -5,6 +5,7 @@
 export interface FoodRecall {
   recallNumber?: string;
   productDescription: string;
+  codeInfo?: string;
   reasonForRecall: string;
   recallingFirm: string;
   recallDate: string;

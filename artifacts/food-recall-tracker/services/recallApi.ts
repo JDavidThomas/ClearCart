@@ -1,12 +1,17 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type {
   FoodRecall,
+  OpenFoodFactsProduct,
   RecallNewsDiagnostics,
   RecallNewsArticle,
   RecallSearchResult,
 } from '@/types/recall';
 import { getRecallNews } from '@workspace/api-client-react';
-import { searchFdaRecalls, type FdaRecallSearchOptions } from './fdaRecalls';
+import {
+  searchFdaBarcodeRecalls,
+  searchFdaRecalls,
+  type FdaRecallSearchOptions,
+} from './fdaRecalls';
 import { buildOpenFdaSearchQuery, cleanRecallSearchTerm } from './recallSearch';
 import {
   getRecallRelevanceNotice,
@@ -25,6 +30,7 @@ import {
 import { filterRecentNews } from './recallNewsFilters';
 import { getCurrentApiBaseUrl } from './apiConnection';
 export {
+  clearOpenFoodFactsBarcodeCache,
   lookupOpenFoodFactsProduct,
   searchOpenFoodFactsProduct,
 } from './openFoodFacts';
@@ -562,4 +568,64 @@ export async function searchFoodRecalls(
     console.error('[RecallSearch] live lookup failed', diagnostics);
     throw new Error(formatRecallSearchError(error));
   }
+}
+
+export async function searchBarcodeFoodRecalls(
+  product: OpenFoodFactsProduct,
+  barcode: string,
+  onNewsDiagnostics?: NewsDiagnosticsListener,
+): Promise<RecallSearchResult> {
+  const productIdentity = cleanRecallSearchTerm(`${product.brand} ${product.name}`);
+  onNewsDiagnostics?.(emptyNewsDiagnostics());
+  if (!cleanRecallSearchTerm(barcode)) {
+    return { recalls: [], relatedRecalls: [], lastUpdated: new Date().toISOString(), fromCache: false };
+  }
+
+  const [fdaResult, newsResult] = await Promise.allSettled([
+    searchFdaBarcodeRecalls(product.name, barcode, { brand: product.brand }),
+    productIdentity
+      ? searchRecentRecallNews(productIdentity, onNewsDiagnostics, {
+          reason: 'barcode-scan',
+          cacheHit: false,
+        })
+      : Promise.resolve({
+          articles: [],
+          unavailable: true,
+          diagnostics: emptyNewsDiagnostics(),
+        }),
+  ]);
+
+  const news =
+    newsResult.status === 'fulfilled'
+      ? newsResult.value
+      : {
+          articles: [],
+          unavailable: true,
+          diagnostics: emptyNewsDiagnostics(),
+        };
+  if (fdaResult.status === 'rejected') {
+    if (news.unavailable) throw new Error(formatRecallSearchError(fdaResult.reason));
+    return {
+      recalls: [],
+      relatedRecalls: [],
+      recentNews: news.articles,
+      newsUnavailable: news.unavailable,
+      newsDiagnostics: news.diagnostics,
+      lastUpdated: new Date().toISOString(),
+      fromCache: false,
+      isProduceSearch: false,
+      fdaUnavailable: true,
+    };
+  }
+
+  return {
+    recalls: fdaResult.value.exactRecalls,
+    relatedRecalls: fdaResult.value.relatedRecalls,
+    recentNews: news.articles,
+    newsUnavailable: news.unavailable,
+    newsDiagnostics: news.diagnostics,
+    lastUpdated: new Date().toISOString(),
+    fromCache: false,
+    isProduceSearch: false,
+  };
 }

@@ -5,7 +5,7 @@
 - [Gemini response schema compatibility](gemini-response-schema.md) — direct Gemini JSON mode rejects `additionalProperties`; use prompt-enforced JSON without that schema field.
 - [Supabase profile sync](local-profile-fallback.md) — direct Expo Supabase Auth persists profiles locally, with guest access preserved during outages.
 - [Supabase network probe](supabase-network-probe.md) — container DNS failures can be independent of Expo runtime connectivity; validate authenticated flows on-device.
-- [openFDA produce relevance](openfda-produce-relevance.md) — client-side grouping is required because prefix-looking queries can still return broad matches.
+- [openFDA product matching](openfda-produce-relevance.md) — locally verify exact barcode identity; keep broad keyword hits secondary.
 - [Supabase storage bucket casing](supabase-storage-bucket-casing.md) — storage bucket IDs must match byte-for-byte in client paths and storage.objects policies.
 - [Supabase publishable keys](supabase-publishable-key.md) — current supabase-js accepts sb_publishable keys; profile failures should be diagnosed separately from key format.
 - [Native TypeScript tests](native-ts-tests.md) — pure Expo service tests can use Node’s native TypeScript runner without adding a test framework or runtime dependency.

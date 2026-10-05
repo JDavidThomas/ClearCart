@@ -3,9 +3,12 @@ import test from 'node:test';
 import type { FoodRecall } from '../types/recall.ts';
 import { rankAndFilterRecalls } from '../services/recallRelevance.ts';
 import {
+  buildBarcodeRecallExactSearchQueries,
+  buildBarcodeRecallFallbackSearchQueries,
   buildOpenFdaFieldSearchQueries,
   buildOpenFdaSearchQuery,
   buildRecallSearchStrategies,
+  isExactBarcodeRecallMatch,
 } from '../services/recallSearch.ts';
 
 test('recall search uses the full product, one relevant word, then one brand word', () => {
@@ -82,4 +85,72 @@ test('brand and product terms can match different parts of a recall record', () 
   const results = rankAndFilterRecalls([recall], 'GreenWise Blueberries');
   assert.equal(results.length, 1);
   assert.equal(results[0].relevance, 'medium');
+});
+
+test('barcode exact searches include full product identity and UPC/EAN variants', () => {
+  assert.deepEqual(
+    buildBarcodeRecallExactSearchQueries(
+      'Great Value Creamy Peanut Butter',
+      '078742370033',
+    ),
+    [
+      'product_description:"Great Value Creamy Peanut Butter"',
+      'code_info:"078742370033"',
+      'product_description:"078742370033"',
+      'code_info:"0078742370033"',
+      'product_description:"0078742370033"',
+    ],
+  );
+});
+
+test('barcode fallback searches target product keywords and recall reasons', () => {
+  assert.deepEqual(
+    buildBarcodeRecallFallbackSearchQueries(
+      'Great Value Creamy Peanut Butter',
+      'Great Value',
+    ),
+    ['product_description:"peanut"', 'reason_for_recall:"peanut"'],
+  );
+});
+
+test('barcode exact matching rejects other peanut products unless their UPC matches', () => {
+  const unrelatedRecall: FoodRecall = {
+    productDescription: 'Peanut Butter Fudge Ice Cream',
+    reasonForRecall: 'Potential allergen issue',
+    recallingFirm: 'Example Creamery',
+    recallDate: '20260722',
+    classification: 'Class I',
+    officialUrl: 'https://www.fda.gov/safety/recalls',
+    codeInfo: 'UPC 000000000000',
+  };
+  const exactByUpc = { ...unrelatedRecall, codeInfo: 'UPC 0078742370033' };
+  const exactByName = {
+    ...unrelatedRecall,
+    productDescription: 'Great Value Creamy Peanut Butter, 16 oz',
+  };
+
+  assert.equal(
+    isExactBarcodeRecallMatch(
+      unrelatedRecall,
+      'Great Value Creamy Peanut Butter',
+      '078742370033',
+    ),
+    false,
+  );
+  assert.equal(
+    isExactBarcodeRecallMatch(
+      exactByUpc,
+      'Great Value Creamy Peanut Butter',
+      '078742370033',
+    ),
+    true,
+  );
+  assert.equal(
+    isExactBarcodeRecallMatch(
+      exactByName,
+      'Great Value Creamy Peanut Butter',
+      '078742370033',
+    ),
+    true,
+  );
 });

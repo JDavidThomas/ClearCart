@@ -1,9 +1,12 @@
 import type { FoodRecall } from '../types/recall';
 import {
+  buildBarcodeRecallExactSearchQueries,
+  buildBarcodeRecallFallbackSearchQueries,
   buildRecallSearchStrategies,
   cleanRecallSearchTerm,
+  isExactBarcodeRecallMatch,
 } from './recallSearch.ts';
-import { rankAndFilterRecalls } from './recallRelevance';
+import { rankAndFilterRecalls } from './recallRelevance.ts';
 import {
   FdaDnsResolutionError,
   fetchOpenFdaWithDnsRetry,
@@ -44,6 +47,7 @@ function redactOpenFdaValue(value: string) {
 interface OpenFdaRecord {
   recall_number?: string;
   product_description?: string;
+  code_info?: string;
   reason_for_recall?: string;
   recalling_firm?: string;
   report_date?: string;
@@ -77,6 +81,7 @@ function normalizeRecord(record: OpenFdaRecord): FoodRecall {
       record.product_description,
       'Product description unavailable',
     ),
+    codeInfo: record.code_info?.trim() || undefined,
     reasonForRecall: valueOrFallback(record.reason_for_recall, 'Reason not provided'),
     recallingFirm: valueOrFallback(record.recalling_firm, 'Recalling firm not provided'),
     recallDate: valueOrFallback(record.report_date, 'Date not provided'),
@@ -98,7 +103,11 @@ function wait(milliseconds: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 }
 
-async function searchEndpoint(search: string, attempt: number) {
+async function searchEndpoint(
+  search: string,
+  attempt: number,
+  maxAttempts = MAX_SEARCH_ATTEMPTS,
+) {
   if (!OPENFDA_API_KEY) {
     throw new Error(
       'FDA API configuration is missing. EXPO_PUBLIC_OPENFDA_API_KEY is not available in the app bundle.',
@@ -117,7 +126,7 @@ async function searchEndpoint(search: string, attempt: number) {
   const apiKeyIncluded = params.has('api_key');
   console.info('[OpenFDA] request', {
     attempt,
-    maxAttempts: MAX_SEARCH_ATTEMPTS,
+    maxAttempts,
     url: safeRequestUrl,
     apiKeyConfigured: Boolean(OPENFDA_API_KEY),
     apiKeyIncluded,
@@ -256,6 +265,15 @@ function deduplicateRecalls(records: OpenFdaRecord[]) {
     });
 }
 
+function isActiveRecall(recall: FoodRecall) {
+  const status = recall.status?.trim().toLowerCase();
+  return !status || !['cancelled', 'canceled', 'closed', 'completed', 'terminated', 'withdrawn'].includes(status);
+}
+
+function sortRecentFirst(recalls: FoodRecall[]) {
+  return [...recalls].sort((left, right) => right.recallDate.localeCompare(left.recallDate));
+}
+
 export async function searchFdaRecalls(
   term: string,
   options: FdaRecallSearchOptions = {},
@@ -310,4 +328,112 @@ export async function searchFdaRecalls(
   }
 
   return rankAndFilterRecalls(deduplicateRecalls(records), normalizedTerm);
+}
+
+export async function searchFdaBarcodeRecalls(
+  productName: string,
+  barcode: string,
+  options: FdaRecallSearchOptions = {},
+): Promise<{ exactRecalls: FoodRecall[]; relatedRecalls: FoodRecall[] }> {
+  const normalizedName = cleanRecallSearchTerm(productName);
+  const normalizedBrand = cleanRecallSearchTerm(options.brand ?? '');
+  const productIdentity = normalizedName
+    ? normalizedBrand &&
+      normalizedName.toLowerCase() !== normalizedBrand.toLowerCase() &&
+      !normalizedName.toLowerCase().startsWith(`${normalizedBrand.toLowerCase()} `)
+      ? `${normalizedBrand} ${normalizedName}`
+      : normalizedName
+    : '';
+  if (!productIdentity && !barcode.replace(/\D/g, '')) {
+    return { exactRecalls: [], relatedRecalls: [] };
+  }
+
+  const exactQueries = buildBarcodeRecallExactSearchQueries(productIdentity, barcode);
+  if (exactQueries.length === 0) return { exactRecalls: [], relatedRecalls: [] };
+
+  const dateRange = getOpenFdaReportDateRange();
+  console.info('[OpenFDA] barcode exact search started', {
+    barcode,
+    productIdentity,
+    queryCount: exactQueries.length,
+    from: dateRange.from,
+    to: dateRange.to,
+  });
+
+  const exactResponses = await Promise.allSettled(
+    exactQueries.map((query, index) =>
+      searchEndpoint(
+        addOpenFdaReportDateRange(query, dateRange),
+        index + 1,
+        exactQueries.length,
+      ),
+    ),
+  );
+  const exactRecords = exactResponses.flatMap((response) =>
+    response.status === 'fulfilled' ? response.value : [],
+  );
+  const exactRecalls = sortRecentFirst(
+    deduplicateRecalls(exactRecords).filter(
+      (recall) => isActiveRecall(recall) && isExactBarcodeRecallMatch(recall, productIdentity, barcode),
+    ),
+  );
+
+  if (exactRecalls.length > 0) {
+    console.info('[OpenFDA] barcode exact search matched product; broad search skipped', {
+      barcode,
+      exactRecallCount: exactRecalls.length,
+    });
+    return { exactRecalls, relatedRecalls: [] };
+  }
+
+  const exactFailure = exactResponses.find(
+    (response): response is PromiseRejectedResult => response.status === 'rejected',
+  );
+  if (exactFailure) {
+    console.error('[OpenFDA] barcode exact search could not be completed', {
+      barcode,
+      error: exactFailure.reason instanceof Error
+        ? exactFailure.reason.message
+        : String(exactFailure.reason),
+    });
+    throw exactFailure.reason;
+  }
+
+  const fallbackQueries = productIdentity
+    ? buildBarcodeRecallFallbackSearchQueries(productIdentity, options.brand)
+    : [];
+  console.info('[OpenFDA] no exact barcode recall found; starting possibly-related search', {
+    barcode,
+    fallbackQueryCount: fallbackQueries.length,
+  });
+  const fallbackResponses = await Promise.allSettled(
+    fallbackQueries.map((query, index) =>
+      searchEndpoint(
+        addOpenFdaReportDateRange(query, dateRange),
+        exactQueries.length + index + 1,
+        exactQueries.length + fallbackQueries.length,
+      ),
+    ),
+  );
+  const successfulFallbacks = fallbackResponses.filter(
+    (response): response is PromiseFulfilledResult<OpenFdaRecord[]> =>
+      response.status === 'fulfilled',
+  );
+  if (successfulFallbacks.length === 0 && fallbackResponses.length > 0) {
+    const failure = fallbackResponses.find(
+      (response): response is PromiseRejectedResult => response.status === 'rejected',
+    );
+    if (failure) throw failure.reason;
+  }
+  const fallbackRecords = successfulFallbacks.flatMap((response) => response.value);
+  const relatedRecalls = sortRecentFirst(
+    deduplicateRecalls(fallbackRecords).filter(isActiveRecall),
+  );
+  console.info('[OpenFDA] barcode possibly-related search completed', {
+    barcode,
+    exactRecallCount: 0,
+    relatedRecallCount: relatedRecalls.length,
+    failedFallbackCount: fallbackResponses.length - successfulFallbacks.length,
+  });
+  return { exactRecalls: [], relatedRecalls };
 }
