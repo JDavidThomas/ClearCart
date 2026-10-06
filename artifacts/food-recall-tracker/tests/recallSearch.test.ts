@@ -58,12 +58,13 @@ test('OpenFDA query builder avoids duplicate OR strategies', () => {
   assert.equal(buildOpenFdaSearchQuery('guacamole'), 'product_description:"guacamole"');
   assert.equal(buildRecallSearchStrategies('avocado').length, 2);
   assert.equal(buildOpenFdaSearchQuery('xyzabc'), 'product_description:"xyzabc"');
-  const encodedSearch = new URLSearchParams({
-    search: buildOpenFdaSearchQuery('guacamole'),
-  })
-    .toString()
-    .replace(/\+/g, '%20');
-  assert.equal(/%2BOR%2B/.test(encodedSearch), false);
+  const encodedPhraseSearch = new URLSearchParams({
+    search: buildOpenFdaSearchQuery('ground beef'),
+  }).toString();
+  assert.equal(
+    encodedPhraseSearch,
+    'search=product_description%3A%22ground+beef%22',
+  );
 });
 
 test('egg, produce, and meat-product terms all build FDA recall queries', () => {

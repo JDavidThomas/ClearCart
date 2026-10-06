@@ -547,7 +547,9 @@ function NoResultsState({
         color={fdaUnavailable ? colors.warning : colors.success}
       />
       <Text style={[styles.stateTitle, { color: colors.foreground }]} testID="fda-no-results">
-        {fdaUnavailable ? 'FDA recall check unavailable' : 'No active FDA recalls found for this product.'}
+        {fdaUnavailable
+          ? 'FDA recall check unavailable'
+          : `No active FDA recalls found for “${term}”.`}
       </Text>
       <Text style={[styles.stateBody, { color: colors.mutedForeground }]}>
         {fdaUnavailable

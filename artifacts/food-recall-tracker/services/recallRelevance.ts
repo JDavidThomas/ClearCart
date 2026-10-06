@@ -276,20 +276,29 @@ export function getRecallRelevanceNotice(term: string, recalls: FoodRecall[]) {
 }
 
 export function splitRecallGroups(term: string, recalls: FoodRecall[]) {
+  const possiblyRelatedRecalls = recalls.filter(
+    (recall) => recall.searchMatch === 'word-fallback',
+  );
   const produceItem = getProduceItem(term);
   if (!produceItem) {
     return {
       isProduceSearch: false,
       produceItem: undefined,
-      directRecalls: recalls,
-      relatedRecalls: [] as FoodRecall[],
+      directRecalls: recalls.filter((recall) => recall.searchMatch !== 'word-fallback'),
+      relatedRecalls: possiblyRelatedRecalls,
     };
   }
 
   return {
     isProduceSearch: true,
     produceItem,
-    directRecalls: recalls.filter((recall) => recall.produceGroup === 'direct'),
-    relatedRecalls: recalls.filter((recall) => recall.produceGroup === 'related'),
+    directRecalls: recalls.filter(
+      (recall) =>
+        recall.searchMatch !== 'word-fallback' && recall.produceGroup === 'direct',
+    ),
+    relatedRecalls: recalls.filter(
+      (recall) =>
+        recall.searchMatch === 'word-fallback' || recall.produceGroup === 'related',
+    ),
   };
 }

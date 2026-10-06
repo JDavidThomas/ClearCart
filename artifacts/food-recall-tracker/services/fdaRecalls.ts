@@ -123,13 +123,14 @@ async function searchEndpoint(
     sort: 'report_date:desc',
     api_key: OPENFDA_API_KEY,
   });
-  const encodedParams = params.toString().replace(/\+/g, '%20').replace(/\*/g, '%2A');
+  const encodedParams = params.toString().replace(/\*/g, '%2A');
   const requestUrl = `${OPENFDA_ENDPOINT}?${encodedParams}`;
   const safeRequestUrl = redactOpenFdaValue(requestUrl);
   const apiKeyIncluded = params.has('api_key');
-  console.info('[OpenFDA] request', {
+  console.info('[OpenFDA] exact FDA request URL', {
     attempt,
     maxAttempts,
+    search,
     url: safeRequestUrl,
     apiKeyConfigured: Boolean(OPENFDA_API_KEY),
     apiKeyIncluded,

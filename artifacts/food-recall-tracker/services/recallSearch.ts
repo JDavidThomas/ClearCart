@@ -1,6 +1,6 @@
 import type { FoodRecall } from '../types/recall.ts';
 
-export const RECALL_SEARCH_QUERY_VERSION = 2;
+export const RECALL_SEARCH_QUERY_VERSION = 3;
 
 export function cleanRecallSearchTerm(term: string) {
   return (
