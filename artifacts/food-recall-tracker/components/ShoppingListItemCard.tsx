@@ -108,7 +108,7 @@ export function ShoppingListItemCard({
   const recallColor =
     result?.recallStatus === 'active'
       ? colors.destructive
-      : result?.recallStatus === 'unavailable'
+      : result?.recallStatus === 'possibly-related' || result?.recallStatus === 'unavailable'
         ? colors.warning
         : colors.success;
   const allergenColor =
@@ -134,6 +134,8 @@ export function ShoppingListItemCard({
     ? 'Recall check pending'
     : result.recallStatus === 'active'
       ? `Active recall${result.recallCount > 1 ? ` · ${result.recallCount}` : ''}`
+      : result.recallStatus === 'possibly-related'
+        ? `Possibly related recall${result.recallCount > 1 ? ` · ${result.recallCount}` : ''}`
       : result.recallStatus === 'unavailable'
         ? 'Check FDA.gov'
         : 'No recalls found';
@@ -234,13 +236,21 @@ export function ShoppingListItemCard({
           </Pressable>
         ) : (
           <StatusRow
-            icon={result?.recallStatus === 'active' ? 'alert-circle' : 'check-circle'}
+            icon={
+              result?.recallStatus === 'active'
+                ? 'alert-circle'
+                : result?.recallStatus === 'possibly-related'
+                  ? 'alert-triangle'
+                  : 'check-circle'
+            }
             label={recallLabel}
             color={recallColor}
             backgroundColor={
               result?.recallStatus === 'active'
                 ? colors.dangerSoft
-                : colors.successSoft
+                : result?.recallStatus === 'possibly-related'
+                  ? colors.warningSoft
+                  : colors.successSoft
             }
           />
         )}

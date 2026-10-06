@@ -16,6 +16,7 @@ export interface FoodRecall {
   summary?: string;
   relevance?: RecallRelevance;
   produceGroup?: ProduceRecallGroup;
+  searchMatch?: 'word-fallback';
 }
 
 export type RecallRelevance = 'high' | 'medium' | 'low';

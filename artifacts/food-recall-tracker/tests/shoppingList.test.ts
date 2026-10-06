@@ -61,6 +61,31 @@ test('shopping list checks treat a banana as clean when product data is availabl
   assert.equal(result.recallStatus, 'clear');
 });
 
+test('word-fallback recalls are shown as possibly related rather than active', () => {
+  const result = buildShoppingListCheckResult('ground beef', profile(), {
+    recallResult: {
+      recalls: [
+        {
+          productDescription: 'Beef Jerky',
+          reasonForRecall: 'Potential contamination',
+          recallingFirm: 'Example Foods',
+          recallDate: '20261001',
+          classification: 'Class I',
+          officialUrl: 'https://www.fda.gov/safety/recalls',
+          searchMatch: 'word-fallback',
+        },
+      ],
+      recentNews: [],
+      newsUnavailable: false,
+      fdaUnavailable: false,
+    },
+    product: null,
+  });
+
+  assert.equal(result.recallStatus, 'possibly-related');
+  assert.equal(result.recallCount, 1);
+});
+
 test('unavailable services remain distinct from clean results and preserve news', () => {
   const result = buildShoppingListCheckResult('Nevada Graziers Raw Milk Cheeses', profile(), {
     recallResult: {
@@ -156,12 +181,13 @@ test('shopping list sorts by recall, allergen, health, news, then clean urgency'
     item('news', { ...baseResult, newsArticleCount: 1 }),
     item('health', { ...baseResult, healthStatus: 'conflicts' }),
     item('allergen', { ...baseResult, allergenStatus: 'match' }),
+    item('possible-recall', { ...baseResult, recallStatus: 'possibly-related' }),
     item('recall', { ...baseResult, recallStatus: 'active' }),
   ];
 
   assert.deepEqual(
     sortShoppingListItems(rows).map((row) => row.id),
-    ['recall', 'allergen', 'health', 'news', 'clean'],
+    ['recall', 'possible-recall', 'allergen', 'health', 'news', 'clean'],
   );
 });
 
@@ -189,6 +215,7 @@ test('shopping list summary counts affected items instead of article totals', ()
 
   assert.deepEqual(summarizeShoppingList([row]), {
     activeRecallItems: 1,
+    possiblyRelatedRecallItems: 0,
     allergenMatchItems: 1,
     healthConflictItems: 1,
     newsItems: 1,

@@ -2,9 +2,12 @@ import type { FoodRecall } from '../types/recall';
 import {
   buildBarcodeRecallExactSearchQueries,
   buildBarcodeRecallFallbackSearchQueries,
+  buildRecallWordFallbackSearchQuery,
   buildRecallSearchStrategies,
   cleanRecallSearchTerm,
   isExactBarcodeRecallMatch,
+  isRecallDescriptionPhraseMatch,
+  isRecallDescriptionWordMatch,
 } from './recallSearch.ts';
 import { rankAndFilterRecalls } from './recallRelevance.ts';
 import {
@@ -280,6 +283,46 @@ export async function searchFdaRecalls(
 ): Promise<FoodRecall[]> {
   const normalizedTerm = cleanRecallSearchTerm(term);
   if (!normalizedTerm) return [];
+
+  if (normalizedTerm.split(' ').length > 1) {
+    const [phraseStrategy] = buildRecallSearchStrategies(normalizedTerm, options);
+    if (!phraseStrategy) return [];
+
+    const dateRange = getOpenFdaReportDateRange();
+    console.info('[OpenFDA] multi-word search starting with exact product phrase', {
+      term: normalizedTerm,
+      query: phraseStrategy.query,
+      from: dateRange.from,
+      to: dateRange.to,
+    });
+    const phraseRecords = await searchEndpoint(
+      addOpenFdaReportDateRange(phraseStrategy.query, dateRange),
+      1,
+      2,
+    );
+    const phraseMatches = deduplicateRecalls(phraseRecords).filter((recall) =>
+      isRecallDescriptionPhraseMatch(recall.productDescription, normalizedTerm),
+    );
+    const exactRecalls = rankAndFilterRecalls(phraseMatches, normalizedTerm);
+    if (exactRecalls.length > 0) return exactRecalls;
+
+    const fallbackQuery = buildRecallWordFallbackSearchQuery(normalizedTerm);
+    if (!fallbackQuery) return [];
+    await wait(SEARCH_ATTEMPT_DELAY_MS);
+    console.info('[OpenFDA] exact product phrase had no matches; trying possibly-related words', {
+      term: normalizedTerm,
+      query: fallbackQuery,
+    });
+    const fallbackRecords = await searchEndpoint(
+      addOpenFdaReportDateRange(`(${fallbackQuery})`, dateRange),
+      2,
+      2,
+    );
+    const fallbackMatches = deduplicateRecalls(fallbackRecords)
+      .filter((recall) => isRecallDescriptionWordMatch(recall.productDescription, normalizedTerm))
+      .map((recall) => ({ ...recall, searchMatch: 'word-fallback' as const }));
+    return rankAndFilterRecalls(fallbackMatches, normalizedTerm);
+  }
 
   const strategies = buildRecallSearchStrategies(normalizedTerm, options).slice(
     0,

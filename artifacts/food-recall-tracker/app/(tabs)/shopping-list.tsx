@@ -607,6 +607,17 @@ export default function ShoppingListScreen() {
                       }
                     />
                     <SummaryRow
+                      icon="help-circle"
+                      label="items have possibly related recalls"
+                      count={summary.possiblyRelatedRecallItems}
+                      color={summary.possiblyRelatedRecallItems ? colors.warning : colors.success}
+                      backgroundColor={
+                        summary.possiblyRelatedRecallItems
+                          ? colors.warningSoft
+                          : colors.successSoft
+                      }
+                    />
+                    <SummaryRow
                       icon="alert-triangle"
                       label="contain your allergens"
                       count={summary.allergenMatchItems}

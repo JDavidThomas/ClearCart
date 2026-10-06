@@ -12,7 +12,11 @@ import {
   searchFdaRecalls,
   type FdaRecallSearchOptions,
 } from './fdaRecalls';
-import { buildOpenFdaSearchQuery, cleanRecallSearchTerm } from './recallSearch';
+import {
+  RECALL_SEARCH_QUERY_VERSION,
+  buildOpenFdaSearchQuery,
+  cleanRecallSearchTerm,
+} from './recallSearch';
 import {
   getRecallRelevanceNotice,
   rankAndFilterRecalls,
@@ -297,7 +301,7 @@ function cacheKey(
   ]
     .filter(Boolean)
     .join('|');
-  return `${CACHE_PREFIX}${encodeURIComponent(identity)}`;
+  return `${CACHE_PREFIX}v${RECALL_SEARCH_QUERY_VERSION}/${encodeURIComponent(identity)}`;
 }
 
 function messageFromApiError(error: unknown) {

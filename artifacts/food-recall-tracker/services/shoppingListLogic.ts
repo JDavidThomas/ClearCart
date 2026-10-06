@@ -17,7 +17,11 @@ import type {
 
 export const SHOPPING_LIST_CHECK_TTL_MS = 60 * 60 * 1000;
 
-export type ShoppingListRecallStatus = 'active' | 'clear' | 'unavailable';
+export type ShoppingListRecallStatus =
+  | 'active'
+  | 'possibly-related'
+  | 'clear'
+  | 'unavailable';
 export type ShoppingListAllergenStatus = 'match' | 'clear' | 'unavailable' | 'not-configured';
 export type ShoppingListHealthStatus = 'conflicts' | 'clear' | 'unavailable' | 'not-configured';
 
@@ -73,6 +77,8 @@ export function buildShoppingListCheckResult(
   },
 ): ShoppingListCheckResult {
   const recallCount = recallResult?.recalls.length ?? 0;
+  const exactRecallCount =
+    recallResult?.recalls.filter((recall) => recall.searchMatch !== 'word-fallback').length ?? 0;
   const recallUnavailable = recallLookupFailed || !recallResult || recallResult.fdaUnavailable === true;
   const newsArticles = recallResult?.recentNews ?? [];
   const newsUnavailable = recallLookupFailed || !recallResult || recallResult.newsUnavailable === true;
@@ -109,7 +115,13 @@ export function buildShoppingListCheckResult(
     shouldUseGenericLabelCheck(product ?? null, productLookupFailed, healthSignals);
 
   return {
-    recallStatus: recallUnavailable ? 'unavailable' : recallCount > 0 ? 'active' : 'clear',
+    recallStatus: recallUnavailable
+      ? 'unavailable'
+      : exactRecallCount > 0
+        ? 'active'
+        : recallCount > 0
+          ? 'possibly-related'
+          : 'clear',
     recallCount,
     allergenStatus:
       allergenVerdict === 'allergen-alert' || allergenVerdict === 'severe-allergen-alert'
@@ -147,17 +159,18 @@ function urgencyRank(item: Pick<ShoppingListItem, 'last_check_result'>) {
   const result = item.last_check_result;
   if (!result) return 4;
   if (result.recallStatus === 'active') return 0;
-  if (result.allergenStatus === 'match') return 1;
-  if (result.healthStatus === 'conflicts') return 2;
-  if (result.newsArticleCount > 0) return 3;
+  if (result.recallStatus === 'possibly-related') return 1;
+  if (result.allergenStatus === 'match') return 2;
+  if (result.healthStatus === 'conflicts') return 3;
+  if (result.newsArticleCount > 0) return 4;
   if (
     result.recallStatus === 'unavailable' ||
     result.allergenStatus === 'unavailable' ||
     result.healthStatus === 'unavailable'
   ) {
-    return 4;
+    return 5;
   }
-  return 5;
+  return 6;
 }
 
 export function sortShoppingListItems(items: ShoppingListItem[]) {
@@ -175,6 +188,7 @@ export function summarizeShoppingList(items: ShoppingListItem[]) {
       const result = item.last_check_result;
       if (!result) return summary;
       if (result.recallStatus === 'active') summary.activeRecallItems += 1;
+      if (result.recallStatus === 'possibly-related') summary.possiblyRelatedRecallItems += 1;
       if (result.allergenStatus === 'match') summary.allergenMatchItems += 1;
       if (result.healthStatus === 'conflicts') summary.healthConflictItems += 1;
       if (result.newsArticleCount > 0) summary.newsItems += 1;
@@ -182,6 +196,7 @@ export function summarizeShoppingList(items: ShoppingListItem[]) {
     },
     {
       activeRecallItems: 0,
+      possiblyRelatedRecallItems: 0,
       allergenMatchItems: 0,
       healthConflictItems: 0,
       newsItems: 0,

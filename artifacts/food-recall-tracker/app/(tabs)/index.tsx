@@ -32,6 +32,7 @@ import {
 } from '@/components/RecallResultTabBar';
 import { useColors } from '@/hooks/useColors';
 import { searchFoodRecalls } from '@/services/recallApi';
+import { RECALL_SEARCH_QUERY_VERSION } from '@/services/recallSearch';
 import { shouldRefetchNewsOnTab } from '@/services/recallTabNavigation';
 import type { RecallNewsDiagnostics, RecallSearchResult } from '@/types/recall';
 
@@ -44,7 +45,6 @@ const EMPTY_NEWS_DIAGNOSTICS: RecallNewsDiagnostics = {
   filteredArticleCount: null,
   error: null,
 };
-
 function formatUpdatedAt(date: string) {
   const parsedDate = new Date(date);
   if (Number.isNaN(parsedDate.getTime())) return 'Unknown';
@@ -93,7 +93,7 @@ export default function HomeScreen() {
     router.setParams({ searchPrefill: undefined, autoSearch: undefined });
   }, [autoSearch, router, searchPrefill]);
 
-  const recallQueryKey = ['food-recalls', submittedTerm] as const;
+  const recallQueryKey = ['food-recalls', RECALL_SEARCH_QUERY_VERSION, submittedTerm] as const;
   const { data, error, isFetching, isError, refetch } = useQuery<RecallSearchResult, Error>({
     queryKey: recallQueryKey,
     queryFn: async () => {
@@ -127,7 +127,11 @@ export default function HomeScreen() {
       console.log('[RecallNews] search submit skipped: empty term');
       return;
     }
-    const cachedQueryState = queryClient.getQueryState(['food-recalls', nextTerm]);
+    const cachedQueryState = queryClient.getQueryState([
+      'food-recalls',
+      RECALL_SEARCH_QUERY_VERSION,
+      nextTerm,
+    ]);
     console.log('[RecallNews] search submit accepted', {
       term: nextTerm,
       sameAsSubmittedTerm: nextTerm === submittedTerm,

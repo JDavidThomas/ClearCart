@@ -7,22 +7,41 @@ import {
   buildBarcodeRecallFallbackSearchQueries,
   buildOpenFdaFieldSearchQueries,
   buildOpenFdaSearchQuery,
+  buildRecallWordFallbackSearchQuery,
   buildRecallSearchStrategies,
+  isRecallDescriptionPhraseMatch,
   isExactBarcodeRecallMatch,
 } from '../services/recallSearch.ts';
 
-test('recall search uses the full product, one relevant word, then one brand word', () => {
+test('multi-word recall searches start with only the complete product-description phrase', () => {
   const strategies = buildRecallSearchStrategies('Great Value Frozen Berries');
 
   assert.deepEqual(
     strategies.map((strategy) => strategy.query),
-    [
-      'product_description:"Great Value Frozen Berries"',
-      'product_description:Berries',
-      'recalling_firm:Great',
-    ],
+    ['product_description:"Great Value Frozen Berries"'],
   );
-  assert.equal(strategies.length <= 3, true);
+});
+
+test('single-word recall searches keep the broad product and firm search strategies', () => {
+  assert.deepEqual(
+    buildRecallSearchStrategies('beef').map((strategy) => strategy.query),
+    ['product_description:"beef"', 'recalling_firm:beef'],
+  );
+  assert.equal(buildRecallSearchStrategies('greenwise')[0]?.query, 'product_description:"greenwise"');
+});
+
+test('multi-word fallback searches OR individual product-description words', () => {
+  assert.equal(
+    buildRecallWordFallbackSearchQuery('ground beef'),
+    'product_description:"ground" OR product_description:"beef"',
+  );
+  assert.equal(buildRecallWordFallbackSearchQuery('beef'), '');
+});
+
+test('phrase matching requires adjacent words in the product description', () => {
+  assert.equal(isRecallDescriptionPhraseMatch('Ground Beef, 80% lean', 'ground beef'), true);
+  assert.equal(isRecallDescriptionPhraseMatch('Roast Beef Sandwiches', 'ground beef'), false);
+  assert.equal(isRecallDescriptionPhraseMatch('Beef Jerky', 'ground beef'), false);
 });
 
 test('a firm phrase produces only one query instead of duplicate fallbacks', () => {

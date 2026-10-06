@@ -238,7 +238,10 @@ export function rankAndFilterRecalls(recalls: FoodRecall[], term: string) {
     .map((recall, originalIndex) => ({
       recall: {
         ...recall,
-        relevance: getRecallFieldRelevance(recall, term) ?? undefined,
+        relevance:
+          recall.searchMatch === 'word-fallback'
+            ? 'low'
+            : getRecallFieldRelevance(recall, term) ?? undefined,
         produceGroup: getProduceGroup(recall.productDescription, term),
       },
       originalIndex,

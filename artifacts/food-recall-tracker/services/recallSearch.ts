@@ -1,5 +1,7 @@
 import type { FoodRecall } from '../types/recall.ts';
 
+export const RECALL_SEARCH_QUERY_VERSION = 2;
+
 export function cleanRecallSearchTerm(term: string) {
   return (
     term
@@ -69,16 +71,19 @@ export function buildRecallSearchStrategies(
   const normalizedTerm = cleanRecallSearchTerm(term);
   if (!normalizedTerm) return [];
 
+  const phraseStrategy = {
+    field: 'product_description' as const,
+    term: normalizedTerm,
+    query: quoteSearchTerm('product_description', normalizedTerm),
+  };
+  if (normalizedTerm.split(' ').length > 1) return [phraseStrategy];
+
   const productSource = normalizeOptionalSearchTerm(options.productType) || normalizedTerm;
   const brandSource = normalizeOptionalSearchTerm(options.brand) || normalizedTerm;
   const productWord = mostRelevantProductWord(productSource);
   const brandWord = firstSearchWord(brandSource);
   const candidates = [
-    {
-      field: 'product_description' as const,
-      term: normalizedTerm,
-      query: quoteSearchTerm('product_description', normalizedTerm),
-    },
+    phraseStrategy,
     ...(productWord && productWord.toLowerCase() !== normalizedTerm.toLowerCase()
       ? [
           {
@@ -106,6 +111,32 @@ export function buildRecallSearchStrategies(
     seenQueries.add(normalizedQuery);
     return true;
   });
+}
+
+export function buildRecallWordFallbackSearchQuery(term: string) {
+  const words = [...new Set(cleanRecallSearchTerm(term).split(' ').filter(Boolean))];
+  if (words.length < 2) return '';
+  return words
+    .map((word) => quoteSearchTerm('product_description', word))
+    .join(' OR ');
+}
+
+export function isRecallDescriptionPhraseMatch(description: string, term: string) {
+  const normalizedTerm = cleanRecallSearchTerm(term).toLowerCase();
+  if (!normalizedTerm) return false;
+  const normalizedDescription = cleanRecallSearchTerm(description).toLowerCase();
+  return ` ${normalizedDescription} `.includes(` ${normalizedTerm} `);
+}
+
+export function isRecallDescriptionWordMatch(description: string, term: string) {
+  const descriptionWords = new Set(
+    cleanRecallSearchTerm(description).toLowerCase().split(' ').filter(Boolean),
+  );
+  return cleanRecallSearchTerm(term)
+    .toLowerCase()
+    .split(' ')
+    .filter(Boolean)
+    .some((word) => descriptionWords.has(word));
 }
 
 export function buildOpenFdaSearchQuery(term: string) {
