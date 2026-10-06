@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { searchOpenFoodFactsProduct } from './openFoodFacts';
 import { searchFoodRecalls } from './recallApi';
+import { shouldLookupShoppingListProductByName } from './singleIngredientFoods.ts';
 import {
   buildShoppingListCheckResult,
   type ShoppingListCheckResult,
@@ -14,9 +15,12 @@ export async function runShoppingListChecks(
   term: string,
   profile: ShoppingListProfile,
 ): Promise<ShoppingListCheckResult> {
+  const productLookup = shouldLookupShoppingListProductByName(term)
+    ? searchOpenFoodFactsProduct(term)
+    : Promise.resolve(null);
   const [recallOutcome, productOutcome] = await Promise.allSettled([
     searchFoodRecalls(term),
-    searchOpenFoodFactsProduct(term),
+    productLookup,
   ]);
   const recallResult = recallOutcome.status === 'fulfilled' ? recallOutcome.value : undefined;
   const product = productOutcome.status === 'fulfilled' ? productOutcome.value : null;

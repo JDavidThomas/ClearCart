@@ -148,7 +148,11 @@ export default function ShoppingListScreen() {
     () =>
       items.filter(
         (item) =>
-          isShoppingListCheckStale(item.last_checked_at) &&
+          isShoppingListCheckStale(
+            item.last_checked_at,
+            Date.now(),
+            item.last_check_result?.checkVersion ?? null,
+          ) &&
           !checkingIds.includes(item.id),
       ),
     [items, checkingIds],
@@ -624,6 +628,15 @@ export default function ShoppingListScreen() {
                       color={summary.allergenMatchItems ? colors.destructive : colors.success}
                       backgroundColor={
                         summary.allergenMatchItems ? colors.dangerSoft : colors.successSoft
+                      }
+                    />
+                    <SummaryRow
+                      icon="help-circle"
+                      label="have possible allergen matches"
+                      count={summary.possibleAllergenItems}
+                      color={summary.possibleAllergenItems ? colors.warning : colors.success}
+                      backgroundColor={
+                        summary.possibleAllergenItems ? colors.warningSoft : colors.successSoft
                       }
                     />
                     <SummaryRow

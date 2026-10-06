@@ -8,7 +8,11 @@ import {
   View,
 } from 'react-native';
 import { useColors } from '@/hooks/useColors';
-import { isShoppingListCheckStale, type ShoppingListItem } from '@/services/shoppingList';
+import {
+  getShoppingListAllergenLabel,
+  isShoppingListCheckStale,
+  type ShoppingListItem,
+} from '@/services/shoppingList';
 
 const FDA_RECALLS_URL = 'https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts';
 
@@ -19,14 +23,6 @@ interface ShoppingListItemCardProps {
   onRecheck: () => void;
   onRemove: () => void;
   onViewDetails: () => void;
-}
-
-function formatAllergenName(value: string) {
-  if (value === 'other') return 'Other';
-  return value
-    .split('-')
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
 }
 
 function formatCheckedAt(value: string | null) {
@@ -103,7 +99,13 @@ export function ShoppingListItemCard({
   const [showHealthDetails, setShowHealthDetails] = useState(false);
   const [showNewsDetails, setShowNewsDetails] = useState(false);
   const result = item.last_check_result;
-  const isStale = isShoppingListCheckStale(item.last_checked_at);
+  const isStale = isShoppingListCheckStale(
+    item.last_checked_at,
+    Date.now(),
+    result?.checkVersion ?? null,
+  );
+  const allergenIsConfirmed =
+    result?.allergenStatus === 'match' && result.allergenEvidence === 'ingredient-data';
 
   const recallColor =
     result?.recallStatus === 'active'
@@ -112,7 +114,7 @@ export function ShoppingListItemCard({
         ? colors.warning
         : colors.success;
   const allergenColor =
-    result?.allergenStatus === 'match'
+    allergenIsConfirmed
       ? colors.destructive
       : result?.allergenStatus === 'clear'
         ? colors.success
@@ -139,15 +141,7 @@ export function ShoppingListItemCard({
       : result.recallStatus === 'unavailable'
         ? 'Check FDA.gov'
         : 'No recalls found';
-  const allergenLabel = !result
-    ? 'Allergen check pending'
-    : result.allergenStatus === 'match'
-      ? `Contains your allergens: ${result.allergenMatches.map(formatAllergenName).join(', ')}`
-      : result.allergenStatus === 'clear'
-        ? 'No allergen matches'
-        : result.allergenStatus === 'unavailable'
-          ? 'Allergen data unavailable'
-          : 'Allergy profile not set up';
+  const allergenLabel = getShoppingListAllergenLabel(result);
   const healthLabel = !result
     ? 'Health check pending'
     : result.healthStatus === 'conflicts'
@@ -256,16 +250,20 @@ export function ShoppingListItemCard({
         )}
         <StatusRow
           icon={
-            result?.allergenStatus === 'match'
+            allergenIsConfirmed
               ? 'alert-circle'
               : result?.allergenStatus === 'clear'
                 ? 'check-circle'
-                : 'info'
+                : result?.allergenStatus === 'possible-match' ||
+                    (result?.allergenStatus === 'match' &&
+                      result.allergenEvidence !== 'ingredient-data')
+                  ? 'help-circle'
+                  : 'info'
           }
           label={allergenLabel}
           color={allergenColor}
           backgroundColor={
-            result?.allergenStatus === 'match'
+            allergenIsConfirmed
               ? colors.dangerSoft
               : result?.allergenStatus === 'clear'
                 ? colors.successSoft
