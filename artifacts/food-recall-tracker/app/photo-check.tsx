@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AllergenInsights } from '@/components/AllergenInsights';
+import { FamilyCheck } from '@/components/FamilyCheck';
 import { HealthDietInsights } from '@/components/HealthInsights';
 import { FdaFreshnessNotice } from '@/components/FdaFreshnessNotice';
 import { PossiblyRelatedRecalls } from '@/components/PossiblyRelatedRecalls';
@@ -691,6 +692,11 @@ function PhotoVerdictView({
         product={verdict.nutritionProduct}
         source="photo"
         colors={colors}
+      />
+      <FamilyCheck
+        productName={verdict.productName}
+        productText={`${verdict.nutritionProduct.ingredients ?? ''} ${verdict.nutritionProduct.allergens ?? ''}`}
+        product={verdict.nutritionProduct}
       />
       <RetakeButton colors={colors} onPress={onRetake} />
       <ManualSearchButton

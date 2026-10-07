@@ -52,11 +52,13 @@ function FamilyMemberRow({
   const colors = useColors();
   const translateX = useRef(new Animated.Value(0)).current;
   const isOpen = useRef(false);
+  const shouldHandleHorizontalSwipe = (_event: unknown, gesture: { dx: number; dy: number }) =>
+    Math.abs(gesture.dx) > 12 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.2;
   const responder = useMemo(
     () => PanResponder.create({
       onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_event, gesture) =>
-        Math.abs(gesture.dx) > 12 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.2,
+      onMoveShouldSetPanResponder: shouldHandleHorizontalSwipe,
+      onMoveShouldSetPanResponderCapture: shouldHandleHorizontalSwipe,
       onPanResponderMove: (_event, gesture) => {
         const base = isOpen.current ? -88 : 0;
         translateX.setValue(Math.max(-88, Math.min(0, base + gesture.dx)));

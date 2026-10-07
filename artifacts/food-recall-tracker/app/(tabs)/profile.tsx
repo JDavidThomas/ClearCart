@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Linking, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ALLERGEN_OPTIONS } from '@/components/AllergenInsights';
+import { FamilyMembersSection } from '@/components/FamilyMembersSection';
 import { DIETARY_PREFERENCE_OPTIONS, HEALTH_CONDITION_OPTIONS } from '@/components/HealthInsights';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
@@ -387,6 +388,7 @@ function LoggedInProfile() {
           </View>
         </View>
       )}
+      <FamilyMembersSection />
       <View style={styles.section}>
         <View style={styles.biometricRow}>
           <View style={styles.biometricCopy}>

@@ -80,7 +80,7 @@ export function FamilyCheck({ productName, productText, product = null }: Family
     ? 'Checking family profiles…'
     : hasConflicts
       ? `${conflictCount} ${conflictCount === 1 ? 'member needs' : 'members need'} a closer look`
-      : 'No conflicts detected';
+      : 'Safe for everyone';
 
   return (
     <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -106,7 +106,7 @@ export function FamilyCheck({ productName, productText, product = null }: Family
       </Pressable>
 
       {expanded ? (
-        <View style={styles.resultList}>
+        <View style={[styles.resultList, { borderTopColor: colors.border }]}>
           {productQuery.isPending ? (
             <Text style={[styles.body, { color: colors.mutedForeground }]}>
               Checking available product details…
@@ -181,7 +181,6 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   resultList: {
-    borderTopColor: '#00000012',
     borderTopWidth: StyleSheet.hairlineWidth,
     gap: 11,
     marginTop: 14,

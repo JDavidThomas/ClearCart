@@ -1,7 +1,7 @@
 import type { OpenFoodFactsProduct } from '@/types/recall';
-import { ALLERGEN_KEYWORDS, evaluateAllergenMatches } from './allergenMatching';
+import { ALLERGEN_KEYWORDS, evaluateAllergenMatches } from './allergenMatching.ts';
 import { productTextContainsAnyKeyword } from './productNameKeywords.ts';
-import { buildConflicts } from './nutritionInsights';
+import { buildConflicts } from './nutritionInsights.ts';
 
 export interface FamilyCheckMember {
   id: string;

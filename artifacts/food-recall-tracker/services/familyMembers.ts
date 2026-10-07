@@ -69,13 +69,19 @@ function getFamilyMemberError(error: unknown, operation: string) {
   const details = getSupabaseErrorDetails(error);
   logSupabaseDiagnostic(`family-members.${operation}.failed`, error);
 
-  if (details.code === 'PGRST205' || /family_members.*(not found|schema cache)/i.test(details.message)) {
+  if (
+    details.code === '42P01' ||
+    details.code === 'PGRST205' ||
+    /family_members.*(not found|schema cache|does not exist)/i.test(details.message) ||
+    /does not exist.*family_members/i.test(details.message)
+  ) {
     return new Error('Family profiles are not set up yet. Run supabase/family-members.sql in your Supabase project.');
   }
   if (details.code === '42501') {
     return new Error('Supabase blocked this family profile request. Check the family_members row-level security policies.');
   }
-  return new Error(`Family profiles could not be ${operation === 'select' ? 'loaded' : 'saved'}. ${details.message}`);
+  const action = operation === 'select' ? 'loaded' : operation === 'delete' ? 'deleted' : 'saved';
+  return new Error(`Family profiles could not be ${action}. ${details.message}`);
 }
 
 export async function listFamilyMembers(ownerId: string) {

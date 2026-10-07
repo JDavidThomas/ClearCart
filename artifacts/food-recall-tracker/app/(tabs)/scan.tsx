@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AllergenInsights } from '@/components/AllergenInsights';
+import { FamilyCheck } from '@/components/FamilyCheck';
 import { HealthDietInsights } from '@/components/HealthInsights';
 import { FDA_NOTICES_URL, FdaFreshnessNotice } from '@/components/FdaFreshnessNotice';
 import { PossiblyRelatedRecalls } from '@/components/PossiblyRelatedRecalls';
@@ -804,6 +805,11 @@ function VerdictView({
           source="barcode"
           colors={colors}
         />
+        <FamilyCheck
+          productName={productLabel}
+          productText={`${verdict.product?.ingredients ?? ''} ${verdict.product?.allergens ?? ''}`}
+          product={verdict.product}
+        />
         <ScanAgainButton colors={colors} onPress={onScanAgain} />
         <SearchByNameButton colors={colors} onPress={() => void router.push('/')} />
       </View>
@@ -952,6 +958,11 @@ function VerdictView({
         product={verdict.product}
         source="barcode"
         colors={colors}
+      />
+      <FamilyCheck
+        productName={productLabel}
+        productText={`${verdict.product?.ingredients ?? ''} ${verdict.product?.allergens ?? ''}`}
+        product={verdict.product}
       />
       <ScanAgainButton colors={colors} onPress={onScanAgain} />
       <SearchByNameButton colors={colors} onPress={() => void router.push('/')} />

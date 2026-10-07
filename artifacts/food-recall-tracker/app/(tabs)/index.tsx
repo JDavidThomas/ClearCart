@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AllergenInsights } from '@/components/AllergenInsights';
+import { FamilyCheck } from '@/components/FamilyCheck';
 import { FdaFreshnessNotice } from '@/components/FdaFreshnessNotice';
 import { HealthDietInsights } from '@/components/HealthInsights';
 import { PossiblyRelatedRecalls } from '@/components/PossiblyRelatedRecalls';
@@ -441,6 +442,7 @@ export default function HomeScreen() {
               source="search"
               colors={colors}
             />
+            <FamilyCheck productName={submittedTerm} productText={submittedTerm} />
           </View>
         ) : null}
       </ScrollView>
