@@ -135,12 +135,12 @@ export function buildConflicts(
     });
   }
 
-  const celiacNameMatch =
-    healthConditions.includes('celiac-disease') &&
-    productTextContainsAnyKeyword(productName, ['wheat', 'bread', 'pasta', 'flour']);
-  if (celiacNameMatch) {
+  const glutenNameMatch =
+    (healthConditions.includes('celiac-disease') || dietaryPreferences.includes('gluten-free')) &&
+    productTextContainsAnyKeyword(productName, ['wheat', 'bread', 'pasta', 'flour', 'barley', 'rye', 'oat']);
+  if (glutenNameMatch) {
     conflicts.push({
-      label: 'Celiac Disease',
+      label: healthConditions.includes('celiac-disease') ? 'Celiac Disease' : 'Gluten-Free',
       detail: 'Product name suggests a likely gluten-containing item. Check the ingredient label.',
       source: 'product-name',
     });
