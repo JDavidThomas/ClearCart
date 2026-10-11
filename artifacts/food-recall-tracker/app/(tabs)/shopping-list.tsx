@@ -475,7 +475,7 @@ export default function ShoppingListScreen() {
                 <ClearCartLogo size={24} />
                 <Text style={[styles.eyebrow, { color: colors.primary }]}>CLEARCART</Text>
               </View>
-              <Text style={[styles.title, { color: colors.foreground }]}>Your Shopping List</Text>
+              <Text style={[styles.title, { color: colors.foreground }]}>My Shopping List</Text>
               <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
                 Check recalls, allergens, health notes, and recent news before you shop.
               </Text>
