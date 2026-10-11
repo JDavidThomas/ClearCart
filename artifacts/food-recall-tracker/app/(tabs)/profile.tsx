@@ -312,7 +312,7 @@ function LoggedInProfile() {
           <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No allergies selected yet. Add them to turn on personalized alerts.</Text>
         )}
         {profile.severity ? <Text style={[styles.severityLabel, { color: colors.mutedForeground }]}>Alert severity: <Text style={{ color: colors.foreground }}>{profile.severity[0].toUpperCase() + profile.severity.slice(1)}</Text></Text> : null}
-        <Pressable onPress={() => router.push('/allergen-setup')} style={({ pressed }) => [styles.secondaryButton, { borderColor: colors.border, marginTop: 16, opacity: pressed ? 0.65 : 1 }]} testID="edit-allergen-profile-button">
+        <Pressable onPress={() => router.push({ pathname: '/allergen-setup', params: { mode: 'edit', step: '0' } })} style={({ pressed }) => [styles.secondaryButton, { borderColor: colors.border, marginTop: 16, opacity: pressed ? 0.65 : 1 }]} testID="edit-allergen-profile-button">
           <Feather name="edit-3" size={17} color={colors.primary} />
           <Text style={[styles.secondaryButtonText, { color: colors.primary }]}>Edit Allergies</Text>
         </Pressable>
@@ -342,7 +342,7 @@ function LoggedInProfile() {
               <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No health conditions added.</Text>
             )}
             <Pressable
-              onPress={() => router.push({ pathname: '/allergen-setup', params: { step: '2' } })}
+              onPress={() => router.push({ pathname: '/allergen-setup', params: { mode: 'edit', step: '2' } })}
               style={({ pressed }) => [styles.secondaryButton, { borderColor: colors.border, marginTop: 16, opacity: pressed ? 0.65 : 1 }]}
               testID="edit-health-conditions-button"
             >
@@ -360,7 +360,7 @@ function LoggedInProfile() {
               <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No dietary preferences added.</Text>
             )}
             <Pressable
-              onPress={() => router.push({ pathname: '/allergen-setup', params: { step: '3' } })}
+              onPress={() => router.push({ pathname: '/allergen-setup', params: { mode: 'edit', step: '3' } })}
               style={({ pressed }) => [styles.secondaryButton, { borderColor: colors.border, marginTop: 16, opacity: pressed ? 0.65 : 1 }]}
               testID="edit-dietary-preferences-button"
             >
@@ -379,7 +379,7 @@ function LoggedInProfile() {
               Add private, in-app reminders for health conditions and dietary preferences. This is not medical advice.
             </Text>
             <Pressable
-              onPress={() => router.push({ pathname: '/allergen-setup', params: { step: '2' } })}
+              onPress={() => router.push({ pathname: '/allergen-setup', params: { mode: 'edit', step: '2' } })}
               style={({ pressed }) => [styles.addHealthButton, { borderColor: colors.warning, opacity: pressed ? 0.65 : 1 }]}
               testID="add-health-needs-button"
             >

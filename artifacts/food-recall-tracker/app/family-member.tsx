@@ -116,12 +116,13 @@ function FamilyMemberForm({ member }: { member: FamilyMember | null }) {
   const router = useRouter();
   const family = useFamilyMembers();
   const knownAllergies = member?.allergies.filter((id) => STANDARD_ALLERGEN_IDS.has(id)) ?? [];
-  const customAllergies = member?.allergies.filter((id) => !STANDARD_ALLERGEN_IDS.has(id)) ?? [];
+  const initialCustomAllergies = member?.allergies.filter((id) => !STANDARD_ALLERGEN_IDS.has(id)) ?? [];
   const [name, setName] = useState<string>(member?.name ?? '');
   const [relationship, setRelationship] = useState<FamilyRelationship | null>(member?.relationship ?? null);
   const [relationshipOpen, setRelationshipOpen] = useState<boolean>(false);
   const [allergies, setAllergies] = useState<string[]>(knownAllergies);
-  const [customAllergyText, setCustomAllergyText] = useState<string>(customAllergies.join(', '));
+  const [customAllergies, setCustomAllergies] = useState<string[]>(initialCustomAllergies);
+  const [customAllergyDraft, setCustomAllergyDraft] = useState<string>('');
   const [healthConditions, setHealthConditions] = useState<string[]>(member?.healthConditions ?? []);
   const [dietaryPreferences, setDietaryPreferences] = useState<string[]>(member?.dietaryPreferences ?? []);
   const [customNote, setCustomNote] = useState<string>(member?.customNote ?? '');
@@ -141,20 +142,23 @@ function FamilyMemberForm({ member }: { member: FamilyMember | null }) {
     );
   };
 
+  const addCustomAllergy = () => {
+    const value = customAllergyDraft.trim();
+    if (value.length < 2) return;
+    setCustomAllergies((current) => current.some((item) => item.toLowerCase() === value.toLowerCase()) ? current : [...current, value]);
+    setCustomAllergyDraft('');
+  };
+
   const save = async () => {
     if (!name.trim()) {
       setFormError('Enter a name to save this family member.');
       return;
     }
     setFormError(null);
-    const customAllergyValues = customAllergyText
-      .split(/[,;/]+/)
-      .map((value) => value.trim())
-      .filter((value) => value.length > 1);
     const values: FamilyMemberValues = {
       name: name.trim(),
       relationship,
-      allergies: [...new Set([...allergies, ...customAllergyValues])],
+      allergies: [...new Set([...allergies, ...customAllergies])],
       healthConditions,
       dietaryPreferences,
       customNote: customNote.trim(),
@@ -266,21 +270,54 @@ function FamilyMemberForm({ member }: { member: FamilyMember | null }) {
             description="Choose all that apply."
             options={ALLERGEN_OPTIONS}
             selected={allergies}
-            onToggle={(id) => toggleSelection(allergies, setAllergies, id)}
+            onToggle={(id) => {
+              const removingOther = id === 'other' && allergies.includes('other');
+              toggleSelection(allergies, setAllergies, id);
+              if (removingOther) {
+                setCustomAllergies([]);
+                setCustomAllergyDraft('');
+              }
+            }}
             colors={colors}
             testIDPrefix="family-allergy"
           />
-          {allergies.includes('other') ? (
-            <TextInput
-              accessibilityLabel="Other family member allergies"
-              autoCapitalize="sentences"
-              onChangeText={setCustomAllergyText}
-              placeholder="Other allergies, separated by commas"
-              placeholderTextColor={colors.mutedForeground}
-              style={[styles.textInput, { backgroundColor: colors.card, borderColor: colors.input, color: colors.foreground }]}
-              testID="family-member-custom-allergy-input"
-              value={customAllergyText}
-            />
+          {allergies.includes('other') || customAllergies.length > 0 ? (
+            <View style={styles.customList}>
+              <View style={styles.customChips}>
+                {customAllergies.map((allergy) => (
+                  <View key={allergy} style={[styles.customChip, { backgroundColor: colors.blueSoft }]}>
+                    <Text style={[styles.customChipText, { color: colors.primary }]}>{allergy}</Text>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Remove ${allergy}`}
+                      hitSlop={8}
+                      onPress={() => setCustomAllergies((current) => current.filter((item) => item !== allergy))}
+                    >
+                      <Feather name="x" size={15} color={colors.destructive} />
+                    </Pressable>
+                  </View>
+                ))}
+              </View>
+              {allergies.includes('other') ? (
+                <View style={styles.customInputRow}>
+                  <TextInput
+                    accessibilityLabel="Other family member allergies"
+                    autoCapitalize="sentences"
+                    onChangeText={setCustomAllergyDraft}
+                    onSubmitEditing={addCustomAllergy}
+                    placeholder="Add another allergy"
+                    placeholderTextColor={colors.mutedForeground}
+                    returnKeyType="done"
+                    style={[styles.textInput, styles.customInputFlex, { backgroundColor: colors.card, borderColor: colors.input, color: colors.foreground }]}
+                    testID="family-member-custom-allergy-input"
+                    value={customAllergyDraft}
+                  />
+                  <Pressable accessibilityRole="button" accessibilityLabel="Add custom allergy" onPress={addCustomAllergy} style={[styles.addCustomButton, { backgroundColor: colors.primary }]}>
+                    <Feather name="plus" size={19} color={colors.primaryForeground} />
+                  </Pressable>
+                </View>
+              ) : null}
+            </View>
           ) : null}
 
           <OptionGroup
@@ -326,25 +363,32 @@ function FamilyMemberForm({ member }: { member: FamilyMember | null }) {
           <Text accessibilityRole="alert" style={[styles.errorText, { color: colors.destructive }]}>{formError}</Text>
         ) : null}
 
-        <Pressable
-          accessibilityRole="button"
-          disabled={family.isSaving}
-          onPress={() => void save()}
-          style={({ pressed }) => [
-            styles.saveButton,
-            { backgroundColor: colors.primary, opacity: pressed || family.isSaving ? 0.72 : 1 },
-          ]}
-          testID="save-family-member-button"
-        >
-          {family.isSaving ? (
-            <ActivityIndicator color={colors.primaryForeground} />
-          ) : (
-            <Feather name="check" size={18} color={colors.primaryForeground} />
-          )}
-          <Text style={[styles.saveButtonText, { color: colors.primaryForeground }]}>
-            {family.isSaving ? 'Saving…' : 'Save family member'}
-          </Text>
-        </Pressable>
+        <View style={styles.footerActions}>
+          <Pressable
+            accessibilityRole="button"
+            disabled={family.isSaving}
+            onPress={() => void save()}
+            style={({ pressed }) => [
+              styles.saveButton,
+              { backgroundColor: colors.primary, opacity: pressed || family.isSaving ? 0.72 : 1 },
+            ]}
+            testID="save-family-member-button"
+          >
+            {family.isSaving ? <ActivityIndicator color={colors.primaryForeground} /> : <Feather name="check" size={18} color={colors.primaryForeground} />}
+            <Text style={[styles.saveButtonText, { color: colors.primaryForeground }]}>
+              {family.isSaving ? 'Saving…' : 'Save'}
+            </Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            disabled={family.isSaving}
+            onPress={() => router.replace('/profile')}
+            style={({ pressed }) => [styles.cancelButton, { borderColor: colors.border, opacity: pressed || family.isSaving ? 0.65 : 1 }]}
+            testID="cancel-family-member-button"
+          >
+            <Text style={[styles.cancelButtonText, { color: colors.foreground }]}>Cancel</Text>
+          </Pressable>
+        </View>
       </KeyboardAwareScrollViewCompat>
     </View>
   );
@@ -584,7 +628,18 @@ const styles = StyleSheet.create({
     marginTop: 20,
     minHeight: 52,
     paddingHorizontal: 18,
+    flex: 1,
   },
+  footerActions: { flexDirection: 'row', gap: 10, marginTop: 20 },
+  cancelButton: { alignItems: 'center', borderRadius: 13, borderWidth: 1, justifyContent: 'center', minHeight: 52, paddingHorizontal: 18 },
+  cancelButtonText: { fontFamily: 'Inter_700Bold', fontSize: 15 },
+  customList: { gap: 10, marginTop: 10 },
+  customChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  customChip: { alignItems: 'center', borderRadius: 999, flexDirection: 'row', gap: 8, paddingHorizontal: 12, paddingVertical: 8 },
+  customChipText: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
+  customInputRow: { alignItems: 'center', flexDirection: 'row', gap: 8 },
+  customInputFlex: { flex: 1 },
+  addCustomButton: { alignItems: 'center', borderRadius: 12, height: 49, justifyContent: 'center', width: 49 },
   saveButtonText: {
     fontFamily: 'Inter_700Bold',
     fontSize: 15,

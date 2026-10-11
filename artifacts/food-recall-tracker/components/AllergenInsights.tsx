@@ -5,6 +5,8 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
 import { classifyAllergenVerdict, evaluateAllergenMatches } from '@/services/allergenMatching';
+import { useFamilyMembers } from '@/services/familyMembers';
+import { shouldShowAllergenSetupPrompt } from '@/services/profilePromptLogic';
 
 export const ALLERGEN_OPTIONS = [
   { id: 'milk', label: 'Milk' },
@@ -44,6 +46,7 @@ export function AllergenInsights({
   const colors = providedColors ?? fallbackColors;
   const router = useRouter();
   const { status, profile, guestPromptDismissed, dismissGuestPrompt } = useAuth();
+  const familyQuery = useFamilyMembers();
   const evaluation = profile
     ? evaluateAllergenMatches(profile.allergies, profile.customAllergy, productName, productText)
     : null;
@@ -126,7 +129,12 @@ export function AllergenInsights({
     );
   }
 
-  if (!profile || profile.allergies.length === 0) {
+  if (
+    profile &&
+    !familyQuery.isPending &&
+    !familyQuery.isError &&
+    shouldShowAllergenSetupPrompt(profile, familyQuery.members)
+  ) {
     return (
       <View style={[styles.promptCard, { backgroundColor: colors.muted, borderColor: colors.border }]}>
         <View style={[styles.promptIcon, { backgroundColor: colors.primary }]}>
@@ -189,7 +197,7 @@ export function AllergenInsights({
             ]}
           >
             {nameFallbackNote}
-            {profile.displayName.trim() || 'You'} — Contains your allergens: {matches.map(getLabel).join(', ')}. Review the product label and official information carefully.
+            {profile?.displayName.trim() || 'You'} — Contains your allergens: {matches.map(getLabel).join(', ')}. Review the product label and official information carefully.
           </Text>
         </View>
       </View>

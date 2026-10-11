@@ -19,14 +19,19 @@ const SEVERITY_OPTIONS: { id: Exclude<AllergySeverity, null>; title: string; des
 export default function AllergenSetupScreen() {
   const colors = useColors();
   const router = useRouter();
-  const { step: requestedStep } = useLocalSearchParams<{ step?: string }>();
+  const { step: requestedStep, mode } = useLocalSearchParams<{ step?: string; mode?: string }>();
   const insets = useSafeAreaInsets();
   const { profile, updateProfile, uploadAvatar } = useAuth();
+  const editMode = mode === 'edit';
   const [step, setStep] = useState(() => {
     const parsedStep = Number(requestedStep);
     return Number.isInteger(parsedStep) && parsedStep >= 0 && parsedStep <= 4 ? parsedStep : 0;
   });
-  const [selected, setSelected] = useState<string[]>(profile?.allergies ?? []);
+  const [selected, setSelected] = useState<string[]>(() =>
+    profile?.allergies.includes('other') || !profile?.customAllergy.trim()
+      ? profile?.allergies ?? []
+      : [...(profile?.allergies ?? []), 'other'],
+  );
   const [customAllergy, setCustomAllergy] = useState(profile?.customAllergy ?? '');
   const [severity, setSeverity] = useState<AllergySeverity>(profile?.severity ?? null);
   const [healthConsentGiven, setHealthConsentGiven] = useState(profile?.healthConsentGiven ?? false);
@@ -54,7 +59,24 @@ export default function AllergenSetupScreen() {
   }
 
   const toggleAllergen = (id: string) => {
-    setSelected((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+    setSelected((current) => {
+      const removing = current.includes(id);
+      if (id === 'other' && removing) setCustomAllergy('');
+      return removing ? current.filter((item) => item !== id) : [...current, id];
+    });
+  };
+
+  const saveAllergies = async () => {
+    setError(null);
+    setSaving(true);
+    try {
+      await updateProfile({ allergies: selected, customAllergy: customAllergy.trim() });
+      router.replace('/profile');
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'We could not save your allergies.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const toggleHealthCondition = (id: string) => {
@@ -75,7 +97,7 @@ export default function AllergenSetupScreen() {
     try {
       const updates: Parameters<typeof updateProfile>[0] = {
         allergies: selected,
-        customAllergy,
+          customAllergy: customAllergy.trim(),
         severity,
         avatarUrl,
       };
@@ -95,6 +117,23 @@ export default function AllergenSetupScreen() {
   };
 
   const saveHealth = async () => {
+    if (editMode) {
+      setError(null);
+      setSaving(true);
+      try {
+        await updateProfile({
+          healthConditions: healthConsentGiven ? healthConditions : [],
+          customHealthNote: healthConsentGiven ? customHealthNote : '',
+          healthConsentGiven,
+        });
+        router.replace('/profile');
+      } catch (saveError) {
+        setError(saveError instanceof Error ? saveError.message : 'We could not save your health preferences.');
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
     if (!healthConsentGiven) {
       setSaving(true);
       try {
@@ -140,6 +179,7 @@ export default function AllergenSetupScreen() {
     setHealthConditions([]);
     setDietaryPreferences([]);
     setCustomHealthNote('');
+    if (editMode) return;
     setError(null);
     try {
       await updateProfile({
@@ -154,6 +194,19 @@ export default function AllergenSetupScreen() {
   };
 
   const saveDietaryPreferences = async () => {
+    if (editMode) {
+      setError(null);
+      setSaving(true);
+      try {
+        await updateProfile({ dietaryPreferences });
+        router.replace('/profile');
+      } catch (saveError) {
+        setError(saveError instanceof Error ? saveError.message : 'We could not save your dietary preferences.');
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
     setError(null);
     setSaving(true);
     try {
@@ -205,7 +258,7 @@ export default function AllergenSetupScreen() {
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
       <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + 18, paddingBottom: insets.bottom + 30 }]} showsVerticalScrollIndicator={false}>
-        <Pressable onPress={() => step === 0 ? router.back() : setStep(step - 1)} style={styles.backButton}>
+        <Pressable onPress={() => editMode ? router.replace('/profile') : step === 0 ? router.back() : setStep(step - 1)} style={styles.backButton}>
           <Feather name="arrow-left" size={20} color={colors.primary} />
           <Text style={[styles.backText, { color: colors.primary }]}>{step === 0 ? 'Profile' : 'Back'}</Text>
         </Pressable>
@@ -219,8 +272,11 @@ export default function AllergenSetupScreen() {
             customAllergy={customAllergy}
             onToggle={toggleAllergen}
             onCustomChange={setCustomAllergy}
-            onNext={() => setStep(1)}
-            onSkip={() => void finish()}
+            onNext={() => editMode ? void saveAllergies() : setStep(1)}
+            onSkip={() => editMode ? router.replace('/profile') : void finish()}
+            editMode={editMode}
+            saving={saving}
+            onRemoveCustom={() => setCustomAllergy('')}
           />
         ) : step === 1 ? (
           <SeverityStep
@@ -242,9 +298,13 @@ export default function AllergenSetupScreen() {
             onCustomNoteChange={setCustomHealthNote}
             onSave={() => void saveHealth()}
             onSkip={() => {
-              setHealthSkipped(true);
-              setStep(3);
+              if (editMode) router.replace('/profile');
+              else {
+                setHealthSkipped(true);
+                setStep(3);
+              }
             }}
+            editMode={editMode}
           />
         ) : step === 3 ? (
           <DietaryStep
@@ -255,9 +315,13 @@ export default function AllergenSetupScreen() {
             onToggle={toggleDietaryPreference}
             onSave={() => void saveDietaryPreferences()}
             onSkip={() => {
-              setDietSkipped(true);
-              setStep(4);
+              if (editMode) router.replace('/profile');
+              else {
+                setDietSkipped(true);
+                setStep(4);
+              }
             }}
+            editMode={editMode}
           />
         ) : (
           <PhotoStep
@@ -288,6 +352,9 @@ function AllergyStep({
   onCustomChange,
   onNext,
   onSkip,
+  editMode,
+  saving,
+  onRemoveCustom,
 }: {
   colors: ReturnType<typeof useColors>;
   selected: string[];
@@ -296,6 +363,9 @@ function AllergyStep({
   onCustomChange: (value: string) => void;
   onNext: () => void;
   onSkip: () => void;
+  editMode: boolean;
+  saving: boolean;
+  onRemoveCustom: () => void;
 }) {
   const otherSelected = selected.includes('other');
   return (
@@ -322,7 +392,15 @@ function AllergyStep({
           );
         })}
       </View>
-      {otherSelected ? (
+      {customAllergy.trim() ? (
+        <View style={[styles.customAllergyChip, { backgroundColor: colors.blueSoft, borderColor: colors.border }]}>
+          <Text style={[styles.optionText, { color: colors.foreground }]}>{customAllergy}</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Remove custom allergy ${customAllergy}`} onPress={onRemoveCustom} hitSlop={8}>
+            <Feather name="x" size={17} color={colors.destructive} />
+          </Pressable>
+        </View>
+      ) : null}
+      {otherSelected && !customAllergy.trim() ? (
         <TextInput
           autoCapitalize="sentences"
           onChangeText={onCustomChange}
@@ -332,11 +410,12 @@ function AllergyStep({
           value={customAllergy}
         />
       ) : null}
-      <Pressable onPress={onNext} style={({ pressed }) => [styles.primaryButton, { backgroundColor: colors.primary, opacity: pressed ? 0.7 : 1 }]}>
-        <Text style={[styles.primaryButtonText, { color: colors.primaryForeground }]}>Continue</Text>
-        <Feather name="arrow-right" size={18} color={colors.primaryForeground} />
+      <Pressable disabled={saving} onPress={onNext} style={({ pressed }) => [styles.primaryButton, { backgroundColor: colors.primary, opacity: pressed || saving ? 0.7 : 1 }]}>
+        {saving ? <ActivityIndicator color={colors.primaryForeground} /> : null}
+        <Text style={[styles.primaryButtonText, { color: colors.primaryForeground }]}>{saving ? 'Saving…' : editMode ? 'Save' : 'Continue'}</Text>
+        {!saving ? <Feather name={editMode ? 'check' : 'arrow-right'} size={18} color={colors.primaryForeground} /> : null}
       </Pressable>
-      <Pressable onPress={onSkip} style={styles.skipButton}><Text style={[styles.skipText, { color: colors.mutedForeground }]}>Skip for now</Text></Pressable>
+      <Pressable disabled={saving} onPress={onSkip} style={styles.skipButton}><Text style={[styles.skipText, { color: colors.mutedForeground }]}>{editMode ? 'Cancel' : 'Skip for now'}</Text></Pressable>
     </View>
   );
 }
@@ -388,6 +467,7 @@ function HealthStep({
   onCustomNoteChange,
   onSave,
   onSkip,
+  editMode,
 }: {
   colors: ReturnType<typeof useColors>;
   consentGiven: boolean;
@@ -400,6 +480,7 @@ function HealthStep({
   onCustomNoteChange: (value: string) => void;
   onSave: () => void;
   onSkip: () => void;
+  editMode: boolean;
 }) {
   return (
     <View>
@@ -477,7 +558,7 @@ function HealthStep({
         {!saving ? <Feather name="arrow-right" size={18} color={colors.primaryForeground} /> : null}
       </Pressable>
       <Pressable disabled={saving} onPress={onSkip} style={styles.skipButton}>
-        <Text style={[styles.skipText, { color: colors.mutedForeground }]}>Skip for now</Text>
+        <Text style={[styles.skipText, { color: colors.mutedForeground }]}>{editMode ? 'Cancel' : 'Skip for now'}</Text>
       </Pressable>
     </View>
   );
@@ -491,6 +572,7 @@ function DietaryStep({
   onToggle,
   onSave,
   onSkip,
+  editMode,
 }: {
   colors: ReturnType<typeof useColors>;
   selected: string[];
@@ -499,6 +581,7 @@ function DietaryStep({
   onToggle: (id: string) => void;
   onSave: () => void;
   onSkip: () => void;
+  editMode: boolean;
 }) {
   return (
     <View>
@@ -551,7 +634,7 @@ function DietaryStep({
         {!saving && consentGiven ? <Feather name="arrow-right" size={18} color={colors.primaryForeground} /> : null}
       </Pressable>
       <Pressable disabled={saving} onPress={onSkip} style={styles.skipButton}>
-        <Text style={[styles.skipText, { color: colors.mutedForeground }]}>Skip for now</Text>
+        <Text style={[styles.skipText, { color: colors.mutedForeground }]}>{editMode ? 'Cancel' : 'Skip for now'}</Text>
       </Pressable>
     </View>
   );
@@ -641,6 +724,7 @@ const styles = StyleSheet.create({
   checkbox: { alignItems: 'center', borderRadius: 6, borderWidth: 1, height: 23, justifyContent: 'center', width: 23 },
   optionText: { flex: 1, fontFamily: 'Inter_600SemiBold', fontSize: 14 },
   customInput: { borderRadius: 13, borderWidth: 1, fontFamily: 'Inter_400Regular', fontSize: 15, marginTop: 14, minHeight: 52, paddingHorizontal: 14 },
+  customAllergyChip: { alignItems: 'center', alignSelf: 'flex-start', borderRadius: 999, borderWidth: 1, flexDirection: 'row', gap: 10, marginTop: 12, paddingHorizontal: 13, paddingVertical: 9 },
   primaryButton: { alignItems: 'center', borderRadius: 14, flexDirection: 'row', gap: 9, justifyContent: 'center', minHeight: 55, marginTop: 26 },
   primaryButtonText: { fontFamily: 'Inter_700Bold', fontSize: 15 },
   skipButton: { alignItems: 'center', justifyContent: 'center', minHeight: 46, marginTop: 8 },
