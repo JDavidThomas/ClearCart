@@ -31,7 +31,7 @@ function NativeTabLayout() {
         <NativeTabs.Trigger.Icon
           sf={{ default: 'cart', selected: 'cart.fill' }}
         />
-        <NativeTabs.Trigger.Label>Shopping</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Label>Shopping List</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="profile">
         <NativeTabs.Trigger.Icon
@@ -108,7 +108,7 @@ function ClassicTabLayout() {
       <Tabs.Screen
         name="shopping-list"
         options={{
-          title: 'Shopping',
+          title: 'Shopping List',
           tabBarIcon: ({ color }) =>
             isIOS ? (
               <SymbolView name="cart" tintColor={color} size={24} />

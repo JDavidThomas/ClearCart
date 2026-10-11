@@ -475,7 +475,7 @@ export default function ShoppingListScreen() {
                 <ClearCartLogo size={24} />
                 <Text style={[styles.eyebrow, { color: colors.primary }]}>CLEARCART</Text>
               </View>
-              <Text style={[styles.title, { color: colors.foreground }]}>Shopping List</Text>
+              <Text style={[styles.title, { color: colors.foreground }]}>Your Shopping List</Text>
               <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
                 Check recalls, allergens, health notes, and recent news before you shop.
               </Text>
@@ -842,11 +842,11 @@ export default function ShoppingListScreen() {
                     <Feather name="shopping-bag" size={21} color={colors.primary} />
                   </View>
                   <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
-                    Your list is ready
+                    Your shopping list is empty.
                   </Text>
                   <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
-                    Add foods you plan to buy. ClearCart will check the same recall, allergen,
-                    health, and news sources used in product search.
+                    Add items you plan to buy and we&apos;ll check them for recalls, allergens, and
+                    health conflicts before you shop.
                   </Text>
                 </View>
               ) : null}
