@@ -16,6 +16,42 @@ export interface FamilyMemberCheckResult {
   name: string;
   allergenMatches: string[];
   healthConflictLabels: string[];
+  healthConflictDetails: { label: string; detail: string }[];
+}
+
+export interface FamilyMemberSafetyMessage {
+  kind: 'allergen' | 'health' | 'safe';
+  text: string;
+}
+
+export function getFamilyMemberSafetyMessages(
+  result: FamilyMemberCheckResult,
+  formatAllergen: (id: string) => string = (id) => id,
+): FamilyMemberSafetyMessage[] {
+  const messages: FamilyMemberSafetyMessage[] = [];
+
+  if (result.allergenMatches.length > 0) {
+    const allergens = result.allergenMatches.map(formatAllergen).join(', ');
+    messages.push({
+      kind: 'allergen',
+      text: `${result.name} is allergic to ${allergens} — this product contains ${allergens}`,
+    });
+  }
+
+  for (const conflict of result.healthConflictDetails) {
+    messages.push({
+      kind: 'health',
+      text: conflict.label === 'Gluten'
+        ? `${result.name} avoids Gluten — this product contains Gluten`
+        : `${result.name} has a ${conflict.label} conflict — ${conflict.detail}`,
+    });
+  }
+
+  if (messages.length === 0) {
+    messages.push({ kind: 'safe', text: `Safe for ${result.name}` });
+  }
+
+  return messages;
 }
 
 function evaluateCustomAllergenMatches(customTerms: string[], productName: string, productText: string) {
@@ -51,14 +87,19 @@ export function evaluateFamilyMember(
     member.dietaryPreferences,
     productName,
   );
+  const healthConflictDetails = healthConflicts.map((conflict) => ({
+    label: conflict.label === 'Gluten-Free' || conflict.label === 'Celiac Disease'
+      ? 'Gluten'
+      : conflict.label,
+    detail: conflict.detail,
+  }));
 
   return {
     memberId: member.id,
     name: member.name,
     allergenMatches: [...new Set([...standardMatches, ...customMatches])],
-    healthConflictLabels: [...new Set(healthConflicts.map((conflict) =>
-      conflict.label === 'Gluten-Free' ? 'Gluten' : conflict.label,
-    ))],
+    healthConflictLabels: [...new Set(healthConflictDetails.map((conflict) => conflict.label))],
+    healthConflictDetails,
   };
 }
 

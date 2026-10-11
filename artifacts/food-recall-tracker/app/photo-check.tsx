@@ -637,6 +637,11 @@ function PhotoVerdictView({
         source="photo"
         colors={colors}
       />
+      <FamilyCheck
+        productName={verdict.productName}
+        productText={`${verdict.nutritionProduct.ingredients ?? ''} ${verdict.nutritionProduct.allergens ?? ''}`}
+        product={verdict.nutritionProduct}
+      />
       <RecallResultTabBar
         activeTab={activeResultTab}
         onChangeTab={setActiveResultTab}
@@ -692,11 +697,6 @@ function PhotoVerdictView({
         product={verdict.nutritionProduct}
         source="photo"
         colors={colors}
-      />
-      <FamilyCheck
-        productName={verdict.productName}
-        productText={`${verdict.nutritionProduct.ingredients ?? ''} ${verdict.nutritionProduct.allergens ?? ''}`}
-        product={verdict.nutritionProduct}
       />
       <RetakeButton colors={colors} onPress={onRetake} />
       <ManualSearchButton

@@ -9,6 +9,7 @@ import { searchOpenFoodFactsProduct } from '@/services/openFoodFacts';
 import {
   evaluateFamilyMember,
   familyMemberHasConflict,
+  getFamilyMemberSafetyMessages,
 } from '@/services/familyCheckLogic';
 import { useFamilyMembers } from '@/services/familyMembers';
 import type { OpenFoodFactsProduct } from '@/types/recall';
@@ -64,7 +65,7 @@ export function FamilyCheck({ productName, productText, product = null }: Family
       <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <Feather name="info" size={19} color={colors.mutedForeground} />
         <View style={styles.copy}>
-          <Text style={[styles.title, { color: colors.foreground }]}>Family Check</Text>
+          <Text style={[styles.title, { color: colors.foreground }]}>Household Safety Check</Text>
           <Text style={[styles.body, { color: colors.mutedForeground }]}>
             Family profiles could not be loaded. Open Profile to check the connection and Supabase setup.
           </Text>
@@ -95,8 +96,11 @@ export function FamilyCheck({ productName, productText, product = null }: Family
           <Feather name="users" size={17} color={colors.primary} />
         </View>
         <View style={styles.copy}>
-          <Text style={[styles.title, { color: colors.foreground }]}>Family Check</Text>
-          <Text style={[styles.body, { color: colors.mutedForeground }]}>{summary}</Text>
+          <Text style={[styles.title, { color: colors.foreground }]}>Household Safety Check</Text>
+          <Text style={[styles.body, { color: colors.mutedForeground }]}>
+            Based on each family member&apos;s saved profile
+          </Text>
+          <Text style={[styles.summary, { color: colors.mutedForeground }]}>{summary}</Text>
         </View>
         {productQuery.isPending ? (
           <ActivityIndicator size="small" color={colors.primary} />
@@ -111,37 +115,22 @@ export function FamilyCheck({ productName, productText, product = null }: Family
             <Text style={[styles.body, { color: colors.mutedForeground }]}>
               Checking available product details…
             </Text>
-          ) : results.map((result) => {
-            if (result.allergenMatches.length === 0 && result.healthConflictLabels.length === 0) {
-              return (
-                <View key={`${result.memberId}-safe`} style={styles.resultRow}>
-                  <Feather name="check-circle" size={16} color={colors.success} />
-                  <Text style={[styles.resultText, { color: colors.foreground }]}>Safe for {result.name}</Text>
+          ) : results.map((result) => (
+            <View key={result.memberId} style={styles.memberResults}>
+              {getFamilyMemberSafetyMessages(result, formatAllergen).map((message, index) => (
+                <View key={`${result.memberId}-${message.kind}-${index}`} style={styles.resultRow}>
+                  <Feather
+                    name={message.kind === 'safe' ? 'check-circle' : 'alert-triangle'}
+                    size={16}
+                    color={message.kind === 'safe' ? colors.success : colors.warning}
+                  />
+                  <Text style={[styles.resultText, { color: colors.foreground }]}>
+                    {message.text}
+                  </Text>
                 </View>
-              );
-            }
-
-            return (
-              <View key={result.memberId} style={styles.memberResults}>
-                {result.allergenMatches.length > 0 ? (
-                  <View style={styles.resultRow}>
-                    <Feather name="alert-triangle" size={16} color={colors.warning} />
-                    <Text style={[styles.resultText, { color: colors.foreground }]}>
-                      Allergen: {result.name} — {result.allergenMatches.map(formatAllergen).join(', ')}
-                    </Text>
-                  </View>
-                ) : null}
-                {result.healthConflictLabels.length > 0 ? (
-                  <View style={styles.resultRow}>
-                    <Feather name="alert-circle" size={16} color={colors.warning} />
-                    <Text style={[styles.resultText, { color: colors.foreground }]}>
-                      Health conflict: {result.name} — {result.healthConflictLabels.join(', ')}
-                    </Text>
-                  </View>
-                ) : null}
-              </View>
-            );
-          })}
+              ))}
+            </View>
+          ))}
         </View>
       ) : null}
     </View>
@@ -179,6 +168,11 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
     fontSize: 13,
     lineHeight: 18,
+  },
+  summary: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 12,
+    lineHeight: 17,
   },
   resultList: {
     borderTopWidth: StyleSheet.hairlineWidth,

@@ -189,7 +189,7 @@ export function AllergenInsights({
             ]}
           >
             {nameFallbackNote}
-            This product matches {matches.map(getLabel).join(', ')} in your profile. Review the product label and official information carefully.
+            {profile.displayName.trim() || 'You'} — Contains your allergens: {matches.map(getLabel).join(', ')}. Review the product label and official information carefully.
           </Text>
         </View>
       </View>

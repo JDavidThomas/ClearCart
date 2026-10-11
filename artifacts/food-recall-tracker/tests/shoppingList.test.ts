@@ -133,6 +133,10 @@ test('ingredient-data allergen matches keep the confirmed label', () => {
   assert.equal(result.allergenEvidence, 'ingredient-data');
   assert.deepEqual(result.allergenMatches, ['peanuts']);
   assert.equal(getShoppingListAllergenLabel(result), 'Contains your allergens: Peanuts');
+  assert.equal(
+    getShoppingListAllergenLabel(result, 'Jordan'),
+    'Jordan — Contains your allergens: Peanuts',
+  );
 });
 
 test('raw beef ignores generic nutrition estimates and unrelated prepared-product data', () => {

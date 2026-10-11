@@ -7,6 +7,8 @@ import {
   Text,
   View,
 } from 'react-native';
+import { FamilyCheck } from '@/components/FamilyCheck';
+import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
 import {
   getShoppingListAllergenLabel,
@@ -96,6 +98,7 @@ export function ShoppingListItemCard({
   onViewDetails,
 }: ShoppingListItemCardProps) {
   const colors = useColors();
+  const { profile } = useAuth();
   const [showHealthDetails, setShowHealthDetails] = useState(false);
   const [showNewsDetails, setShowNewsDetails] = useState(false);
   const result = item.last_check_result;
@@ -141,7 +144,7 @@ export function ShoppingListItemCard({
       : result.recallStatus === 'unavailable'
         ? 'Check FDA.gov'
         : 'No recalls found';
-  const allergenLabel = getShoppingListAllergenLabel(result);
+  const allergenLabel = getShoppingListAllergenLabel(result, profile?.displayName);
   const healthLabel = !result
     ? 'Health check pending'
     : result.healthStatus === 'conflicts'
@@ -350,6 +353,8 @@ export function ShoppingListItemCard({
           </View>
         ) : null}
       </View>
+
+      <FamilyCheck productName={item.term} productText={item.term} />
 
       <View style={[styles.actions, { borderTopColor: colors.border }]}>
         <Pressable

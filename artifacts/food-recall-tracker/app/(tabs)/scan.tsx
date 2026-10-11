@@ -756,6 +756,11 @@ function VerdictView({
           source="barcode"
           colors={colors}
         />
+        <FamilyCheck
+          productName={productLabel}
+          productText={buildProductAllergenText(verdict.product)}
+          product={verdict.product}
+        />
         <RecallResultTabBar
           activeTab={activeResultTab}
           onChangeTab={setActiveResultTab}
@@ -805,11 +810,6 @@ function VerdictView({
           source="barcode"
           colors={colors}
         />
-        <FamilyCheck
-          productName={productLabel}
-          productText={`${verdict.product?.ingredients ?? ''} ${verdict.product?.allergens ?? ''}`}
-          product={verdict.product}
-        />
         <ScanAgainButton colors={colors} onPress={onScanAgain} />
         <SearchByNameButton colors={colors} onPress={() => void router.push('/')} />
       </View>
@@ -829,6 +829,11 @@ function VerdictView({
         dataAvailable={hasAllergenData(verdict.product)}
         source="barcode"
         colors={colors}
+      />
+      <FamilyCheck
+        productName={productLabel}
+        productText={buildProductAllergenText(verdict.product)}
+        product={verdict.product}
       />
       <RecallResultTabBar
         activeTab={activeResultTab}
@@ -958,11 +963,6 @@ function VerdictView({
         product={verdict.product}
         source="barcode"
         colors={colors}
-      />
-      <FamilyCheck
-        productName={productLabel}
-        productText={`${verdict.product?.ingredients ?? ''} ${verdict.product?.allergens ?? ''}`}
-        product={verdict.product}
       />
       <ScanAgainButton colors={colors} onPress={onScanAgain} />
       <SearchByNameButton colors={colors} onPress={() => void router.push('/')} />

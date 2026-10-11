@@ -310,6 +310,7 @@ export default function HomeScreen() {
                   source="search"
                   colors={colors}
                 />
+                <FamilyCheck productName={submittedTerm} productText={submittedTerm} />
                 <RecallResultTabBar
                   activeTab={activeResultTab}
                   onChangeTab={(tab) => {
@@ -442,7 +443,6 @@ export default function HomeScreen() {
               source="search"
               colors={colors}
             />
-            <FamilyCheck productName={submittedTerm} productText={submittedTerm} />
           </View>
         ) : null}
       </ScrollView>

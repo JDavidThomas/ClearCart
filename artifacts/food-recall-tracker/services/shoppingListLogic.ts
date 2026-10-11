@@ -278,11 +278,13 @@ export function getShoppingListAllergenLabel(
     ShoppingListCheckResult,
     'allergenStatus' | 'allergenMatches' | 'allergenEvidence' | 'allergenNotice'
   > | null,
+  displayName = '',
 ) {
+  const prefix = displayName.trim() ? `${displayName.trim()} — ` : '';
   if (!result) return 'Allergen check pending';
   if (result.allergenNotice) return result.allergenNotice;
   if (result.allergenStatus === 'match' && result.allergenEvidence === 'ingredient-data') {
-    return `Contains your allergens: ${result.allergenMatches.map(formatAllergenName).join(', ')}`;
+    return `${prefix}Contains your allergens: ${result.allergenMatches.map(formatAllergenName).join(', ')}`;
   }
   if (
     result.allergenStatus === 'possible-match' ||
@@ -290,7 +292,7 @@ export function getShoppingListAllergenLabel(
   ) {
     const matches = result.allergenMatches.map(formatAllergenName).join(', ');
     const detail = matches ? `: ${matches}` : '';
-    return `Possible allergen match based on product name${detail}. Verify the package label — this is not a confirmed match.`;
+    return `${prefix}Possible allergen match based on product name${detail}. Verify the package label — this is not a confirmed match.`;
   }
   if (result.allergenStatus === 'clear') return 'No allergen matches';
   if (result.allergenStatus === 'unavailable') return 'Allergen data unavailable';

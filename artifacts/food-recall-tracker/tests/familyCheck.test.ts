@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   evaluateFamilyMember,
   familyMemberHasConflict,
+  getFamilyMemberSafetyMessages,
   type FamilyCheckMember,
 } from '../services/familyCheckLogic.ts';
 
@@ -25,6 +26,10 @@ test('family allergen checks use the product-name matching rules', () => {
   assert.deepEqual(result.allergenMatches, ['peanuts']);
   assert.deepEqual(result.healthConflictLabels, []);
   assert.equal(familyMemberHasConflict(result), true);
+  assert.equal(
+    getFamilyMemberSafetyMessages(result, () => 'Peanuts')[0]?.text,
+    'Emma is allergic to Peanuts — this product contains Peanuts',
+  );
 });
 
 test('family allergen checks also inspect available ingredient data', () => {
@@ -46,6 +51,10 @@ test('Gluten-Free family members get a name-based conflict for whole wheat bread
 
   assert.deepEqual(result.healthConflictLabels, ['Gluten']);
   assert.equal(familyMemberHasConflict(result), true);
+  assert.equal(
+    getFamilyMemberSafetyMessages(result)[0]?.text,
+    'David avoids Gluten — this product contains Gluten',
+  );
 });
 
 test('a banana is safe for a family member without matching needs', () => {
@@ -54,4 +63,8 @@ test('a banana is safe for a family member without matching needs', () => {
   assert.deepEqual(result.allergenMatches, []);
   assert.deepEqual(result.healthConflictLabels, []);
   assert.equal(familyMemberHasConflict(result), false);
+  assert.equal(
+    getFamilyMemberSafetyMessages(result)[0]?.text,
+    'Safe for Emma',
+  );
 });
