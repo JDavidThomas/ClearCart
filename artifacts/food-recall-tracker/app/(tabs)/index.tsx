@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AllergenInsights } from '@/components/AllergenInsights';
+import { ClearCartLogo } from '@/components/ClearCartLogo';
 import { FamilyCheck } from '@/components/FamilyCheck';
 import { FdaFreshnessNotice } from '@/components/FdaFreshnessNotice';
 import { HealthDietInsights } from '@/components/HealthInsights';
@@ -169,9 +170,7 @@ export default function HomeScreen() {
       >
         <View style={styles.header}>
             <View style={styles.eyebrowRow}>
-              <View style={[styles.brandMark, { backgroundColor: colors.primary }]}>
-                <Feather name="shield" size={16} color={colors.primaryForeground} />
-              </View>
+              <ClearCartLogo size={28} />
               <Text style={[styles.eyebrow, { color: colors.primary }]}>CLEARCART</Text>
             </View>
             <Text style={[styles.title, { color: colors.foreground }]}>Check a product before you eat it.</Text>

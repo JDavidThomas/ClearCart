@@ -16,6 +16,7 @@ import {
 import { KeyboardAvoidingView as KeyboardControllerAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ShoppingListItemCard } from '@/components/ShoppingListItemCard';
+import { ClearCartLogo } from '@/components/ClearCartLogo';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
 import {
@@ -382,7 +383,7 @@ export default function ShoppingListScreen() {
           <View style={styles.headingRow}>
             <View style={styles.headingCopy}>
               <View style={styles.eyebrowRow}>
-                <Feather name="shopping-cart" size={15} color={colors.primary} />
+                <ClearCartLogo size={24} />
                 <Text style={[styles.eyebrow, { color: colors.primary }]}>CLEARCART</Text>
               </View>
               <Text style={[styles.title, { color: colors.foreground }]}>Shopping List</Text>
