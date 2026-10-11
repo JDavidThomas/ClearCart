@@ -4,6 +4,7 @@ import { searchFoodRecalls } from './recallApi';
 import { shouldLookupShoppingListProductByName } from './singleIngredientFoods.ts';
 import {
   buildShoppingListCheckResult,
+  type FrequentItem,
   type ShoppingListCheckResult,
   type ShoppingListItem,
   type ShoppingListProfile,
@@ -35,6 +36,8 @@ export async function runShoppingListChecks(
 
 const SHOPPING_LIST_COLUMNS =
   'id,user_id,term,added_at,last_checked_at,last_check_result,is_checked';
+const FREQUENT_ITEM_COLUMNS =
+  'id,user_id,term,added_at,last_checked_at,last_check_result,is_checked,last_used_at';
 
 export async function fetchShoppingListItems(userId: string) {
   const { data, error } = await supabase
@@ -44,6 +47,79 @@ export async function fetchShoppingListItems(userId: string) {
     .order('added_at', { ascending: false });
   if (error) throw error;
   return (data ?? []) as unknown as ShoppingListItem[];
+}
+
+export async function fetchFrequentItems(userId: string) {
+  const { data, error } = await supabase
+    .from('frequent_items')
+    .select(FREQUENT_ITEM_COLUMNS)
+    .eq('user_id', userId)
+    .order('added_at', { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as unknown as FrequentItem[];
+}
+
+export async function upsertFrequentItem(
+  userId: string,
+  term: string,
+  result: ShoppingListCheckResult,
+  checkedAt: string,
+) {
+  const { data, error } = await supabase
+    .from('frequent_items')
+    .upsert(
+      {
+        user_id: userId,
+        term,
+        last_check_result: result,
+        last_checked_at: checkedAt,
+        last_used_at: checkedAt,
+        is_checked: false,
+      },
+      { onConflict: 'user_id,term' },
+    )
+    .select(FREQUENT_ITEM_COLUMNS)
+    .single();
+  if (error) throw error;
+  return data as unknown as FrequentItem;
+}
+
+export async function saveFrequentItemCheck(
+  userId: string,
+  itemId: string,
+  result: ShoppingListCheckResult,
+  checkedAt: string,
+) {
+  const { data, error } = await supabase
+    .from('frequent_items')
+    .update({ last_check_result: result, last_checked_at: checkedAt })
+    .eq('user_id', userId)
+    .eq('id', itemId)
+    .select(FREQUENT_ITEM_COLUMNS)
+    .single();
+  if (error) throw error;
+  return data as unknown as FrequentItem;
+}
+
+export async function touchFrequentItem(userId: string, itemId: string, usedAt: string) {
+  const { data, error } = await supabase
+    .from('frequent_items')
+    .update({ last_used_at: usedAt })
+    .eq('user_id', userId)
+    .eq('id', itemId)
+    .select(FREQUENT_ITEM_COLUMNS)
+    .single();
+  if (error) throw error;
+  return data as unknown as FrequentItem;
+}
+
+export async function deleteFrequentItem(userId: string, itemId: string) {
+  const { error } = await supabase
+    .from('frequent_items')
+    .delete()
+    .eq('user_id', userId)
+    .eq('id', itemId);
+  if (error) throw error;
 }
 
 export async function insertShoppingListItem(userId: string, term: string) {

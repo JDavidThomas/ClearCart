@@ -1,4 +1,4 @@
-import { Feather } from '@expo/vector-icons';
+import { Feather, Ionicons } from '@expo/vector-icons';
 import { useState, type ComponentProps } from 'react';
 import {
   Linking,
@@ -25,6 +25,9 @@ interface ShoppingListItemCardProps {
   onRecheck: () => void;
   onRemove: () => void;
   onViewDetails: () => void;
+  isFrequent: boolean;
+  frequentUpdating: boolean;
+  onToggleFrequent: () => void;
 }
 
 function formatCheckedAt(value: string | null) {
@@ -96,6 +99,9 @@ export function ShoppingListItemCard({
   onRecheck,
   onRemove,
   onViewDetails,
+  isFrequent,
+  frequentUpdating,
+  onToggleFrequent,
 }: ShoppingListItemCardProps) {
   const colors = useColors();
   const { profile } = useAuth();
@@ -199,6 +205,27 @@ export function ShoppingListItemCard({
             {formatCheckedAt(item.last_checked_at)}
             {isStale && item.last_checked_at ? ' · Recheck recommended' : ''}
           </Text>
+        </Pressable>
+        <Pressable
+          accessibilityLabel={
+            isFrequent
+              ? `Remove ${item.term} from Frequently Bought`
+              : `Mark ${item.term} as frequent`
+          }
+          accessibilityRole="button"
+          disabled={frequentUpdating}
+          onPress={onToggleFrequent}
+          style={({ pressed }) => [
+            styles.frequentButton,
+            { opacity: frequentUpdating || pressed ? 0.55 : 1 },
+          ]}
+          testID={`shopping-list-frequent-${item.id}`}
+        >
+          <Ionicons
+            name={isFrequent ? 'star' : 'star-outline'}
+            size={21}
+            color={isFrequent ? colors.primary : colors.mutedForeground}
+          />
         </Pressable>
         <Pressable
           accessibilityLabel={item.is_checked ? `Mark ${item.term} as active` : `Mark ${item.term} complete`}
@@ -441,6 +468,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 44,
     minWidth: 44,
+  },
+  frequentButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+    minWidth: 36,
   },
   statusList: {
     gap: 8,

@@ -17,19 +17,26 @@ import { KeyboardAvoidingView as KeyboardControllerAvoidingView } from 'react-na
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ShoppingListItemCard } from '@/components/ShoppingListItemCard';
 import { ClearCartLogo } from '@/components/ClearCartLogo';
+import { FrequentItemCard } from '@/components/FrequentItemCard';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
 import {
+  deleteFrequentItem,
   deleteCheckedShoppingListItems,
   deleteShoppingListItem,
+  fetchFrequentItems,
   fetchShoppingListItems,
   insertShoppingListItem,
   isShoppingListCheckStale,
   runShoppingListChecks,
+  sortFrequentItems,
   saveShoppingListCheck,
   setShoppingListItemChecked,
   sortShoppingListItems,
   summarizeShoppingList,
+  touchFrequentItem,
+  upsertFrequentItem,
+  type FrequentItem,
   type ShoppingListItem,
 } from '@/services/shoppingList';
 
@@ -39,7 +46,7 @@ function describeError(error: unknown) {
       ? String((error as { code?: unknown }).code)
       : '';
   if (code === '42P01' || code === 'PGRST205') {
-    return 'Shopping List storage is not set up yet. Run supabase/shopping-list.sql in your Supabase SQL Editor.';
+    return 'Shopping List storage is not set up yet. Run supabase/shopping-list.sql and supabase/frequent-items.sql in your Supabase SQL Editor.';
   }
   return error instanceof Error ? error.message : 'Something went wrong. Please try again.';
 }
@@ -129,8 +136,13 @@ export default function ShoppingListScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [items, setItems] = useState<ShoppingListItem[]>([]);
+  const [frequentItems, setFrequentItems] = useState<FrequentItem[]>([]);
   const [newTerm, setNewTerm] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [frequentBusyIds, setFrequentBusyIds] = useState<string[]>([]);
+  const [addingFrequentIds, setAddingFrequentIds] = useState<string[]>([]);
+  const [frequentExpanded, setFrequentExpanded] = useState(true);
+  const [showAllFrequent, setShowAllFrequent] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [isCheckingAll, setIsCheckingAll] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -161,11 +173,16 @@ export default function ShoppingListScreen() {
   const checkedCount = useMemo(() => items.filter((item) => item.is_checked).length, [items]);
   const activeItems = useMemo(() => items.filter((item) => !item.is_checked), [items]);
   const completedItems = useMemo(() => items.filter((item) => item.is_checked), [items]);
+  const visibleFrequentItems = useMemo(
+    () => (showAllFrequent ? frequentItems : frequentItems.slice(0, 3)),
+    [frequentItems, showAllFrequent],
+  );
 
   useFocusEffect(
     useCallback(() => {
       if (!userId) {
         setItems([]);
+        setFrequentItems([]);
         setIsLoading(false);
         return undefined;
       }
@@ -182,6 +199,13 @@ export default function ShoppingListScreen() {
         })
         .finally(() => {
           if (isActive) setIsLoading(false);
+        });
+      void fetchFrequentItems(userId)
+        .then((rows) => {
+          if (isActive) setFrequentItems(sortFrequentItems(rows));
+        })
+        .catch((error: unknown) => {
+          if (isActive) setErrorMessage(describeError(error));
         });
 
       return () => {
@@ -214,6 +238,71 @@ export default function ShoppingListScreen() {
       setErrorMessage(describeError(error));
     } finally {
       setCheckingIds((current) => current.filter((id) => id !== item.id));
+    }
+  };
+
+  const handleToggleFrequent = async (item: ShoppingListItem) => {
+    if (!userId || !auth.profile || frequentBusyIds.includes(item.id)) return;
+    const savedItem = frequentItems.find(
+      (frequentItem) =>
+        frequentItem.term.trim().toLocaleLowerCase() === item.term.trim().toLocaleLowerCase(),
+    );
+    setErrorMessage(null);
+    setFrequentBusyIds((current) => [...current, item.id]);
+    try {
+      if (savedItem) {
+        await deleteFrequentItem(userId, savedItem.id);
+        setFrequentItems((current) =>
+          current.filter((frequentItem) => frequentItem.id !== savedItem.id),
+        );
+      } else {
+        const result = await runShoppingListChecks(item.term, auth.profile);
+        const checkedAt = new Date().toISOString();
+        const saved = await upsertFrequentItem(userId, item.term, result, checkedAt);
+        setFrequentItems((current) =>
+          sortFrequentItems([
+            ...current.filter(
+              (frequentItem) =>
+                frequentItem.term.trim().toLocaleLowerCase() !==
+                item.term.trim().toLocaleLowerCase(),
+            ),
+            saved,
+          ]),
+        );
+      }
+    } catch (error) {
+      setErrorMessage(describeError(error));
+    } finally {
+      setFrequentBusyIds((current) => current.filter((id) => id !== item.id));
+    }
+  };
+
+  const handleAddFrequentToList = async (item: FrequentItem) => {
+    if (!userId || !auth.profile || addingFrequentIds.includes(item.id)) return;
+    setErrorMessage(null);
+    setAddingFrequentIds((current) => [...current, item.id]);
+    try {
+      const activeDuplicate = items.find(
+        (listItem) =>
+          !listItem.is_checked &&
+          listItem.term.trim().toLocaleLowerCase() === item.term.trim().toLocaleLowerCase(),
+      );
+      if (activeDuplicate) {
+        await handleRecheck(activeDuplicate);
+      } else {
+        const inserted = await insertShoppingListItem(userId, item.term);
+        setItems((current) => sortShoppingListItems([...current, inserted]));
+        setShowSummary(false);
+        void handleRecheck(inserted);
+      }
+      const touched = await touchFrequentItem(userId, item.id, new Date().toISOString());
+      setFrequentItems((current) =>
+        sortFrequentItems(current.map((frequentItem) => frequentItem.id === touched.id ? touched : frequentItem)),
+      );
+    } catch (error) {
+      setErrorMessage(describeError(error));
+    } finally {
+      setAddingFrequentIds((current) => current.filter((id) => id !== item.id));
     }
   };
 
@@ -440,6 +529,64 @@ export default function ShoppingListScreen() {
 
           {userId ? (
             <>
+              {frequentItems.length > 0 ? (
+                <View style={styles.frequentSection} testID="frequently-bought">
+                  <View style={styles.sectionHeading}>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityState={{ expanded: frequentExpanded }}
+                      onPress={() => setFrequentExpanded((current) => !current)}
+                      style={styles.frequentHeadingButton}
+                      testID="frequently-bought-toggle"
+                    >
+                      <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
+                        Frequently Bought
+                      </Text>
+                      <Text style={[styles.itemCount, { color: colors.mutedForeground }]}>
+                        {frequentItems.length}
+                      </Text>
+                      <Feather
+                        name={frequentExpanded ? 'chevron-up' : 'chevron-down'}
+                        size={19}
+                        color={colors.mutedForeground}
+                      />
+                    </Pressable>
+                    {frequentExpanded && frequentItems.length > 3 ? (
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={() => setShowAllFrequent((current) => !current)}
+                        style={styles.seeAllButton}
+                        testID="frequently-bought-see-all"
+                      >
+                        <Text style={[styles.seeAllText, { color: colors.primary }]}>
+                          {showAllFrequent ? 'Show less' : `See all (${frequentItems.length})`}
+                        </Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                  {frequentExpanded
+                    ? visibleFrequentItems.map((item) => (
+                        <FrequentItemCard
+                          key={item.id}
+                          item={item}
+                          adding={addingFrequentIds.includes(item.id)}
+                          onAddToList={() => void handleAddFrequentToList(item)}
+                          onRemove={() => {
+                            if (!userId) return;
+                            void deleteFrequentItem(userId, item.id)
+                              .then(() =>
+                                setFrequentItems((current) =>
+                                  current.filter((frequentItem) => frequentItem.id !== item.id),
+                                ),
+                              )
+                              .catch((error: unknown) => setErrorMessage(describeError(error)));
+                          }}
+                        />
+                      ))
+                    : null}
+                </View>
+              ) : null}
+
               <View style={styles.addSection}>
                 <Text style={[styles.inputLabel, { color: colors.foreground }]}>
                   Add a product or ingredient
@@ -723,6 +870,13 @@ export default function ShoppingListScreen() {
                       onRecheck={() => void handleRecheck(item)}
                       onRemove={() => handleRemove(item)}
                       onViewDetails={() => handleViewDetails(item.term)}
+                      isFrequent={frequentItems.some(
+                        (frequentItem) =>
+                          frequentItem.term.trim().toLocaleLowerCase() ===
+                          item.term.trim().toLocaleLowerCase(),
+                      )}
+                      frequentUpdating={frequentBusyIds.includes(item.id)}
+                      onToggleFrequent={() => void handleToggleFrequent(item)}
                     />
                   ))}
                 </View>
@@ -747,6 +901,13 @@ export default function ShoppingListScreen() {
                       onRecheck={() => void handleRecheck(item)}
                       onRemove={() => handleRemove(item)}
                       onViewDetails={() => handleViewDetails(item.term)}
+                      isFrequent={frequentItems.some(
+                        (frequentItem) =>
+                          frequentItem.term.trim().toLocaleLowerCase() ===
+                          item.term.trim().toLocaleLowerCase(),
+                      )}
+                      frequentUpdating={frequentBusyIds.includes(item.id)}
+                      onToggleFrequent={() => void handleToggleFrequent(item)}
                     />
                   ))}
                 </View>
@@ -1024,6 +1185,26 @@ const styles = StyleSheet.create({
   },
   itemSection: {
     gap: 10,
+  },
+  frequentSection: {
+    gap: 10,
+  },
+  frequentHeadingButton: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flex: 1,
+    gap: 8,
+    minHeight: 38,
+  },
+  seeAllButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 38,
+    paddingHorizontal: 4,
+  },
+  seeAllText: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 12,
   },
   itemCount: {
     fontFamily: 'Inter_600SemiBold',

@@ -6,11 +6,13 @@ import {
   buildShoppingListCheckResult,
   getShoppingListAllergenLabel,
   isShoppingListCheckStale,
+  sortFrequentItems,
   sortShoppingListItems,
   summarizeShoppingList,
   type ShoppingListCheckResult,
   type ShoppingListProfile,
   type ShoppingListItem,
+  type FrequentItem,
 } from '../services/shoppingListLogic.ts';
 import {
   getSingleIngredientFoodCategory,
@@ -420,5 +422,27 @@ test('completed shopping list items sort below active items', () => {
       (item) => item.id,
     ),
     ['active', 'completed'],
+  );
+});
+
+test('frequently bought items sort by most recently added first', () => {
+  const item = (id: string, addedAt: string): FrequentItem => ({
+    id,
+    user_id: 'user',
+    term: id,
+    added_at: addedAt,
+    last_checked_at: null,
+    last_check_result: null,
+    is_checked: false,
+    last_used_at: addedAt,
+  });
+
+  assert.deepEqual(
+    sortFrequentItems([
+      item('older', '2026-10-01T10:00:00.000Z'),
+      item('newest', '2026-10-10T10:00:00.000Z'),
+      item('middle', '2026-10-05T10:00:00.000Z'),
+    ]).map(({ id }) => id),
+    ['newest', 'middle', 'older'],
   );
 });

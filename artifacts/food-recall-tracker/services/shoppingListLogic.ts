@@ -62,6 +62,10 @@ export interface ShoppingListItem {
   is_checked: boolean;
 }
 
+export interface FrequentItem extends ShoppingListItem {
+  last_used_at: string;
+}
+
 type RecallCheckData = Pick<
   RecallSearchResult,
   'recalls' | 'recentNews' | 'newsUnavailable' | 'fdaUnavailable'
@@ -234,6 +238,12 @@ export function sortShoppingListItems(items: ShoppingListItem[]) {
     if (urgencyDifference !== 0) return urgencyDifference;
     return Date.parse(second.added_at) - Date.parse(first.added_at);
   });
+}
+
+export function sortFrequentItems(items: FrequentItem[]) {
+  return [...items].sort(
+    (first, second) => Date.parse(second.added_at) - Date.parse(first.added_at),
+  );
 }
 
 export function summarizeShoppingList(items: ShoppingListItem[]) {
