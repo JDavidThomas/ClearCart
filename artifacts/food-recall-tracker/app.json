@@ -10,7 +10,12 @@
     "ios": {
       "supportsTablet": false
     },
-    "android": {},
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#2563EB"
+      }
+    },
     "web": {
       "favicon": "./assets/icon.png"
     },
