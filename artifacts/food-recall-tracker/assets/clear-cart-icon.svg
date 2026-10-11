@@ -1,21 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
-  <!-- Background App Tile -->
   <rect width="1024" height="1024" rx="230" fill="#2563EB" />
-
-  <!-- Primary Shape: Symmetrical Family Cart Frame -->
   <g fill="none" stroke="#FFFFFF" stroke-width="48" stroke-linecap="round" stroke-linejoin="round">
-    <!-- Push Handle & Rear Frame Base -->
     <path d="M 220 340 L 320 340 L 420 620 L 740 620" />
-    <!-- Front/Basket Wireframe Enclosure -->
     <path d="M 350 420 L 790 420 L 740 620" />
   </g>
-
-  <!-- Solid White Wheels -->
   <circle cx="460" cy="730" r="48" fill="#FFFFFF" />
   <circle cx="700" cy="730" r="48" fill="#FFFFFF" />
-
-  <!-- Supporting Accent: High-Visibility Safety Green Stamp -->
   <circle cx="790" cy="420" r="105" fill="#22C55E" />
-  <!-- Pure White Checkmark for Maximum Brightness Against Green -->
   <path d="M 735 420 L 775 460 L 850 375" fill="none" stroke="#FFFFFF" stroke-width="32" stroke-linecap="round" stroke-linejoin="round" />
 </svg>
