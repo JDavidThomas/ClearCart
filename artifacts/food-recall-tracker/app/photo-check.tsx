@@ -92,7 +92,7 @@ export default function PhotoCheckScreen() {
     setPhotoState('verdict');
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-    console.info('[Photo] Open Food Facts lookup attempt', {
+    console.info('[Photo] Open Food Facts lookup starts', {
       productName,
       brand: identification.brand,
       productType: identification.productType,
@@ -108,7 +108,7 @@ export default function PhotoCheckScreen() {
         const resolvedProduct = nutritionProduct ?? fallbackNutritionProduct;
         const hasOpenFoodFactsNutrition = Boolean(nutritionProduct && hasNutritionData(nutritionProduct));
         const hasOpenFoodFactsAllergenData = hasAllergenData(nutritionProduct);
-        console.info('[Photo] Open Food Facts nutrition lookup', {
+        console.info('[Photo] Open Food Facts lookup resolves', {
           productName,
           apiCallSucceeded: true,
           returnedProduct: Boolean(nutritionProduct),
@@ -126,7 +126,7 @@ export default function PhotoCheckScreen() {
         });
       })
       .catch((error) => {
-        console.info('[Photo] Open Food Facts nutrition lookup failed', {
+        console.info('[Photo] Open Food Facts lookup resolves with fallback', {
           productName,
           apiCallSucceeded: false,
           returnedNutritionData: false,
@@ -163,6 +163,11 @@ export default function PhotoCheckScreen() {
   };
 
   const processAsset = async (asset: ImagePicker.ImagePickerAsset) => {
+    console.info('[Photo] Photo captured or selected', {
+      width: asset.width,
+      height: asset.height,
+      mimeType: asset.mimeType ?? 'image/jpeg',
+    });
     const sourceWidth = asset.width || GEMINI_IMAGE_LONGEST_SIDE;
     const sourceHeight = asset.height || GEMINI_IMAGE_LONGEST_SIDE;
     const resizeAction =
@@ -193,7 +198,12 @@ export default function PhotoCheckScreen() {
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setPhotoState('identifying');
 
+    console.info('[Photo] Gemini call starts');
     const identification = await identifyFoodFromImage(encodedImage.base64, 'image/jpeg');
+    console.info('[Photo] Gemini call resolves', {
+      identifiedProductName: identification.fullName,
+      confidence: identification.confidence,
+    });
     console.info('[Gemini] normalized photo scanner JSON', JSON.stringify(identification, null, 2));
     console.info('[Photo] Product identification result', {
       productName: identification.fullName,
@@ -284,6 +294,7 @@ export default function PhotoCheckScreen() {
       if (result.canceled) return;
       const asset = result.assets[0];
       if (!asset) throw new Error('We could not read that photo. Please try again.');
+      console.info('[Photo] Photo captured');
       await processAsset(asset);
     } catch (error) {
       setErrorMessage(
@@ -313,6 +324,7 @@ export default function PhotoCheckScreen() {
       if (result.canceled) return;
       const asset = result.assets[0];
       if (!asset) throw new Error('We could not read that photo. Please try again.');
+      console.info('[Photo] Photo selected from gallery');
       await processAsset(asset);
     } catch (error) {
       setErrorMessage(

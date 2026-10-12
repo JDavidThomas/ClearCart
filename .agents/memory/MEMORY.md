@@ -20,3 +20,4 @@
 - [News client verification gate](news-client-verification.md) — server-only checks are insufficient; verify the target search in client state and the News render before claiming success or issuing a fresh tunnel.
 - [Supabase JWT recovery confirmation](supabase-jwt-recovery-confirmation.md) — Expo Go restored an existing session after startup refresh; treat auth as fixed unless new evidence contradicts it.
 - [Frequently Bought persistence](frequently-bought-storage.md) — Keep saved frequent items in their own user-scoped table so active-list deletion never removes them.
+- [Photo household checks](photo-family-check.md) — Run name-based household allergen checks immediately; product-catalog delays must not suppress safety warnings.

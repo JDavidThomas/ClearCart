@@ -24,6 +24,15 @@ function formatAllergen(id: string) {
   return ALLERGEN_OPTIONS.find((option) => option.id === id)?.label ?? id;
 }
 
+function hasProductSafetyDetails(product: OpenFoodFactsProduct | null) {
+  if (!product) return false;
+  if (product.ingredients?.trim() || product.allergens?.trim()) return true;
+  return Boolean(
+    product.nutrition &&
+      Object.values(product.nutrition).some((value) => typeof value === 'number' && Number.isFinite(value)),
+  );
+}
+
 export function FamilyCheck({ productName, productText, product = null }: FamilyCheckProps) {
   const colors = useColors();
   const { status } = useAuth();
@@ -44,6 +53,7 @@ export function FamilyCheck({ productName, productText, product = null }: Family
   });
 
   const productForCheck = product ?? productQuery.data ?? null;
+  const productDetailsAvailable = hasProductSafetyDetails(productForCheck);
   const results = useMemo(
     () => members.map((member) =>
       evaluateFamilyMember(
@@ -56,20 +66,66 @@ export function FamilyCheck({ productName, productText, product = null }: Family
     [members, productForCheck, productName, productText],
   );
   const hasConflicts = results.some(familyMemberHasConflict);
-  const expanded = expandedChoice ?? hasConflicts;
+  const expanded = expandedChoice ?? (hasConflicts || !productDetailsAvailable);
 
-  if (status !== 'authenticated' || familyQuery.isPending) return null;
+  useEffect(() => {
+    if (status !== 'authenticated' || familyQuery.isPending || familyQuery.isError || members.length === 0) return;
+    console.info('[FamilyCheck] Family check runs', {
+      productName,
+      familyMemberCount: members.length,
+      productDetailsAvailable,
+      conflictingMembers: results.filter(familyMemberHasConflict).map((result) => result.name),
+    });
+    console.info('[FamilyCheck] Result rendered', {
+      productName,
+      familyMemberCount: members.length,
+      conflictingMembers: results.filter(familyMemberHasConflict).map((result) => result.name),
+      productLookupStatus: productQuery.isPending
+        ? 'pending'
+        : productQuery.isError
+          ? 'unavailable'
+          : 'resolved',
+    });
+  }, [
+    familyQuery.isError,
+    familyQuery.isPending,
+    members,
+    productForCheck,
+    productDetailsAvailable,
+    productName,
+    productQuery.isError,
+    productQuery.isPending,
+    results,
+    status,
+  ]);
 
-  if (familyQuery.isError) {
+  if (status !== 'authenticated') return null;
+
+  if (familyQuery.isError || (familyQuery.isPending && familyQuery.fetchStatus === 'idle')) {
     return (
       <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <Feather name="info" size={19} color={colors.mutedForeground} />
         <View style={styles.copy}>
           <Text style={[styles.title, { color: colors.foreground }]}>Household Safety Check</Text>
           <Text style={[styles.body, { color: colors.mutedForeground }]}>
-            Family profiles could not be loaded. Open Profile to check the connection and Supabase setup.
+            Unable to load family profiles. Household check unavailable — verify manually.
           </Text>
         </View>
+      </View>
+    );
+  }
+
+  if (familyQuery.isPending) {
+    return (
+      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <Feather name="users" size={19} color={colors.primary} />
+        <View style={styles.copy}>
+          <Text style={[styles.title, { color: colors.foreground }]}>Household Safety Check</Text>
+          <Text style={[styles.body, { color: colors.mutedForeground }]}>
+            Checking family profiles…
+          </Text>
+        </View>
+        <ActivityIndicator size="small" color={colors.primary} />
       </View>
     );
   }
@@ -77,10 +133,10 @@ export function FamilyCheck({ productName, productText, product = null }: Family
   if (members.length === 0) return null;
 
   const conflictCount = results.filter(familyMemberHasConflict).length;
-  const summary = productQuery.isPending
-    ? 'Checking family profiles…'
-    : hasConflicts
-      ? `${conflictCount} ${conflictCount === 1 ? 'member needs' : 'members need'} a closer look`
+  const summary = hasConflicts
+    ? `${conflictCount} ${conflictCount === 1 ? 'member needs' : 'members need'} a closer look`
+    : productQuery.isPending || productQuery.isError || !productDetailsAvailable
+      ? 'No name-based conflict found — verify manually'
       : 'Safe for everyone';
 
   return (
@@ -102,20 +158,23 @@ export function FamilyCheck({ productName, productText, product = null }: Family
           </Text>
           <Text style={[styles.summary, { color: colors.mutedForeground }]}>{summary}</Text>
         </View>
-        {productQuery.isPending ? (
-          <ActivityIndicator size="small" color={colors.primary} />
-        ) : (
-          <Feather name={expanded ? 'chevron-up' : 'chevron-down'} size={20} color={colors.mutedForeground} />
-        )}
+        <View style={styles.headerAction}>
+          {productQuery.isPending ? (
+            <ActivityIndicator size="small" color={colors.primary} />
+          ) : (
+            <Feather name={expanded ? 'chevron-up' : 'chevron-down'} size={20} color={colors.mutedForeground} />
+          )}
+        </View>
       </Pressable>
 
       {expanded ? (
         <View style={[styles.resultList, { borderTopColor: colors.border }]}>
-          {productQuery.isPending ? (
+          {productQuery.isPending || !productDetailsAvailable ? (
             <Text style={[styles.body, { color: colors.mutedForeground }]}>
-              Checking available product details…
+              Household results include a name-based check. Verify the package label if product details are unavailable.
             </Text>
-          ) : results.map((result) => (
+          ) : null}
+          {results.map((result) => (
             <View key={result.memberId} style={styles.memberResults}>
               {getFamilyMemberSafetyMessages(result, formatAllergen).map((message, index) => (
                 <View key={`${result.memberId}-${message.kind}-${index}`} style={styles.resultRow}>
@@ -148,6 +207,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 11,
     minHeight: 40,
+  },
+  headerAction: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 24,
+    minWidth: 24,
   },
   iconCircle: {
     alignItems: 'center',

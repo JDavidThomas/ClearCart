@@ -32,6 +32,21 @@ test('family allergen checks use the product-name matching rules', () => {
   );
 });
 
+test('SKIPPY peanut butter triggers Emma’s name-based alert without Open Food Facts data', () => {
+  const result = evaluateFamilyMember(
+    member({ allergies: ['peanuts'] }),
+    'SKIPPY Creamy Peanut Butter',
+    '',
+    null,
+  );
+
+  assert.deepEqual(result.allergenMatches, ['peanuts']);
+  assert.equal(
+    getFamilyMemberSafetyMessages(result, () => 'Peanuts')[0]?.text,
+    'Emma is allergic to Peanuts — this product contains Peanuts',
+  );
+});
+
 test('family allergen checks also inspect available ingredient data', () => {
   const result = evaluateFamilyMember(
     member({ allergies: ['peanuts'] }),

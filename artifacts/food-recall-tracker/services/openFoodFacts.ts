@@ -10,11 +10,27 @@ const OPEN_FOOD_FACTS_SEARCH_URL = 'https://world.openfoodfacts.org/cgi/search.p
 const CACHE_PREFIX = '@food-recall-tracker/open-food-facts/';
 const OPEN_FOOD_FACTS_USER_AGENT = 'Safe Cart/1.0 (contact@safecart.app)';
 const OPEN_FOOD_FACTS_RESPONSE_LOG_LIMIT = 4_000;
+const OPEN_FOOD_FACTS_REQUEST_TIMEOUT_MS = 5_000;
 const OPEN_FOOD_FACTS_HEADERS = {
   'User-Agent': OPEN_FOOD_FACTS_USER_AGENT,
   'X-User-Agent': OPEN_FOOD_FACTS_USER_AGENT,
   Accept: 'application/json',
 };
+
+async function fetchOpenFoodFacts(url: string, init: RequestInit = {}) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), OPEN_FOOD_FACTS_REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error('Open Food Facts lookup timed out.');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
 
 interface OpenFoodFactsSearchPayload {
   products?: Record<string, unknown>[];
@@ -181,7 +197,7 @@ async function fetchProductByBarcode(barcode: string) {
 
   let response: Response;
   try {
-    response = await fetch(url, { headers: OPEN_FOOD_FACTS_HEADERS });
+    response = await fetchOpenFoodFacts(url, { headers: OPEN_FOOD_FACTS_HEADERS });
   } catch (error) {
     console.error('[OpenFoodFacts] Barcode network request failed', {
       barcode,
@@ -251,7 +267,7 @@ async function fetchProductsBySearchTerm(name: string) {
     page_size: '5',
     fields: 'code,product_name,product_name_en,brands,ingredients_text,ingredients_text_en,allergens,allergens_tags,nutriments,nutriscore_grade,nova_group',
   });
-  const response = await fetch(`${OPEN_FOOD_FACTS_SEARCH_URL}?${params.toString()}`, {
+  const response = await fetchOpenFoodFacts(`${OPEN_FOOD_FACTS_SEARCH_URL}?${params.toString()}`, {
     headers: OPEN_FOOD_FACTS_HEADERS,
   });
   if (!response.ok) throw new Error('The product database is unavailable right now.');
@@ -319,7 +335,7 @@ export async function lookupOpenFoodFactsProduct(
   return product;
 }
 
-export async function searchOpenFoodFactsProduct(
+async function searchOpenFoodFactsProductWithStrategies(
   name: string,
   brand = '',
   barcode = '',
@@ -424,4 +440,40 @@ export async function searchOpenFoodFactsProduct(
     nameBasedFallbackRecommended: !hasIngredientOrAllergenData(fallbackProduct),
   });
   return fallbackProduct;
+}
+
+export async function searchOpenFoodFactsProduct(
+  name: string,
+  brand = '',
+  barcode = '',
+  productType = '',
+): Promise<OpenFoodFactsProduct | null> {
+  const timeoutMs = OPEN_FOOD_FACTS_REQUEST_TIMEOUT_MS;
+  console.info('[OpenFoodFacts] Lookup starts', { productName: name, timeoutMs });
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const result = await Promise.race([
+      searchOpenFoodFactsProductWithStrategies(name, brand, barcode, productType),
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(
+          () => reject(new Error('Open Food Facts lookup timed out.')),
+          timeoutMs,
+        );
+      }),
+    ]);
+    console.info('[OpenFoodFacts] Lookup resolves', {
+      productName: name,
+      found: Boolean(result),
+    });
+    return result;
+  } catch (error) {
+    console.info('[OpenFoodFacts] Lookup resolves with fallback', {
+      productName: name,
+      found: false,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
 }

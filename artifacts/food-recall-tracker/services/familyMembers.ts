@@ -50,6 +50,7 @@ interface FamilyMemberRow {
 }
 
 const FAMILY_MEMBERS_QUERY_KEY = 'family-members';
+const FAMILY_MEMBERS_TIMEOUT_MS = 5_000;
 
 function toFamilyMember(row: FamilyMemberRow): FamilyMember {
   return {
@@ -85,13 +86,36 @@ function getFamilyMemberError(error: unknown, operation: string) {
 }
 
 export async function listFamilyMembers(ownerId: string) {
-  const { data, error } = await supabase
-    .from('family_members')
-    .select('*')
-    .eq('owner_id', ownerId)
-    .order('created_at', { ascending: true });
-  if (error) throw getFamilyMemberError(error, 'select');
-  return (data as FamilyMemberRow[]).map(toFamilyMember);
+  console.info('[FamilyCheck] Family members fetch starts');
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), FAMILY_MEMBERS_TIMEOUT_MS);
+  let data: unknown;
+  let error: unknown;
+  try {
+    const response = await supabase
+      .from('family_members')
+      .select('*')
+      .eq('owner_id', ownerId)
+      .order('created_at', { ascending: true })
+      .abortSignal(controller.signal);
+    data = response.data;
+    error = response.error;
+  } catch (requestError) {
+    error = requestError;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+  if (error) {
+    console.info('[FamilyCheck] Family members fetch fails', {
+      error: error instanceof Error ? error.message : String(error),
+      timedOut: controller.signal.aborted,
+      timeoutMs: FAMILY_MEMBERS_TIMEOUT_MS,
+    });
+    throw getFamilyMemberError(error, 'select');
+  }
+  const members = ((data ?? []) as FamilyMemberRow[]).map(toFamilyMember);
+  console.info('[FamilyCheck] Family members fetch resolves', { count: members.length });
+  return members;
 }
 
 export async function saveFamilyMember(ownerId: string, input: SaveFamilyMemberInput) {
