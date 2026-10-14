@@ -11,6 +11,7 @@
       "supportsTablet": false
     },
     "android": {
+      "package": "com.clearcart.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#2563EB"
