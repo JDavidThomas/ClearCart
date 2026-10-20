@@ -39,6 +39,12 @@ export function FamilyCheck({ productName, productText, product = null }: Family
   const familyQuery = useFamilyMembers();
   const members = familyQuery.members;
   const [expandedChoice, setExpandedChoice] = useState<boolean | null>(null);
+  const [retryingFamilyProfiles, setRetryingFamilyProfiles] = useState(false);
+
+  const retryFamilyCheck = () => {
+    setRetryingFamilyProfiles(true);
+    void familyQuery.refetch().finally(() => setRetryingFamilyProfiles(false));
+  };
 
   useEffect(() => {
     setExpandedChoice(null);
@@ -101,7 +107,11 @@ export function FamilyCheck({ productName, productText, product = null }: Family
 
   if (status !== 'authenticated') return null;
 
-  if (familyQuery.isError || (familyQuery.isPending && familyQuery.fetchStatus === 'idle')) {
+  if (
+    familyQuery.isError ||
+    retryingFamilyProfiles ||
+    (familyQuery.isPending && familyQuery.fetchStatus === 'idle')
+  ) {
     return (
       <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <Feather name="info" size={19} color={colors.mutedForeground} />
@@ -110,6 +120,24 @@ export function FamilyCheck({ productName, productText, product = null }: Family
           <Text style={[styles.body, { color: colors.mutedForeground }]}>
             Unable to load family profiles. Household check unavailable — verify manually.
           </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Retry household safety check"
+            accessibilityState={{ busy: retryingFamilyProfiles, disabled: retryingFamilyProfiles }}
+            disabled={retryingFamilyProfiles}
+            onPress={retryFamilyCheck}
+            style={styles.retryButton}
+            testID="family-check-retry"
+          >
+            {retryingFamilyProfiles ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <Feather name="refresh-cw" size={14} color={colors.primary} />
+            )}
+            <Text style={[styles.retryText, { color: colors.primary }]}>
+              {retryingFamilyProfiles ? 'Retrying…' : 'Retry'}
+            </Text>
+          </Pressable>
         </View>
       </View>
     );
@@ -233,6 +261,19 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
     fontSize: 13,
     lineHeight: 18,
+  },
+  retryButton: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    gap: 7,
+    marginTop: 7,
+    minHeight: 36,
+    paddingHorizontal: 4,
+  },
+  retryText: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 13,
   },
   summary: {
     fontFamily: 'Inter_600SemiBold',
