@@ -13,9 +13,12 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
+import {
+  HAS_SEEN_TOUR_KEY,
+  PROFILE_SETUP_COMPLETED_KEY,
+  hasCompletedProfileSetup,
+} from '@/services/onboardingTourLogic';
 import { fetchShoppingListItems } from '@/services/shoppingList';
-
-export const HAS_SEEN_TOUR_KEY = 'has_seen_tour';
 
 const TOUR_STEPS = [
   {
@@ -44,19 +47,6 @@ const TOUR_STEPS = [
   },
 ] as const;
 
-function hasCompletedProfile(profile: ReturnType<typeof useAuth>['profile']) {
-  return Boolean(
-    profile &&
-      (profile.healthConsentGiven ||
-        profile.allergies.length > 0 ||
-        profile.healthConditions.length > 0 ||
-        profile.dietaryPreferences.length > 0 ||
-        profile.customAllergy.trim() ||
-        profile.customHealthNote.trim() ||
-        profile.severity),
-  );
-}
-
 async function markTourSeen() {
   try {
     await AsyncStorage.setItem(HAS_SEEN_TOUR_KEY, 'true');
@@ -72,7 +62,7 @@ export function OnboardingTour() {
   const { status, profile } = useAuth();
   const [stepIndex, setStepIndex] = useState<number | null>(null);
   const pulse = useRef(new Animated.Value(0)).current;
-  const completedProfile = hasCompletedProfile(profile);
+  const completedProfile = hasCompletedProfileSetup(profile);
 
   useEffect(() => {
     let cancelled = false;
@@ -82,6 +72,10 @@ export function OnboardingTour() {
 
       try {
         if ((await AsyncStorage.getItem(HAS_SEEN_TOUR_KEY)) === 'true') return;
+        if ((await AsyncStorage.getItem(PROFILE_SETUP_COMPLETED_KEY)) === 'true') {
+          await markTourSeen();
+          return;
+        }
       } catch (error) {
         console.warn('[OnboardingTour] Could not read tour completion', error);
         return;

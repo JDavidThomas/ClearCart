@@ -1,4 +1,5 @@
 import { Feather } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -9,6 +10,15 @@ import { ALLERGEN_OPTIONS } from '@/components/AllergenInsights';
 import { DIETARY_PREFERENCE_OPTIONS, HEALTH_CONDITION_OPTIONS } from '@/components/HealthInsights';
 import { useAuth, type AllergySeverity } from '@/context/AuthContext';
 import { useColors } from '@/hooks/useColors';
+import { PROFILE_SETUP_COMPLETED_KEY } from '@/services/onboardingTourLogic';
+
+async function rememberProfileSetupCompletion() {
+  try {
+    await AsyncStorage.setItem(PROFILE_SETUP_COMPLETED_KEY, 'true');
+  } catch (error) {
+    console.warn('[Profile setup] Could not persist completion locally', error);
+  }
+}
 
 const SEVERITY_OPTIONS: { id: Exclude<AllergySeverity, null>; title: string; description: string }[] = [
   { id: 'mild', title: 'Mild', description: 'Discomfort' },
@@ -71,6 +81,7 @@ export default function AllergenSetupScreen() {
     setSaving(true);
     try {
       await updateProfile({ allergies: selected, customAllergy: customAllergy.trim() });
+      await rememberProfileSetupCompletion();
       router.replace('/profile');
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'We could not save your allergies.');
@@ -108,6 +119,7 @@ export default function AllergenSetupScreen() {
       }
       if (!dietSkipped) updates.dietaryPreferences = dietaryPreferences;
       await updateProfile(updates);
+      await rememberProfileSetupCompletion();
       router.replace('/profile');
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'We could not save your profile.');
