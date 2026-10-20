@@ -10,6 +10,14 @@ import {
 
 test("NewsAPI search broadens long product names instead of requiring one exact phrase", () => {
   assert.equal(buildNewsQuery("banana"), "banana AND recall");
+  assert.equal(
+    buildNewsQuery("bacon"),
+    "(bacon AND recall) OR (bacon AND (meat OR poultry OR deli) AND recall) OR ((meat OR poultry OR deli) AND recall)",
+  );
+  assert.equal(
+    buildNewsQuery("chicken"),
+    "(chicken AND recall) OR (chicken AND (poultry OR meat OR deli) AND recall) OR ((poultry OR meat OR deli) AND recall)",
+  );
   assert.equal(buildNewsQuery("baby spinach"), "baby spinach AND recall");
   assert.equal(
     buildNewsQuery("Sierra Nevada Graziers Raw Milk Cheeses"),
@@ -21,6 +29,27 @@ test("NewsAPI search broadens long product names instead of requiring one exact 
   );
   assert.equal(buildNewsQuery("raw milk cheese recall"), "raw milk cheese AND recall");
   assert.equal(normalizeNewsSearchTerm("  café—style  eggs! "), "cafe style eggs");
+});
+
+test("broad meat recall headlines surface when the searched ingredient appears in the description", () => {
+  const articles = normalizeNewsArticles(
+    [
+      {
+        title: "1.58 million pounds of meat and poultry products recalled",
+        description:
+          "Kayem Foods recalled bacon, hot dogs, and deli meats in a Class I recall.",
+        url: "https://news.example/kayem-meat-recall",
+        publishedAt: "2026-10-17T12:00:00.000Z",
+        source: { name: "Food Safety News" },
+      },
+    ],
+    "2026-09-20T00:00:00.000Z",
+    "2026-10-20T23:59:59.000Z",
+    "bacon",
+  );
+
+  assert.equal(articles.length, 1);
+  assert.match(articles[0].title, /recalled/i);
 });
 
 test("identified products query by brand and product terms rather than brand alone", () => {

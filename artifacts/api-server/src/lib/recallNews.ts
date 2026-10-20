@@ -2,6 +2,16 @@ export const NEWS_API_RESULT_LIMIT = 10;
 const RECENT_NEWS_WINDOW_MS = 30 * 24 * 60 * 60 * 1_000;
 const NON_DIRECT_NEWS_HOSTS = ["biztoc.com", "alltoc.com"] as const;
 const NON_DIRECT_NEWS_SOURCE_PREFIXES = ["biztoc", "alltoc"] as const;
+const BROAD_INGREDIENT_CATEGORIES: Record<string, string[]> = {
+  bacon: ["meat", "poultry", "deli"],
+  beef: ["meat", "ground beef"],
+  chicken: ["poultry", "meat", "deli"],
+  deli: ["meat", "poultry", "deli meats"],
+  ham: ["meat", "pork", "deli"],
+  pork: ["meat", "pork", "deli"],
+  sausage: ["meat", "pork", "poultry"],
+  turkey: ["meat", "poultry", "deli"],
+};
 const PRODUCT_DESCRIPTOR_WORDS = new Set([
   "chopped",
   "chunky",
@@ -184,6 +194,11 @@ export function buildNewsQuery(
     .filter((word) => word && !/^(recall|recalls)$/i.test(word));
 
   if (terms.length === 0) return "recall";
+  if (terms.length === 1 && BROAD_INGREDIENT_CATEGORIES[terms[0]]) {
+    const ingredient = terms[0];
+    const categories = BROAD_INGREDIENT_CATEGORIES[ingredient].join(" OR ");
+    return `(${ingredient} AND recall) OR (${ingredient} AND (${categories}) AND recall) OR ((${categories}) AND recall)`;
+  }
   if (terms.length <= 3) return `${terms.join(" ")} AND recall`;
 
   const brand = terms.slice(0, 2).join(" ");
