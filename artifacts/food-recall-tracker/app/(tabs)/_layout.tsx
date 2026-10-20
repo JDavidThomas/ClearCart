@@ -1,5 +1,6 @@
 import React from 'react';
 import { Platform, StyleSheet, useColorScheme, View } from 'react-native';
+import { OnboardingTour } from '@/components/OnboardingTour';
 import { useColors } from '@/hooks/useColors';
 import { Feather } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
@@ -140,8 +141,17 @@ function ClassicTabLayout() {
 }
 
 export default function TabLayout() {
-  if (isLiquidGlassAvailable()) {
-    return <NativeTabLayout />;
-  }
-  return <ClassicTabLayout />;
+  return (
+    <View style={styles.tabRoot}>
+      <View style={styles.tabContent}>
+        {isLiquidGlassAvailable() ? <NativeTabLayout /> : <ClassicTabLayout />}
+      </View>
+      <OnboardingTour />
+    </View>
+  );
 }
+
+const styles = StyleSheet.create({
+  tabRoot: { flex: 1 },
+  tabContent: { flex: 1 },
+});
