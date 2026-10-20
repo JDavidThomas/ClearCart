@@ -1,0 +1,16 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "dIGJqSJPQ8rgM42RGTRiS"
+uri = "file://screenshots/clearcart-preview-install-qr.png"
+type = "image"
+title = "ClearCart Android install QR code"
+description = "Scan to open the EAS internal install page for the ClearCart preview APK."
+logical_id = "3f217ddc-19bc-4f0f-9654-e3072c28126f"
+content_hash = "sha256:3f21335b1a3fee029f068b7f76dcfeb2fb733f524485b4f00d9d89216dc37d8c"
+size = 4410
+mtime_ms = 1792465524050
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:597f3d7c-f108-4153-983f-01535554f33e/3f217ddc-19bc-4f0f-9654-e3072c28126f/3c51865b-15bb-4255-963e-a7832af9f581"
+storage_version_token = "1792465554994623"
+content_type = "image/png"
