@@ -340,6 +340,7 @@ async function searchOpenFoodFactsProductWithStrategies(
   brand = '',
   barcode = '',
   productType = '',
+  options: { forceRefresh?: boolean } = {},
 ): Promise<OpenFoodFactsProduct | null> {
   const normalizedName = name.trim();
   if (!normalizedName) return null;
@@ -351,7 +352,9 @@ async function searchOpenFoodFactsProductWithStrategies(
   let barcodeProduct: OpenFoodFactsProduct | null = null;
   if (normalizedBarcode) {
     try {
-      barcodeProduct = await lookupOpenFoodFactsProduct(normalizedBarcode);
+      barcodeProduct = await lookupOpenFoodFactsProduct(normalizedBarcode, {
+        forceRefresh: options.forceRefresh,
+      });
       console.info('[OpenFoodFacts] Photo barcode lookup completed', {
         barcode: normalizedBarcode,
         found: Boolean(barcodeProduct),
@@ -375,7 +378,7 @@ async function searchOpenFoodFactsProductWithStrategies(
     'name',
     `v2|${JSON.stringify([normalizedName, normalizedBrand, normalizedProductType])}`,
   );
-  const cached = await readCachedProduct(key);
+  const cached = options.forceRefresh ? { hit: false, product: null } : await readCachedProduct(key);
   if (cached.hit && hasIngredientOrAllergenData(cached.product)) {
     console.info('[OpenFoodFacts] Name search cache hit', {
       productName: normalizedName,
@@ -447,13 +450,14 @@ export async function searchOpenFoodFactsProduct(
   brand = '',
   barcode = '',
   productType = '',
+  options: { forceRefresh?: boolean } = {},
 ): Promise<OpenFoodFactsProduct | null> {
   const timeoutMs = OPEN_FOOD_FACTS_REQUEST_TIMEOUT_MS;
   console.info('[OpenFoodFacts] Lookup starts', { productName: name, timeoutMs });
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   try {
     const result = await Promise.race([
-      searchOpenFoodFactsProductWithStrategies(name, brand, barcode, productType),
+      searchOpenFoodFactsProductWithStrategies(name, brand, barcode, productType, options),
       new Promise<never>((_, reject) => {
         timeoutId = setTimeout(
           () => reject(new Error('Open Food Facts lookup timed out.')),

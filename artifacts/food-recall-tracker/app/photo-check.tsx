@@ -42,6 +42,7 @@ import type { OpenFoodFactsNutrition, OpenFoodFactsProduct, RecallSearchResult }
 
 type PhotoState = 'ready' | 'identifying' | 'checking' | 'confirming' | 'verdict' | 'error';
 type RecallCheckStatus = 'checking' | 'available' | 'unavailable';
+type ProductDetailsLookupStatus = 'checking' | 'available' | 'unavailable' | 'idle';
 const GEMINI_IMAGE_LONGEST_SIDE = 1568;
 const FDA_NOTICES_URL = 'https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts';
 
@@ -50,6 +51,7 @@ interface PhotoVerdict extends FoodIdentification {
   recallCheckStatus: RecallCheckStatus;
   nutritionProduct: OpenFoodFactsProduct;
   nutritionSource: 'open-food-facts' | 'photo' | 'none';
+  nutritionLookupStatus: ProductDetailsLookupStatus;
 }
 
 export default function PhotoCheckScreen() {
@@ -63,48 +65,51 @@ export default function PhotoCheckScreen() {
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const photoRequestId = useRef(0);
+  const productLookupRequestId = useRef(0);
   const topPadding = insets.top;
 
   const reset = () => {
     photoRequestId.current += 1;
+    productLookupRequestId.current += 1;
     setPhotoState('ready');
     setVerdict(null);
     setImageUri(null);
     setErrorMessage(null);
   };
 
-  const checkProduct = (productName: string, identification: FoodIdentification) => {
-    const requestId = ++photoRequestId.current;
-    const fallbackNutritionProduct = buildPhotoNutritionProduct(productName, identification);
-    const updateVerdict = (update: Partial<PhotoVerdict>) => {
-      if (photoRequestId.current !== requestId) return;
-      setVerdict((current) => (current ? { ...current, ...update } : current));
-    };
-
-    setVerdict({
-      ...identification,
-      productName,
-      recallResult: null,
-      recallCheckStatus: 'checking',
-      nutritionProduct: fallbackNutritionProduct,
-      nutritionSource: hasNutritionData(fallbackNutritionProduct) ? 'photo' : 'none',
-    });
-    setPhotoState('verdict');
-    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  const lookupProductDetails = (
+    productName: string,
+    identification: FoodIdentification,
+    fallbackNutritionProduct: OpenFoodFactsProduct,
+    requestId: number,
+    forceRefresh = false,
+  ) => {
+    const lookupId = ++productLookupRequestId.current;
+    setVerdict((current) =>
+      photoRequestId.current === requestId && current
+        ? { ...current, nutritionLookupStatus: 'checking' }
+        : current,
+    );
 
     console.info('[Photo] Open Food Facts lookup starts', {
       productName,
       brand: identification.brand,
       productType: identification.productType,
       barcodeAvailable: Boolean(identification.barcode),
+      forceRefresh,
     });
     void searchOpenFoodFactsProduct(
       productName,
       identification.brand,
       identification.barcode ?? '',
       identification.productType,
+      { forceRefresh },
     )
       .then((nutritionProduct) => {
+        if (
+          photoRequestId.current !== requestId ||
+          productLookupRequestId.current !== lookupId
+        ) return;
         const resolvedProduct = nutritionProduct ?? fallbackNutritionProduct;
         const hasOpenFoodFactsNutrition = Boolean(nutritionProduct && hasNutritionData(nutritionProduct));
         const hasOpenFoodFactsAllergenData = hasAllergenData(nutritionProduct);
@@ -116,27 +121,67 @@ export default function PhotoCheckScreen() {
           returnedAllergenData: hasOpenFoodFactsAllergenData,
           nameBasedAllergenFallbackNeeded: !hasOpenFoodFactsAllergenData,
         });
-        updateVerdict({
-          nutritionProduct: resolvedProduct,
-          nutritionSource: hasOpenFoodFactsNutrition
-            ? 'open-food-facts'
-            : hasNutritionData(resolvedProduct)
-              ? 'photo'
-              : 'none',
-        });
+        setVerdict((current) =>
+          photoRequestId.current === requestId && current
+            ? {
+                ...current,
+                nutritionProduct: resolvedProduct,
+                nutritionSource: hasOpenFoodFactsNutrition
+                  ? 'open-food-facts'
+                  : hasNutritionData(resolvedProduct)
+                    ? 'photo'
+                    : 'none',
+                nutritionLookupStatus: nutritionProduct ? 'available' : 'unavailable',
+              }
+            : current,
+        );
       })
       .catch((error) => {
+        if (
+          photoRequestId.current !== requestId ||
+          productLookupRequestId.current !== lookupId
+        ) return;
         console.info('[Photo] Open Food Facts lookup resolves with fallback', {
           productName,
           apiCallSucceeded: false,
           returnedNutritionData: false,
           error: error instanceof Error ? error.message : String(error),
         });
-        updateVerdict({
-          nutritionProduct: fallbackNutritionProduct,
-          nutritionSource: hasNutritionData(fallbackNutritionProduct) ? 'photo' : 'none',
-        });
+        setVerdict((current) =>
+          photoRequestId.current === requestId && current
+            ? {
+                ...current,
+                nutritionProduct: fallbackNutritionProduct,
+                nutritionSource: hasNutritionData(fallbackNutritionProduct) ? 'photo' : 'none',
+                nutritionLookupStatus: 'unavailable',
+              }
+            : current,
+        );
       });
+  };
+
+  const checkProduct = (productName: string, identification: FoodIdentification) => {
+    const requestId = ++photoRequestId.current;
+    const fallbackNutritionProduct = buildPhotoNutritionProduct(productName, identification);
+
+    setVerdict({
+      ...identification,
+      productName,
+      recallResult: null,
+      recallCheckStatus: 'checking',
+      nutritionProduct: fallbackNutritionProduct,
+      nutritionSource: hasNutritionData(fallbackNutritionProduct) ? 'photo' : 'none',
+      nutritionLookupStatus: 'checking',
+    });
+    setPhotoState('verdict');
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+    lookupProductDetails(
+      productName,
+      identification,
+      fallbackNutritionProduct,
+      requestId,
+    );
 
     void searchFoodRecalls(productName, {
       brand: identification.brand,
@@ -149,7 +194,10 @@ export default function PhotoCheckScreen() {
           returnedResults: recallResult.recalls.length > 0,
           recallCount: recallResult.recalls.length,
         });
-        updateVerdict({ recallResult, recallCheckStatus: 'available' });
+        if (photoRequestId.current !== requestId) return;
+        setVerdict((current) =>
+          current ? { ...current, recallResult, recallCheckStatus: 'available' } : current,
+        );
       })
       .catch((error) => {
         console.info('[Photo] FDA recall check failed', {
@@ -158,7 +206,10 @@ export default function PhotoCheckScreen() {
           returnedResults: false,
           error: error instanceof Error ? error.message : String(error),
         });
-        updateVerdict({ recallResult: null, recallCheckStatus: 'unavailable' });
+        if (photoRequestId.current !== requestId) return;
+        setVerdict((current) =>
+          current ? { ...current, recallResult: null, recallCheckStatus: 'unavailable' } : current,
+        );
       });
   };
 
@@ -235,6 +286,7 @@ export default function PhotoCheckScreen() {
         recallCheckStatus: 'unavailable',
         nutritionProduct: buildPhotoNutritionProduct('unknown', identification),
         nutritionSource: 'none',
+        nutritionLookupStatus: 'idle',
       });
       setPhotoState('verdict');
       return;
@@ -250,12 +302,24 @@ export default function PhotoCheckScreen() {
         nutritionSource: hasNutritionData(buildPhotoNutritionProduct(identifiedProductName, identification))
           ? 'photo'
           : 'none',
+        nutritionLookupStatus: 'idle',
       });
       setPhotoState('confirming');
       return;
     }
 
     await checkProduct(searchTerm, identification);
+  };
+
+  const retryProductDetails = () => {
+    if (!verdict?.productName || verdict.nutritionLookupStatus === 'checking') return;
+    void lookupProductDetails(
+      verdict.productName,
+      verdict,
+      buildPhotoNutritionProduct(verdict.productName, verdict),
+      photoRequestId.current,
+      true,
+    );
   };
 
   const confirmProduct = async () => {
@@ -469,7 +533,12 @@ export default function PhotoCheckScreen() {
             <ManualSearchButton colors={colors} onPress={() => router.push('/')} />
           </View>
         ) : verdict ? (
-          <PhotoVerdictView verdict={verdict} colors={colors} onRetake={reset} />
+          <PhotoVerdictView
+            verdict={verdict}
+            colors={colors}
+            onRetake={reset}
+            onRetryProductDetails={retryProductDetails}
+          />
         ) : null}
 
         {photoState === 'ready' ? (
@@ -614,10 +683,12 @@ function PhotoVerdictView({
   verdict,
   colors,
   onRetake,
+  onRetryProductDetails,
 }: {
   verdict: PhotoVerdict;
   colors: ReturnType<typeof useColors>;
   onRetake: () => void;
+  onRetryProductDetails: () => void;
 }) {
   const router = useRouter();
   const [activeResultTab, setActiveResultTab] = useState<RecallResultTab>('fda');
@@ -642,6 +713,11 @@ function PhotoVerdictView({
   return (
     <View style={styles.verdictStack}>
       <ProductIdentityCard verdict={verdict} colors={colors} />
+      <PhotoProductDetailsStatus
+        status={verdict.nutritionLookupStatus}
+        colors={colors}
+        onRetry={onRetryProductDetails}
+      />
       <AllergenInsights
         productName={verdict.productName}
         productText={`${verdict.nutritionProduct.ingredients ?? ''} ${verdict.nutritionProduct.allergens ?? ''}`}
@@ -716,6 +792,51 @@ function PhotoVerdictView({
         onPress={() => void router.push('/')}
         label="Search by name"
       />
+    </View>
+  );
+}
+
+function PhotoProductDetailsStatus({
+  status,
+  colors,
+  onRetry,
+}: {
+  status: ProductDetailsLookupStatus;
+  colors: ReturnType<typeof useColors>;
+  onRetry: () => void;
+}) {
+  if (status === 'available' || status === 'idle') return null;
+  const isChecking = status === 'checking';
+  return (
+    <View style={[styles.productLookupCard, { backgroundColor: colors.blueSoft, borderColor: colors.border }]}>
+      {isChecking
+        ? <ActivityIndicator size="small" color={colors.primary} />
+        : <Feather name="info" size={19} color={colors.primary} />}
+      <View style={styles.productLookupCopy}>
+        <Text style={[styles.verdictBody, { color: colors.foreground }]}>
+          {isChecking
+            ? 'Loading product details. Household checks still use the identified product name.'
+            : 'Open Food Facts product details are unavailable. Household checks still use the identified name; verify the package label.'}
+        </Text>
+        {!isChecking ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Retry product details lookup"
+            accessibilityState={{ busy: false, disabled: false }}
+            onPress={onRetry}
+            style={({ pressed }) => [
+              styles.productLookupRetry,
+              { backgroundColor: colors.primary, opacity: pressed ? 0.75 : 1 },
+            ]}
+            testID="photo-product-details-retry"
+          >
+            <Feather name="refresh-cw" size={15} color={colors.primaryForeground} />
+            <Text style={[styles.primaryButtonText, { color: colors.primaryForeground }]}>
+              Retry product details
+            </Text>
+          </Pressable>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -1024,6 +1145,9 @@ const styles = StyleSheet.create({
   fdaStatusTitle: { fontFamily: 'Inter_700Bold', fontSize: 17, lineHeight: 22 },
   recallSectionTitle: { fontFamily: 'Inter_700Bold', fontSize: 18, marginTop: 2 },
   fdaInfoButton: { alignItems: 'center', borderRadius: 12, flexDirection: 'row', gap: 8, justifyContent: 'center', minHeight: 46, paddingHorizontal: 14 },
+  productLookupCard: { alignItems: 'flex-start', borderRadius: 16, borderWidth: 1, flexDirection: 'row', gap: 12, padding: 16 },
+  productLookupCopy: { flex: 1, gap: 10 },
+  productLookupRetry: { alignItems: 'center', alignSelf: 'flex-start', borderRadius: 12, flexDirection: 'row', gap: 8, justifyContent: 'center', minHeight: 42, paddingHorizontal: 14 },
   suggestionCard: { borderRadius: 20, borderWidth: 1, gap: 12, padding: 22 },
   tipList: { alignSelf: 'stretch', gap: 10, marginTop: 4 },
   tipRow: { alignItems: 'flex-start', flexDirection: 'row', gap: 8 },
