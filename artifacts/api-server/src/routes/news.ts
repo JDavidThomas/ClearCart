@@ -17,6 +17,7 @@ import {
 const router: IRouter = Router();
 const NEWS_API_SEARCH_URL = "https://newsapi.org/v2/everything";
 const NEWS_API_REQUEST_TIMEOUT_MS = 8_000;
+const NEWS_API_FETCH_PAGE_SIZE = 50;
 
 interface NewsApiResponse {
   status?: unknown;
@@ -41,7 +42,7 @@ function createNewsApiRequest(
     to: dateRange.to,
     language: "en",
     sortBy: "publishedAt",
-    pageSize: String(NEWS_API_RESULT_LIMIT),
+    pageSize: String(NEWS_API_FETCH_PAGE_SIZE),
   });
 
   return {
