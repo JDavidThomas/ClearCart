@@ -8,6 +8,9 @@
       "env": {
         "EXPO_PUBLIC_API_BASE_URL": "https://expo.clearcart.net"
       },
+      "hooks": {
+        "pre_install": "cd ../.. && pnpm install --no-frozen-lockfile"
+      }
     }
   }
 }
