@@ -6,7 +6,8 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://expo.clearcart.net"
+        "EXPO_PUBLIC_API_BASE_URL": "https://expo.clearcart.net",
+        "EAS_PNPM_FILTER_WORKSPACE": "food-recall-tracker"
       }
     }
   }

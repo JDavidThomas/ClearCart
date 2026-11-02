@@ -3,8 +3,9 @@
   "version": "0.0.0",
   "license": "MIT",
   "packageManager": "pnpm@10.26.1",
-  "pnpm": {
-    "version": "10.26.1"
+  "engines": {
+    "pnpm": "10.26.1",
+    "node": ">=20.0.0"
   },
   "scripts": {
     "eas-build-pre-install": "pnpm install --no-frozen-lockfile",
