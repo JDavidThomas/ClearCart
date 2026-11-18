@@ -69,10 +69,19 @@ function normalizeRecord(record: OpenFdaRecord) {
       record.product_description,
       "Product description unavailable",
     ),
-    reasonForRecall: valueOrFallback(record.reason_for_recall, "Reason not provided"),
-    recallingFirm: valueOrFallback(record.recalling_firm, "Recalling firm not provided"),
+    reasonForRecall: valueOrFallback(
+      record.reason_for_recall,
+      "Reason not provided",
+    ),
+    recallingFirm: valueOrFallback(
+      record.recalling_firm,
+      "Recalling firm not provided",
+    ),
     recallDate: valueOrFallback(record.report_date, "Date not provided"),
-    classification: valueOrFallback(record.classification, "Classification not provided"),
+    classification: valueOrFallback(
+      record.classification,
+      "Classification not provided",
+    ),
     status: record.status?.trim() || undefined,
     officialUrl: valueOrFallback(record.url, DEFAULT_FDA_NOTICES_URL),
   };
@@ -80,7 +89,7 @@ function normalizeRecord(record: OpenFdaRecord) {
 
 async function searchEndpoint(endpoint: string, search: string, limit: number) {
   const params = new URLSearchParams({
-    search,
+    search: `"${search}"`,
     limit: String(limit),
     sort: "report_date:desc",
   });
@@ -99,11 +108,14 @@ async function searchEndpoint(endpoint: string, search: string, limit: number) {
     /([?&]api_key=)[^&]*/,
     "$1%5BREDACTED%5D",
   );
-  logger.info({
-    url: safeRequestUrl,
-    apiKeyConfigured: Boolean(apiKey),
-    apiKeyIncluded: params.has("api_key"),
-  }, "Requesting OpenFDA URL");
+  logger.info(
+    {
+      url: safeRequestUrl,
+      apiKeyConfigured: Boolean(apiKey),
+      apiKeyIncluded: params.has("api_key"),
+    },
+    "Requesting OpenFDA URL",
+  );
 
   let response: Response;
   try {
@@ -208,11 +220,7 @@ router.get("/recalls/fda", async (req, res) => {
     const normalizedResults = results.filter((record) => {
       const key =
         record.recallNumber ??
-        [
-          record.productDescription,
-          record.recallingFirm,
-          record.recallDate,
-        ]
+        [record.productDescription, record.recallingFirm, record.recallDate]
           .join("|")
           .toLocaleLowerCase();
       if (seen.has(key)) return false;
@@ -220,11 +228,16 @@ router.get("/recalls/fda", async (req, res) => {
       return true;
     });
 
-    const response = GetFdaRecallsResponse.parse({ results: normalizedResults });
+    const response = GetFdaRecallsResponse.parse({
+      results: normalizedResults,
+    });
     res.json(response);
   } catch (error) {
     if (error instanceof FdaConfigurationError) {
-      logger.error({ err: error, search }, "OpenFDA API configuration is missing");
+      logger.error(
+        { err: error, search },
+        "OpenFDA API configuration is missing",
+      );
       res.status(500).json({
         code: error.code,
         message: "FDA API configuration is missing.",
@@ -242,7 +255,10 @@ router.get("/recalls/fda", async (req, res) => {
     }
 
     if (error instanceof FdaResponseError) {
-      logger.error({ err: error, search, upstreamStatus: error.status }, "FDA API returned an error");
+      logger.error(
+        { err: error, search, upstreamStatus: error.status },
+        "FDA API returned an error",
+      );
       res.status(502).json({
         code: error.code,
         message: `FDA API returned an error (HTTP ${error.status}). Please try again.`,
