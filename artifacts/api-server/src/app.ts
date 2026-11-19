@@ -5,7 +5,7 @@ import router from "./routes";
 import { logger } from "./lib/logger";
 
 const app: Express = express();
-
+app.get('/ping', (req, res) => { res.send('pong'); });
 app.use(
   pinoHttp({
     logger,
