@@ -1,6 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
-
+console.log(">>> RENDER IS RUNNING THIS EXACT FILE <<<");
 // Use the PORT provided by Replit/the environment, or fall back to 3000
 const port = Number(process.env.PORT) || 3000;
 
